@@ -15,8 +15,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = ["pytest>=8.0"]
+
 
 [project.scripts]
 model-manager = "model_manager.main:main"
