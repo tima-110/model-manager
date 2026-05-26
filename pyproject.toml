@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "model-manager"
+version = "0.1.0"
+description = "Manage model rankings and aliases for LiteLLM installations."
+requires-python = ">=3.12"
+dependencies = [
+    "typer[all]>=0.12",
+    "rich>=13",
+    "pydantic>=2",
+    "platformdirs>=4",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+model-manager = "model_manager.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/model_manager"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
