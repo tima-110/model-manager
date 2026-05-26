@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from model_manager.config import AppConfig, load_config
-from model_manager.domain import aliases, scores
+from model_manager.domain import aliases, scores, advisor
 
 app = typer.Typer(
     name="model-manager",
@@ -45,9 +45,6 @@ def root(
     ),
 ) -> None:
     """Manage model rankings and aliases for LiteLLM installations."""
-    # Store config in a way that sub-commands can access it
-    # In a real app, we might use a context object or a singleton
-    # For now, we'll rely on load_config(config) in each command
 
 # --- Scores Group ---
 scores_app = typer.Typer(help="Manage Artificial Analysis score ingestion.")
@@ -182,6 +179,79 @@ def aliases_audit(
         for mid in report["missing_ids"]:
             console.print(f" - {mid}")
 
+# --- Advisor Group ---
+advisor_app = typer.Typer(help="High-level model selection and comparison.")
+app.add_typer(advisor_app, name="advisor")
+
+@advisor_app.command("compare")
+def advisor_compare(
+    ids: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Compare multiple models side-by-side."""
+    cfg = load_config(config)
+    id_list = ids.split(",")
+    results = advisor.compare_models(cfg, id_list)
+
+    table = Table(title="Model Comparison")
+    table.add_column("Provider ID", style="cyan")
+    table.add_column("Model", style="magenta")
+    table.add_column("Variant", style="yellow")
+    table.add_column("Intel", style="green")
+    table.add_column("Coding", style="green")
+    table.add_column("Math", style="green")
+
+    for r in results:
+        if "error" in r:
+            table.add_row(r["provider_id"], "[red]Error[/red]", "-", "-", "-", "-")
+        else:
+            s = r["scores"]
+            table.add_row(
+                r["provider_id"],
+                r["model"],
+                r["variant"],
+                str(s.get("intelligence", "N/A")),
+                str(s.get("coding", "N/A")),
+                str(s.get("math", "N/A"))
+            )
+
+    console.print(table)
+
+@advisor_app.command("best")
+def advisor_best(
+    metric: str = typer.Option("intelligence", help="Metric to optimize (intelligence, coding, math)"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Find the best mapped model for a specific metric."""
+    cfg = load_config(config)
+    best = advisor.find_best_model(cfg, metric)
+
+    if not best:
+        console.print("[red]No models with scores found.[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"The best model for [bold]{metric}[/bold] is:")
+    console.print(f"  Model:   [green]{best['model']}[/green] ({best['variant']})")
+    console.print(f"  Slug:    {best['slug']}")
+    console.print(f"  Score:   [bold]{best['score']}[/bold]")
+
+@advisor_app.command("gaps")
+def advisor_gaps(
+    ids: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Report mapping gaps for a list of IDs."""
+    cfg = load_config(config)
+    id_list = ids.split(",")
+    missing = advisor.get_mapping_gaps(cfg, id_list)
+
+    if not missing:
+        console.print("[green]No mapping gaps found![/green]")
+    else:
+        console.print(f"Found {len(missing)} missing mappings:")
+        for mid in missing:
+            console.print(f" - {mid}")
+
 # --- LiteLLM Integration ---
 @app.command("sync-litellm")
 def sync_litellm(
@@ -189,7 +259,6 @@ def sync_litellm(
     provider: str = typer.Option("openrouter", help="Default provider for discovery"),
 ) -> None:
     """Sync mappings based on LiteLLM config."""
-    # We need a separate config for the app itself
     app_cfg = load_config(None)
 
     if not config_path.exists():
@@ -203,9 +272,7 @@ def sync_litellm(
         console.print(f"[red]Error parsing YAML: {e}[/red]")
         raise typer.Exit(1)
 
-    # Extract model names
     model_ids = []
-    # LiteLLM config typically has 'model_list'
     model_list = yaml_data.get("model_list", [])
     for m in model_list:
         if "model_name" in m:
@@ -217,17 +284,12 @@ def sync_litellm(
 
     console.print(f"Found {len(model_ids)} models in LiteLLM config. Starting audit...")
 
-    # Audit
     report = aliases.audit_mappings(app_cfg, model_ids)
     console.print(f"Mapped: {report['mapped']} / {report['total']}")
 
     if report["missing"]:
-        console.print(f"Discovering mappings for {report['missing']} missing models...")
-        # Run discovery for the missing IDs
-        # Note: we pass them in chunks if the list is huge, but for now all at once
-        ids_str = ",".join(report["missing_ids"])
-        # We'll call the discovery logic internally
-        suggestions = aliases.discover_aliases(app_cfg, provider, report["missing_ids"])
+        console.print(f"Discovering mappings for {len(report['missing'])} missing models...")
+        suggestions = aliases.discover_aliases(app_cfg, provider, report["missing"])
 
         if not suggestions:
             console.print("[yellow]No suggestions found for missing models.[/yellow]")
