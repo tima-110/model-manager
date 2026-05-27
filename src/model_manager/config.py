@@ -53,3 +53,7 @@ def get_aliases_path(config: AppConfig) -> Path:
 def get_raw_scores_path(config: AppConfig) -> Path:
     """Return path to the raw AA response JSON file."""
     return config.data_dir / "aa_raw_response.json"
+
+def get_free_models_path(config: AppConfig) -> Path:
+    """Return path to the OpenRouter free models JSON file."""
+    return config.data_dir / "openrouter_free_models.json"

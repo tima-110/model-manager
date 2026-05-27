@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import os
 import yaml
 import typer
 from pathlib import Path
@@ -11,8 +12,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from model_manager.config import AppConfig, load_config
-from model_manager.domain import aliases, scores, advisor
+from model_manager.config import AppConfig, load_config, get_free_models_path
+from model_manager.domain import aliases, scores, advisor, discovery, auth
 
 app = typer.Typer(
     name="model-manager",
@@ -45,6 +46,58 @@ def root(
     ),
 ) -> None:
     """Manage model rankings and aliases for LiteLLM installations."""
+
+# --- Auth Group ---
+auth_app = typer.Typer(help="Manage secure API keys in the system keychain.")
+app.add_typer(auth_app, name="auth")
+
+@auth_app.command("set")
+def auth_set(
+    key_name: str,
+    value: str,
+) -> None:
+    """Store an API key in the system keychain.
+
+    Example: model-manager auth set OPENROUTER_API_KEY=sk-or-xxx
+    """
+    # Support both 'KEY=VALUE' and separate arguments
+    if "=" in key_name:
+        k, v = key_name.split("=", 1)
+    else:
+        k = key_name
+        v = value if value else ""
+        if not v:
+            console.print("[red]Error: No value provided for the key.[/red]")
+            raise typer.Exit(1)
+
+    auth.set_secret(k, v)
+    console.print(f"[green]Successfully stored {k} in the keychain.[/green]")
+
+@auth_app.command("delete")
+def auth_delete(
+    key_name: str,
+) -> None:
+    """Remove an API key from the system keychain."""
+    auth.delete_secret(key_name)
+    console.print(f"[green]Deleted {key_name} from the keychain.[/green]")
+
+@auth_app.command("list")
+def auth_list() -> None:
+    """List keys currently stored in the keychain for this app."""
+    # Keyring doesn't have a built-in 'list' for all services,
+    # but we know which ones we use.
+    tracked_keys = ["OPENROUTER_API_KEY", "ARTIFICIAL_ANALYSIS_API_KEY"]
+
+    table = Table(title="Stored Secrets")
+    table.add_column("Key", style="cyan")
+    table.add_column("Status", style="magenta")
+
+    for k in tracked_keys:
+        val = auth.get_secret(k)
+        status = "[green]Stored[/green]" if val else "[red]Missing[/red]"
+        table.add_row(k, status)
+
+    console.print(table)
 
 # --- Scores Group ---
 scores_app = typer.Typer(help="Manage Artificial Analysis score ingestion.")
@@ -307,6 +360,66 @@ def sync_litellm(
                 console.print(f"[green]Mapped {sug['pid']} to {slug}[/green]")
 
     console.print("\n[green]Sync complete.[/green]")
+
+@app.command("discover-free")
+def discover_free(
+    probe: bool = typer.Option(
+        False, "--probe",
+        help="Verify model availability by sending a minimal request.",
+    ),
+    config: Path | None = typer.Option(
+        None, "--config", "-c",
+        help="Path to custom config.toml",
+    ),
+) -> None:
+    """Query current free models from OpenRouter and save their capabilities."""
+    cfg = load_config(config)
+
+    try:
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+            progress.add_task(description="Fetching free models from OpenRouter...", total=None)
+            models = discovery.fetch_free_models()
+
+            if probe:
+                api_key = auth.get_secret("OPENROUTER_API_KEY")
+                if not api_key:
+                    console.print("[red]Error: OPENROUTER_API_KEY not found in environment or keychain. Probing disabled.[/red]")
+                else:
+                    progress.add_task(description="Probing models for availability...", total=len(models))
+                    verified_models = []
+                    for m in models:
+                        if discovery.probe_model(m["id"], api_key):
+                            verified_models.append(m)
+                    models = verified_models
+
+            progress.add_task(description="Saving discovery results...", total=None)
+            path = get_free_models_path(cfg)
+            discovery.save_free_models(cfg, models, path)
+
+        if not models:
+            console.print("[yellow]No free models discovered.[/yellow]")
+            return
+
+        table = Table(title=f"Discovered Free Models ({len(models)})")
+        table.add_column("Model ID", style="cyan")
+        table.add_column("Name", style="magenta")
+        table.add_column("Context", style="green")
+        table.add_column("Architecture", style="yellow")
+
+        for m in models:
+            table.add_row(
+                str(m["id"] or "Unknown"),
+                str(m["name"] or "Unknown"),
+                str(m["context_length"] or "N/A"),
+                str(m["architecture"] or "Unknown")
+            )
+
+        console.print(table)
+        console.print(f"\n[green]Saved {len(models)} models to {path}[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error during discovery: {e}[/red]")
+        raise typer.Exit(1)
 
 @app.command("init")
 def init(

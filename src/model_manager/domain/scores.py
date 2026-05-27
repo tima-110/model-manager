@@ -9,10 +9,11 @@ from datetime import datetime
 from pathlib import Path
 
 from model_manager.config import AppConfig, get_raw_scores_path, get_scores_path
+from model_manager.domain import auth
 
 def get_api_key() -> str | None:
-    """Load AA API key from environment variables."""
-    return os.environ.get("ARTIFICIAL_ANALYSIS_API_KEY")
+    """Load AA API key from environment or keychain."""
+    return auth.get_secret("ARTIFICIAL_ANALYSIS_API_KEY")
 
 def fetch_aa_data(api_key: str, config: AppConfig) -> dict | None:
     """Fetch model data from Artificial Analysis API and save raw response."""
