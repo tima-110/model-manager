@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path
+from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
 from model_manager.domain import aliases, scores, advisor, discovery, auth
 
 app = typer.Typer(
@@ -86,7 +86,7 @@ def auth_list() -> None:
     """List keys currently stored in the keychain for this app."""
     # Keyring doesn't have a built-in 'list' for all services,
     # but we know which ones we use.
-    tracked_keys = ["OPENROUTER_API_KEY", "ARTIFICIAL_ANALYSIS_API_KEY", "NVIDIA_API_KEY"]
+    tracked_keys = ["OPENROUTER_API_KEY", "ARTIFICIAL_ANALYSIS_API_KEY", "NVIDIA_API_KEY", "OLLAMA_API_KEY"]
 
     table = Table(title="Stored Secrets")
     table.add_column("Key", style="cyan")
@@ -462,6 +462,67 @@ def discover_nvidia(
             return
 
         table = Table(title=f"Discovered NVIDIA Models ({len(models)})")
+        table.add_column("Model ID", style="cyan")
+        table.add_column("Name", style="magenta")
+        table.add_column("Context", style="green")
+        table.add_column("Architecture", style="yellow")
+
+        for m in models:
+            table.add_row(
+                str(m["id"] or "Unknown"),
+                str(m["name"] or "Unknown"),
+                str(m["context_length"] or "N/A"),
+                str(m["architecture"] or "Unknown")
+            )
+
+        console.print(table)
+        console.print(f"\n[green]Saved {len(models)} models to {path}[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error during discovery: {e}[/red]")
+        raise typer.Exit(1)
+
+@app.command("discover-ollama")
+def discover_ollama(
+    probe: bool = typer.Option(
+        False, "--probe",
+        help="Verify model availability by sending a minimal request.",
+    ),
+    config: Path | None = typer.Option(
+        None, "--config", "-c",
+        help="Path to custom config.toml",
+    ),
+) -> None:
+    """Query current available models from Ollama Cloud and save their capabilities."""
+    cfg = load_config(config)
+
+    try:
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+            api_key = auth.get_secret("OLLAMA_API_KEY")
+            if not api_key:
+                console.print("[red]Error: OLLAMA_API_KEY not found in environment or keychain.[/red]")
+                raise typer.Exit(1)
+
+            progress.add_task(description="Fetching models from Ollama...", total=None)
+            models = discovery.fetch_ollama_models(api_key)
+
+            if probe:
+                progress.add_task(description="Probing models for availability...", total=len(models))
+                verified_models = []
+                for m in models:
+                    if discovery.probe_model(m["id"], api_key, provider="ollama"):
+                        verified_models.append(m)
+                models = verified_models
+
+            progress.add_task(description="Saving discovery results...", total=None)
+            path = get_ollama_models_path(cfg)
+            discovery.save_free_models(cfg, models, path)
+
+        if not models:
+            console.print("[yellow]No Ollama models discovered.[/yellow]")
+            return
+
+        table = Table(title=f"Discovered Ollama Models ({len(models)})")
         table.add_column("Model ID", style="cyan")
         table.add_column("Name", style="magenta")
         table.add_column("Context", style="green")

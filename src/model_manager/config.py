@@ -61,3 +61,7 @@ def get_free_models_path(config: AppConfig) -> Path:
 def get_nvidia_models_path(config: AppConfig) -> Path:
     """Return path to the NVIDIA available models JSON file."""
     return config.data_dir / "nvidia_available_models.json"
+
+def get_ollama_models_path(config: AppConfig) -> Path:
+    """Return path to the Ollama available models JSON file."""
+    return config.data_dir / "ollama_available_models.json"

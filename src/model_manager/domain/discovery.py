@@ -1,4 +1,4 @@
-"""OpenRouter and NVIDIA model discovery logic."""
+"""OpenRouter, NVIDIA, and Ollama model discovery logic."""
 from __future__ import annotations
 
 import json
@@ -14,6 +14,8 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/models"
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+OLLAMA_API_URL = "https://ollama.com/api/tags"
+OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
 
 def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     """Fetch all models from OpenRouter and filter for free ones."""
@@ -74,12 +76,45 @@ def fetch_nvidia_models(api_key: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from NVIDIA: {e}")
 
+def fetch_ollama_models(api_key: str) -> List[Dict[str, Any]]:
+    """Fetch models from Ollama Cloud and map to internal representation."""
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        req = urllib.request.Request(OLLAMA_API_URL, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            # Ollama /api/tags returns { "models": [ { "name": "...", ... } ] }
+            all_models = data.get("models", [])
+
+            models = []
+            for m in all_models:
+                model_id = m.get("name", "")
+                models.append({
+                    "id": model_id,
+                    "name": model_id,
+                    "context_length": None,
+                    "architecture": None,
+                    "description": None,
+                    "tags": [],
+                })
+            return models
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch models from Ollama: {e}")
+
 def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter") -> bool:
     """Check if a model is responsive by sending a minimal request."""
     if not api_key:
         return False
 
-    chat_url = NVIDIA_CHAT_URL if provider == "nvidia" else OPENROUTER_CHAT_URL
+    if provider == "ollama":
+        chat_url = OLLAMA_CHAT_URL
+    elif provider == "nvidia":
+        chat_url = NVIDIA_CHAT_URL
+    else:
+        chat_url = OPENROUTER_CHAT_URL
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -95,6 +130,9 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
         "messages": [{"role": "user", "content": "hi"}],
         "max_tokens": 1
     }
+
+    if provider == "ollama":
+        data["stream"] = False
 
     try:
         req = urllib.request.Request(
