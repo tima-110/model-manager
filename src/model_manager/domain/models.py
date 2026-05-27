@@ -67,3 +67,17 @@ def resolve_model(model_id: str, config: AppConfig) -> dict | None:
             for vid, vdata in model_data.get("variants", {}).items()
         ]
     }
+
+def remove_model(config: AppConfig, model_id: str) -> bool:
+    """Remove a conceptual model from the library. Returns True if removed, False if not found."""
+    data = storage.load_models_data(config)
+    if model_id in data.get("models", {}):
+        del data["models"][model_id]
+
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        storage.save_models_data(config, data)
+        return True
+    return False

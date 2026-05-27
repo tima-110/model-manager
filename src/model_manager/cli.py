@@ -86,6 +86,18 @@ def models_add(
     models.add_model(cfg, model, family=family, display_name=display_name, default_variant=default_variant)
     console.print(f"[green]Successfully added/updated conceptual model {model}[/green]")
 
+@models_app.command("remove")
+def models_remove(
+    model: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Remove a conceptual model from the library."""
+    cfg = load_config(config)
+    if models.remove_model(cfg, model):
+        console.print(f"[green]Successfully removed conceptual model {model}[/green]")
+    else:
+        console.print(f"[red]Error: Conceptual model {model} not found.[/red]")
+
 # --- Auth Group ---
 auth_app = typer.Typer(help="Manage secure API keys in the system keychain.")
 app.add_typer(auth_app, name="auth")
