@@ -116,13 +116,11 @@ def discover_provider_ids(config: AppConfig, model_id: str, provider: str | None
     return matches
 
 def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
-    """Match via Artificial Analysis slugs."""
+    """Match via Artificial Analysis slugs with sanity checking."""
     res = resolve_model(model_id, config)
     if not res:
         return []
 
-    # Use the default variant's slug as the primary anchor
-    # We could potentially check all variants, but start with the default.
     aa_slug = None
     for var in res["variants"]:
         if var["variant_id"] == res["default_variant"]:
@@ -138,27 +136,35 @@ def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
 
     try:
         data = json.loads(path.read_text())
-        # AA raw data is typically { "data": [ { "slug": "...", "providers": [...] }, ... ] }
         models_list = data.get("data", [])
         for m in models_list:
             if m.get("slug") == aa_slug:
-                # AA raw data provider structure varies; we'll look for a 'providers' list
-                # or 'deployments'.
                 providers = m.get("providers", [])
                 if not providers:
                     providers = m.get("deployments", [])
 
-                return [
-                    {"provider": p.get("provider", "unknown"), "provider_id": p.get("id")}
-                    for p in providers if p.get("id")
-                ]
+                results = []
+                model_keywords = set(model_id.lower().split("-"))
+
+                for p in providers:
+                    pid = p.get("id", "").lower()
+                    if not pid:
+                        continue
+
+                    # Sanity check: provider ID should share at least one significant keyword with model_id
+                    # (e.g. "gemma" should be in "openrouter/google/gemma-4-31b-it")
+                    pid_keywords = set(pid.replace("/", " ").replace("_", " ").split("-"))
+                    if model_keywords & pid_keywords:
+                        results.append({"provider": p.get("provider", "unknown"), "provider_id": p.get("id")})
+
+                return results
     except Exception:
         pass
 
     return []
 
 def _match_via_string(config: AppConfig, model_id: str, provider: str | None = None) -> List[Dict[str, Any]]:
-    """Match via string similarity across provider caches."""
+    """Match via string similarity across provider caches, prioritizing substring matches."""
     provider_paths = {
         "openrouter": get_free_models_path(config),
         "nvidia": get_nvidia_models_path(config),
@@ -166,6 +172,8 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
     }
 
     matches = []
+    model_id_lower = model_id.lower()
+
     for p_name, path in provider_paths.items():
         if provider and p_name != provider:
             continue
@@ -177,20 +185,29 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
             data = json.loads(path.read_text())
             models_list = data.get("models", [])
             for m in models_list:
-                # Compare both id and name
-                mid = m.get("id", "")
-                name = m.get("name", "")
+                mid = m.get("id", "").lower()
+                name = m.get("name", "").lower()
 
-                # Use difflib to get a similarity score
-                # We compare the conceptual model_id against both the provider's id and name
-                score_id = difflib.SequenceMatcher(None, model_id.lower(), mid.lower()).ratio()
-                score_name = difflib.SequenceMatcher(None, model_id.lower(), name.lower()).ratio()
+                # 1. Substring Match (Highest Confidence)
+                if model_id_lower in mid or model_id_lower in name:
+                    matches.append({
+                        "provider": p_name,
+                        "provider_id": m.get("id", ""),
+                        "score": 1.0
+                    })
+                    continue
+
+                # 2. Fuzzy Match on stripped ID
+                # Remove common provider prefixes to get a better ratio
+                stripped_id = mid.split("/")[-1]
+                score_id = difflib.SequenceMatcher(None, model_id_lower, stripped_id).ratio()
+                score_name = difflib.SequenceMatcher(None, model_id_lower, name).ratio()
                 best_score = max(score_id, score_name)
 
                 if best_score > 0.6:
                     matches.append({
                         "provider": p_name,
-                        "provider_id": mid,
+                        "provider_id": m.get("id", ""),
                         "score": best_score
                     })
         except Exception:
