@@ -13,7 +13,7 @@ This document describes the configuration and data storage for `model-manager`.
 | `debug` | Boolean | `false` | Enables debug-level logging to stderr. |
 
 ## Data Storage
-The tool maintains three primary JSON files in the `data_dir`.
+The tool maintains six primary JSON files in the `data_dir`.
 
 ### 1. `model_scores.json`
 Contains the processed intelligence, coding, and math scores fetched from Artificial Analysis.
@@ -44,6 +44,15 @@ The tool uses a hierarchical structure to handle model variants (e.g., quantized
 
 ### 3. `aa_raw_response.json`
 A direct dump of the Artificial Analysis API response. This is used for debugging and for recovering data if the processing logic changes.
+
+### 4. `openrouter_free_models.json`
+A cache of free models discovered from the OpenRouter API, including their context length and architecture.
+
+### 5. `nvidia_available_models.json`
+A cache of models discovered from the NVIDIA API.
+
+### 6. `ollama_available_models.json`
+A cache of models discovered from the Ollama Cloud API.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:
