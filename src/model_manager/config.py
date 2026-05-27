@@ -46,9 +46,9 @@ def get_scores_path(config: AppConfig) -> Path:
     """Return path to the model scores JSON file."""
     return config.data_dir / "model_scores.json"
 
-def get_aliases_path(config: AppConfig) -> Path:
-    """Return path to the model aliases JSON file."""
-    return config.data_dir / "model_aliases.json"
+def get_models_path(config: AppConfig) -> Path:
+    """Return path to the models JSON file."""
+    return config.data_dir / "models.json"
 
 def get_raw_scores_path(config: AppConfig) -> Path:
     """Return path to the raw AA response JSON file."""

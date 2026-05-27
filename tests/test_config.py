@@ -29,5 +29,5 @@ def test_path_helpers(mock_config):
     aliases_path = get_aliases_path(mock_config)
 
     assert scores_path.name == "model_scores.json"
-    assert aliases_path.name == "model_aliases.json"
+    assert aliases_path.name == "models.json"
     assert scores_path.parent == mock_config.data_dir

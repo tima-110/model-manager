@@ -47,6 +47,30 @@ def root(
 ) -> None:
     """Manage model rankings and aliases for LiteLLM installations."""
 
+# --- Models Group ---
+models_app = typer.Typer(help="Manage the conceptual model library.")
+app.add_typer(models_app, name="models")
+
+@models_app.command("list")
+def models_list(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """List all defined conceptual model IDs."""
+    cfg = load_config(config)
+    aliases = aliases.load_aliases(cfg)
+    model_ids = sorted(aliases.get("models", {}).keys())
+
+    if not model_ids:
+        console.print("[yellow]No conceptual models defined in models.json.[/yellow]")
+        return
+
+    table = Table(title="Conceptual Models")
+    table.add_column("Model ID", style="cyan")
+    for mid in model_ids:
+        table.add_row(mid)
+
+    console.print(table)
+
 # --- Auth Group ---
 auth_app = typer.Typer(help="Manage secure API keys in the system keychain.")
 app.add_typer(auth_app, name="auth")

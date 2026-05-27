@@ -6,10 +6,10 @@ import difflib
 from datetime import datetime
 from pathlib import Path
 
-from model_manager.config import AppConfig, get_aliases_path, get_scores_path
+from model_manager.config import AppConfig, get_models_path, get_scores_path
 
 def load_aliases(config: AppConfig) -> dict:
-    path = get_aliases_path(config)
+    path = get_models_path(config)
     if not path.exists():
         return {"meta": {}, "models": {}}
     try:
@@ -18,7 +18,7 @@ def load_aliases(config: AppConfig) -> dict:
         return {"meta": {}, "models": {}}
 
 def save_aliases(config: AppConfig, aliases: dict) -> None:
-    path = get_aliases_path(config)
+    path = get_models_path(config)
     path.write_text(json.dumps(aliases, indent=2))
 
 def resolve_id(provider_id: str, config: AppConfig) -> dict | None:

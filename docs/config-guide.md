@@ -25,7 +25,7 @@ Contains the processed intelligence, coding, and math scores fetched from Artifi
     - `scores`: A dictionary of indices (`intelligence`, `coding`, `math`).
     - `last_synced`: Timestamp of the last update.
 
-### 2. `model_aliases.json`
+### 2. `models.json`
 The mapping layer that translates provider-specific IDs into AA slugs.
 
 **The Variant-Based Schema:**
@@ -56,12 +56,12 @@ A cache of models discovered from the Ollama Cloud API.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:
-1. **Explicit Search**: The system scans all variants in `model_aliases.json` for the provided ID.
+1. **Explicit Search**: The system scans all variants in `models.json` for the provided ID.
 2. **Model Match**: If the ID matches a conceptual model key, the `default_variant` is used.
 3. **Score Lookup**: The resolved `aa_slug` is used to fetch the laest scores from `model_scores.json`.
 
 ### Forward Resolution
 The tool also supports resolving a **Conceptual Model ID** instead of a provider ID. In this mode, the system:
-1. Looks up the model ID directly in the `models` map of `model_aliases.json`.
+1. Looks up the model ID directly in the `models` map of `models.json`.
 2. Retrieves the model's metadata (family, display name).
 3. Lists all associated variants and the provider IDs mapped to each.

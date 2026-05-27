@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Configuration
 DATA_DIR = "data"
-ALIASES_PATH = os.path.join(DATA_DIR, "model_aliases.json")
+ALIASES_PATH = os.path.join(DATA_DIR, "models.json")
 SCORES_PATH = os.path.join(DATA_DIR, "model_scores.json")
 
 def load_json(path):

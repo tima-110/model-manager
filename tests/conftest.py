@@ -42,7 +42,7 @@ def tmp_data_dir(tmp_path: Path) -> Path:
             }
         }
     }
-    (data_dir / "model_aliases.json").write_text(json.dumps(aliases))
+    (data_dir / "models.json").write_text(json.dumps(aliases))
 
     return data_dir
 
