@@ -1,8 +1,13 @@
 """Domain logic for managing conceptual models."""
 from __future__ import annotations
 
+import json
+import difflib
 from datetime import datetime
-from model_manager.config import AppConfig
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from model_manager.config import AppConfig, get_raw_scores_path, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
 from model_manager.domain import storage
 
 def list_models(config: AppConfig) -> list[str]:
@@ -81,3 +86,115 @@ def remove_model(config: AppConfig, model_id: str) -> bool:
         storage.save_models_data(config, data)
         return True
     return False
+
+def discover_provider_ids(config: AppConfig, model_id: str, provider: str | None = None) -> List[Dict[str, Any]]:
+    """Discover potential provider IDs for a conceptual model using a hybrid AA + string approach."""
+    matches = []
+
+    # 1. AA-First Match
+    aa_matches = _match_via_aa(config, model_id)
+    for m in aa_matches:
+        matches.append({
+            "provider": m["provider"],
+            "provider_id": m["provider_id"],
+            "method": "aa",
+            "score": 1.0
+        })
+
+    # 2. String-Based Match
+    string_matches = _match_via_string(config, model_id, provider)
+    for m in string_matches:
+        # Avoid duplicating AA matches
+        if not any(match["provider_id"] == m["provider_id"] for match in matches):
+            matches.append({
+                "provider": m["provider"],
+                "provider_id": m["provider_id"],
+                "method": "string",
+                "score": m["score"]
+            })
+
+    return matches
+
+def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
+    """Match via Artificial Analysis slugs."""
+    res = resolve_model(model_id, config)
+    if not res:
+        return []
+
+    # Use the default variant's slug as the primary anchor
+    # We could potentially check all variants, but start with the default.
+    aa_slug = None
+    for var in res["variants"]:
+        if var["variant_id"] == res["default_variant"]:
+            aa_slug = var["aa_slug"]
+            break
+
+    if not aa_slug:
+        return []
+
+    path = get_raw_scores_path(config)
+    if not path.exists():
+        return []
+
+    try:
+        data = json.loads(path.read_text())
+        # AA raw data is typically { "data": [ { "slug": "...", "providers": [...] }, ... ] }
+        models_list = data.get("data", [])
+        for m in models_list:
+            if m.get("slug") == aa_slug:
+                # AA raw data provider structure varies; we'll look for a 'providers' list
+                # or 'deployments'.
+                providers = m.get("providers", [])
+                if not providers:
+                    providers = m.get("deployments", [])
+
+                return [
+                    {"provider": p.get("provider", "unknown"), "provider_id": p.get("id")}
+                    for p in providers if p.get("id")
+                ]
+    except Exception:
+        pass
+
+    return []
+
+def _match_via_string(config: AppConfig, model_id: str, provider: str | None = None) -> List[Dict[str, Any]]:
+    """Match via string similarity across provider caches."""
+    provider_paths = {
+        "openrouter": get_free_models_path(config),
+        "nvidia": get_nvidia_models_path(config),
+        "ollama": get_ollama_models_path(config),
+    }
+
+    matches = []
+    for p_name, path in provider_paths.items():
+        if provider and p_name != provider:
+            continue
+
+        if not path.exists():
+            continue
+
+        try:
+            data = json.loads(path.read_text())
+            models_list = data.get("models", [])
+            for m in models_list:
+                # Compare both id and name
+                mid = m.get("id", "")
+                name = m.get("name", "")
+
+                # Use difflib to get a similarity score
+                # We compare the conceptual model_id against both the provider's id and name
+                score_id = difflib.SequenceMatcher(None, model_id.lower(), mid.lower()).ratio()
+                score_name = difflib.SequenceMatcher(None, model_id.lower(), name.lower()).ratio()
+                best_score = max(score_id, score_name)
+
+                if best_score > 0.6:
+                    matches.append({
+                        "provider": p_name,
+                        "provider_id": mid,
+                        "score": best_score
+                    })
+        except Exception:
+            continue
+
+    # Sort by score descending
+    return sorted(matches, key=lambda x: x["score"], reverse=True)

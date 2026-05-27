@@ -98,6 +98,91 @@ def models_remove(
     else:
         console.print(f"[red]Error: Conceptual model {model} not found.[/red]")
 
+@models_app.command("discover")
+def models_discover(
+    model_id: str,
+    provider: str | None = typer.Option(None, "--provider", "-p"),
+    refresh: bool = typer.Option(False, "--refresh"),
+    yolo: bool = typer.Option(False, "--yolo"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Discover and map provider IDs to a conceptual model.
+
+    Uses a hybrid approach: first checking Artificial Analysis (AA) slugs,
+    then performing fuzzy string matching across provider caches.
+    """
+    cfg = load_config(config)
+
+    if refresh:
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+            progress.add_task(description="Refreshing provider caches...", total=None)
+
+            # OpenRouter
+            try:
+                data = discovery.fetch_openrouter_free_models()
+                discovery.save_free_models(cfg, data, get_free_models_path(cfg))
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to refresh OpenRouter: {e}[/yellow]")
+
+            # NVIDIA
+            try:
+                api_key = auth.get_secret("NVIDIA_API_KEY")
+                if api_key:
+                    data = discovery.fetch_nvidia_models(api_key)
+                    discovery.save_free_models(cfg, data, get_nvidia_models_path(cfg))
+                else:
+                    console.print("[yellow]Warning: NVIDIA_API_KEY missing, skipping NVIDIA refresh.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to refresh NVIDIA: {e}[/yellow]")
+
+            # Ollama
+            try:
+                api_key = auth.get_secret("OLLAMA_API_KEY")
+                if api_key:
+                    data = discovery.fetch_ollama_models(api_key)
+                    discovery.save_free_models(cfg, data, get_ollama_models_path(cfg))
+                else:
+                    console.print("[yellow]Warning: OLLAMA_API_KEY missing, skipping Ollama refresh.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to refresh Ollama: {e}[/yellow]")
+
+            progress.add_task(description="Refreshing AA scores...", total=None)
+            try:
+                aa_api_key = scores.get_api_key()
+                if aa_api_key:
+                    raw = scores.fetch_aa_data(aa_api_key, cfg)
+                    scores.process_aa_data(raw, cfg)
+                else:
+                    console.print("[yellow]Warning: ARTIFICIAL_ANALYSIS_API_KEY missing, skipping AA refresh.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to refresh AA scores: {e}[/yellow]")
+
+    matches = models.discover_provider_ids(cfg, model_id, provider)
+    if not matches:
+        console.print(f"[yellow]No provider matches found for {model_id}.[/yellow]")
+        return
+
+    console.print(f"\n[bold]Discovery results for {model_id}:[/bold]")
+
+    for match in matches:
+        method_color = "green" if match["method"] == "aa" else "cyan"
+        score_str = f" (score: {match['score']:.2f})" if match["method"] == "string" else ""
+
+        console.print(f" - [{method_color}]{match['method'].upper()}[/{method_color}] {match['provider']}: {match['provider_id']}{score_str}")
+
+        if yolo:
+            aliases.add_alias(cfg, model_id, match["provider"], match["provider_id"], "standard")
+            console.print(f"   [dim]Auto-mapped...[/dim]")
+        else:
+            choice = typer.prompt("Accept mapping? (y/n)", default="n")
+            if choice.lower() == 'y':
+                aliases.add_alias(cfg, model_id, match["provider"], match["provider_id"], "standard")
+                console.print(f"   [green]Mapped![/green]")
+            else:
+                console.print(f"   [red]Skipped.[/red]")
+
+    console.print(f"\n[green]Discovery process complete.[/green]")
+
 # --- Auth Group ---
 auth_app = typer.Typer(help="Manage secure API keys in the system keychain.")
 app.add_typer(auth_app, name="auth")
