@@ -1,4 +1,4 @@
-"""OpenRouter model discovery logic."""
+"""OpenRouter and NVIDIA model discovery logic."""
 from __future__ import annotations
 
 import json
@@ -12,8 +12,10 @@ from model_manager.config import AppConfig
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/models"
+NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
-def fetch_free_models() -> List[Dict[str, Any]]:
+def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     """Fetch all models from OpenRouter and filter for free ones."""
     try:
         req = urllib.request.Request(OPENROUTER_API_URL)
@@ -41,17 +43,52 @@ def fetch_free_models() -> List[Dict[str, Any]]:
         # We'll let the CLI handle the error reporting
         raise RuntimeError(f"Failed to fetch models from OpenRouter: {e}")
 
-def probe_model(model_id: str, api_key: Optional[str]) -> bool:
+def fetch_nvidia_models(api_key: str) -> List[Dict[str, Any]]:
+    """Fetch models from NVIDIA and filter for free tier ones."""
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        req = urllib.request.Request(NVIDIA_API_URL, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            # OpenAI compatible /v1/models usually returns { "data": [ { "id": "...", ... } ] }
+            all_models = data.get("data", [])
+
+            free_models = []
+            for m in all_models:
+                model_id = m.get("id", "")
+                # Since we don't have explicit pricing in the basic /v1/models,
+                # we'll treat them all as available and let the user filter
+                # or we can check for specific 'free' keywords in the ID.
+                free_models.append({
+                    "id": model_id,
+                    "name": m.get("id"),
+                    "context_length": None,
+                    "architecture": None,
+                    "description": None,
+                    "tags": [],
+                })
+            return free_models
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch models from NVIDIA: {e}")
+
+def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter") -> bool:
     """Check if a model is responsive by sending a minimal request."""
     if not api_key:
         return False
 
+    chat_url = NVIDIA_CHAT_URL if provider == "nvidia" else OPENROUTER_CHAT_URL
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/castor-claw/model-manager",
-        "X-Title": "Model Manager Discovery"
     }
+
+    if provider == "openrouter":
+        headers["HTTP-Referer"] = "https://github.com/castor-claw/model-manager",
+        headers["X-Title"] = "Model Manager Discovery"
 
     data = {
         "model": model_id,
@@ -61,15 +98,13 @@ def probe_model(model_id: str, api_key: Optional[str]) -> bool:
 
     try:
         req = urllib.request.Request(
-            OPENROUTER_CHAT_URL,
+            chat_url,
             data=json.dumps(data).encode(),
             headers=headers
         )
         with urllib.request.urlopen(req, timeout=10) as response:
-            # Check for 200 OK
             if response.status == 200:
                 body = json.loads(response.read().decode())
-                # Some models return 200 but embed an error in the JSON
                 if "error" in body:
                     return False
                 return True

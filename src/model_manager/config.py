@@ -57,3 +57,7 @@ def get_raw_scores_path(config: AppConfig) -> Path:
 def get_free_models_path(config: AppConfig) -> Path:
     """Return path to the OpenRouter free models JSON file."""
     return config.data_dir / "openrouter_free_models.json"
+
+def get_nvidia_models_path(config: AppConfig) -> Path:
+    """Return path to the NVIDIA available models JSON file."""
+    return config.data_dir / "nvidia_available_models.json"
