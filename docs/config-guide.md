@@ -59,3 +59,9 @@ When `model-manager aliases resolve <id>` is called, the following logic is appl
 1. **Explicit Search**: The system scans all variants in `model_aliases.json` for the provided ID.
 2. **Model Match**: If the ID matches a conceptual model key, the `default_variant` is used.
 3. **Score Lookup**: The resolved `aa_slug` is used to fetch the laest scores from `model_scores.json`.
+
+### Forward Resolution
+The tool also supports resolving a **Conceptual Model ID** instead of a provider ID. In this mode, the system:
+1. Looks up the model ID directly in the `models` map of `model_aliases.json`.
+2. Retrieves the model's metadata (family, display name).
+3. Lists all associated variants and the provider IDs mapped to each.

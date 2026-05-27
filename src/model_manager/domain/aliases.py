@@ -62,6 +62,31 @@ def resolve_id(provider_id: str, config: AppConfig) -> dict | None:
 
     return None
 
+def resolve_model(model_id: str, config: AppConfig) -> dict | None:
+    """
+    Resolves a conceptual model_id to its variants and providers.
+    """
+    aliases = load_aliases(config)
+    model_data = aliases.get("models", {}).get(model_id)
+
+    if not model_data:
+        return None
+
+    return {
+        "model": model_id,
+        "display_name": model_data.get("display_name"),
+        "family": model_data.get("family"),
+        "default_variant": model_data.get("default_variant"),
+        "variants": [
+            {
+                "variant_id": vid,
+                "aa_slug": vdata.get("aa_slug"),
+                "provider_ids": vdata.get("provider_ids", {})
+            }
+            for vid, vdata in model_data.get("variants", {}).items()
+        ]
+    }
+
 def load_json_safe(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -70,8 +95,8 @@ def load_json_safe(path: Path) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def add_alias(config: AppConfig, provider: str, provider_id: str, model_id: str, variant_id: str, family: str | None = None, display_name: str | None = None, aa_slug: str | None = None) -> None:
-    """Registers a provider_id to a model variant."""
+def add_alias(config: AppConfig, provider: str | None = None, provider_id: str | None = None, model_id: str, variant_id: str = "standard", family: str | None = None, display_name: str | None = None, aa_slug: str | None = None) -> None:
+    """Registers a provider_id to a model variant, or creates a skeleton model."""
     aliases = load_aliases(config)
 
     if "models" not in aliases:
@@ -84,6 +109,10 @@ def add_alias(config: AppConfig, provider: str, provider_id: str, model_id: str,
             "variants": {},
             "default_variant": "standard"
         }
+
+    if provider is None or provider_id is None:
+        save_aliases(config, aliases)
+        return
 
     model = aliases["models"][model_id]
     if variant_id not in model["variants"]:
