@@ -6,30 +6,18 @@ import difflib
 from datetime import datetime
 from pathlib import Path
 
-from model_manager.config import AppConfig, get_models_path, get_scores_path
-
-def load_aliases(config: AppConfig) -> dict:
-    path = get_models_path(config)
-    if not path.exists():
-        return {"meta": {}, "models": {}}
-    try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return {"meta": {}, "models": {}}
-
-def save_aliases(config: AppConfig, aliases: dict) -> None:
-    path = get_models_path(config)
-    path.write_text(json.dumps(aliases, indent=2))
+from model_manager.config import AppConfig, get_scores_path
+from model_manager.domain import storage, models
 
 def resolve_id(provider_id: str, config: AppConfig) -> dict | None:
     """
     Resolves a provider_id to its AA slug and retrieves scores.
     """
-    aliases = load_aliases(config)
+    data = storage.load_models_data(config)
     scores = load_json_safe(get_scores_path(config))
 
     # 1. Explicit Match
-    for model_id, model_data in aliases.get("models", {}).items():
+    for model_id, model_data in data.get("models", {}).items():
         for variant_id, variant_data in model_data.get("variants", {}).items():
             for provider, ids in variant_data.get("provider_ids", {}).items():
                 if provider_id in ids:
@@ -44,8 +32,8 @@ def resolve_id(provider_id: str, config: AppConfig) -> dict | None:
                     }
 
     # 2. Model Key Match (Fallback to default variant)
-    if provider_id in aliases.get("models", {}):
-        model_data = aliases["models"][provider_id]
+    if provider_id in data.get("models", {}):
+        model_data = data["models"][provider_id]
         default_variant = model_data.get("default_variant")
         if default_variant:
             variant_data = model_data["variants"].get(default_variant)
@@ -62,31 +50,6 @@ def resolve_id(provider_id: str, config: AppConfig) -> dict | None:
 
     return None
 
-def resolve_model(model_id: str, config: AppConfig) -> dict | None:
-    """
-    Resolves a conceptual model_id to its variants and providers.
-    """
-    aliases = load_aliases(config)
-    model_data = aliases.get("models", {}).get(model_id)
-
-    if not model_data:
-        return None
-
-    return {
-        "model": model_id,
-        "display_name": model_data.get("display_name"),
-        "family": model_data.get("family"),
-        "default_variant": model_data.get("default_variant"),
-        "variants": [
-            {
-                "variant_id": vid,
-                "aa_slug": vdata.get("aa_slug"),
-                "provider_ids": vdata.get("provider_ids", {})
-            }
-            for vid, vdata in model_data.get("variants", {}).items()
-        ]
-    }
-
 def load_json_safe(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -95,26 +58,16 @@ def load_json_safe(path: Path) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def add_alias(config: AppConfig, provider: str | None = None, provider_id: str | None = None, model_id: str, variant_id: str = "standard", family: str | None = None, display_name: str | None = None, aa_slug: str | None = None) -> None:
+def add_alias(config: AppConfig, model_id: str, provider: str | None = None, provider_id: str | None = None, variant_id: str = "standard", family: str | None = None, display_name: str | None = None, aa_slug: str | None = None) -> None:
     """Registers a provider_id to a model variant, or creates a skeleton model."""
-    aliases = load_aliases(config)
-
-    if "models" not in aliases:
-        aliases["models"] = {}
-
-    if model_id not in aliases["models"]:
-        aliases["models"][model_id] = {
-            "display_name": display_name or model_id.replace("-", " ").title(),
-            "family": family or "unknown",
-            "variants": {},
-            "default_variant": "standard"
-        }
+    # Ensure the conceptual model exists first
+    models.add_model(config, model_id, family=family, display_name=display_name)
 
     if provider is None or provider_id is None:
-        save_aliases(config, aliases)
         return
 
-    model = aliases["models"][model_id]
+    data = storage.load_models_data(config)
+    model = data["models"][model_id]
     if variant_id not in model["variants"]:
         model["variants"][variant_id] = {
             "aa_slug": None,
@@ -125,7 +78,7 @@ def add_alias(config: AppConfig, provider: str | None = None, provider_id: str |
     variant = model["variants"][variant_id]
 
     # Ensure 1-to-1 mapping from ID to Variant
-    for mid, mdata in aliases["models"].items():
+    for mid, mdata in data["models"].items():
         for vid, vdata in mdata["variants"].items():
             for prov, ids in vdata["provider_ids"].items():
                 if provider_id in ids:
@@ -139,15 +92,15 @@ def add_alias(config: AppConfig, provider: str | None = None, provider_id: str |
     if aa_slug:
         variant["aa_slug"] = aa_slug
 
-    if "meta" not in aliases:
-        aliases["meta"] = {}
-    aliases["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    save_aliases(config, aliases)
+    storage.save_models_data(config, data)
 
 def discover_aliases(config: AppConfig, provider: str, ids: list[str]) -> list[dict]:
     """Suggests AA slugs for unmapped provider IDs."""
-    aliases = load_aliases(config)
+    data = storage.load_models_data(config)
     scores = load_json_safe(get_scores_path(config))
     all_aa_slugs = list(scores.get("models", {}).keys())
     all_aa_names = [m.get("name") for m in scores.get("models", {}).values() if m.get("name")]

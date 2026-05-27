@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
-from model_manager.domain import aliases, scores, advisor, discovery, auth
+from model_manager.domain import aliases, scores, advisor, discovery, auth, models
 
 app = typer.Typer(
     name="model-manager",
@@ -57,8 +57,7 @@ def models_list(
 ) -> None:
     """List all defined conceptual model IDs."""
     cfg = load_config(config)
-    aliases = aliases.load_aliases(cfg)
-    model_ids = sorted(aliases.get("models", {}).keys())
+    model_ids = models.list_models(cfg)
 
     if not model_ids:
         console.print("[yellow]No conceptual models defined in models.json.[/yellow]")
@@ -70,6 +69,22 @@ def models_list(
         table.add_row(mid)
 
     console.print(table)
+
+@models_app.command("add")
+def models_add(
+    model: str,
+    family: str | None = typer.Option(None, "--family", "-f"),
+    display_name: str | None = typer.Option(None, "--display-name", "-d"),
+    default_variant: str | None = typer.Option(None, "--default-variant", "-v"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Add or update a conceptual model.
+
+    Example: model-manager model add my-model --family LLM --display-name "My Model"
+    """
+    cfg = load_config(config)
+    models.add_model(cfg, model, family=family, display_name=display_name, default_variant=default_variant)
+    console.print(f"[green]Successfully added/updated conceptual model {model}[/green]")
 
 # --- Auth Group ---
 auth_app = typer.Typer(help="Manage secure API keys in the system keychain.")
@@ -165,7 +180,7 @@ def aliases_resolve(
     cfg = load_config(config)
 
     # Try forward resolution first (conceptual model ID)
-    model_res = aliases.resolve_model(identifier, cfg)
+    model_res = models.resolve_model(identifier, cfg)
     if model_res:
         table = Table(title=f"Model Summary: {model_res['display_name']}")
         table.add_column("Field", style="cyan")
@@ -233,7 +248,7 @@ def aliases_add(
     To create a skeleton model, omit the provider and provider_id.
     """
     cfg = load_config(config)
-    aliases.add_alias(cfg, provider, provider_id, model, variant, family, display_name, aa_slug)
+    aliases.add_alias(cfg, model, provider, provider_id, variant, family, display_name, aa_slug)
     if provider and provider_id:
         console.print(f"[green]Mapped {provider_id} to {model} ({variant})[/green]")
     else:
@@ -606,6 +621,23 @@ def init(
     """Initialize default config and data directories."""
     cfg = load_config(config)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create stub models.json if it doesn't exist
+    from model_manager.domain import storage
+    models_path = storage.get_models_path(cfg) # Wait, get_models_path is in storage.py? No, it was in config.py
+
+    # I should check the import in storage.py.
+    # storage.py does: from model_manager.config import AppConfig, get_models_path
+    # So I can't use storage.get_models_path unless I export it or use config.get_models_path.
+
+    from model_manager.config import get_models_path
+    path = get_models_path(cfg)
+    if not path.exists():
+        storage.save_models_data(cfg, {"meta": {}, "models": {}})
+        console.print(f"[green]Created stub models.json at: {path}[/green]")
+    else:
+        console.print(f"[yellow]models.json already exists at: {path}[/yellow]")
+
     console.print(f"[green]Initialized data directory at: {cfg.data_dir}[/green]")
 
 if __name__ == "__main__":
