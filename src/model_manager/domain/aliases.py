@@ -58,10 +58,11 @@ def load_json_safe(path: Path) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def add_alias(config: AppConfig, model_id: str, provider: str | None = None, provider_id: str | None = None, variant_id: str = "standard", family: str | None = None, display_name: str | None = None, aa_slug: str | None = None) -> None:
+def add_alias(config: AppConfig, model_id: str, provider: str | None = None, provider_id: str | None = None, variant_id: str = "standard", family: str | None = None, display_name: str | None = None, aa_slug: str | None = None, scores: dict | None = None) -> None:
     """Registers a provider_id to a model variant, or creates a skeleton model."""
     # Ensure the conceptual model exists first
     models.add_model(config, model_id, family=family, display_name=display_name)
+
 
     data = storage.load_models_data(config)
     model = data["models"][model_id]
@@ -89,6 +90,9 @@ def add_alias(config: AppConfig, model_id: str, provider: str | None = None, pro
 
     if aa_slug:
         variant["aa_slug"] = aa_slug
+    if scores:
+        variant["scores"] = scores
+
 
     if "meta" not in data:
         data["meta"] = {}

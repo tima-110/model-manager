@@ -189,7 +189,8 @@ def models_discover(
                 idx = int(choice) - 1
                 if 0 <= idx < len(candidates):
                     picked_slug = candidates[idx]["slug"]
-                    aliases.add_alias(cfg, model_id, variant_id=default_variant, aa_slug=picked_slug)
+                    picked_scores = scores.get_scores_for_slug(cfg, picked_slug)
+                    aliases.add_alias(cfg, model_id, variant_id=default_variant, aa_slug=picked_slug, scores=picked_scores)
                     console.print(f"[green]Set default AA slug to {picked_slug}[/green]")
                     existing_slug = picked_slug
         else:
@@ -221,7 +222,8 @@ def models_discover(
                             idx = int(choice) - 1
                             if 0 <= idx < len(candidates):
                                 picked_slug = candidates[idx]["slug"]
-                                aliases.add_alias(cfg, model_id, variant_id=var_name, aa_slug=picked_slug)
+                                picked_scores = scores.get_scores_for_slug(cfg, picked_slug)
+                                aliases.add_alias(cfg, model_id, variant_id=var_name, aa_slug=picked_slug, scores=picked_scores)
                                 console.print(f"[green]Set AA slug for {var_name} to {picked_slug}[/green]")
                     else:
                         console.print("[yellow]No AA candidates found.[/yellow]")

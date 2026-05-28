@@ -66,3 +66,17 @@ def process_aa_data(aa_response: dict, config: AppConfig) -> dict | None:
     scores_path = get_scores_path(config)
     scores_path.write_text(json.dumps(processed, indent=2))
     return processed
+
+def get_scores_for_slug(config: AppConfig, slug: str) -> dict | None:
+    """Retrieve scores for a specific AA slug from the processed scores file."""
+    path = get_scores_path(config)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        model_data = data.get("models", {}).get(slug)
+        if model_data:
+            return model_data.get("scores")
+    except Exception:
+        pass
+    return None
