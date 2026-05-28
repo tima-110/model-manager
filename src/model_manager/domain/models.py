@@ -5,7 +5,7 @@ import json
 import difflib
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from model_manager.config import AppConfig, get_raw_scores_path, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
 from model_manager.domain import storage
@@ -87,18 +87,58 @@ def remove_model(config: AppConfig, model_id: str) -> bool:
         return True
     return False
 
-def discover_provider_ids(config: AppConfig, model_id: str, provider: str | None = None) -> List[Dict[str, Any]]:
-    """Discover potential provider IDs for a conceptual model using a hybrid AA + string approach."""
+def search_aa_candidates(config: AppConfig, query: str) -> List[Dict[str, str]]:
+    """Search the raw AA dataset for potential model candidates based on a query."""
+    path = get_raw_scores_path(config)
+    if not path.exists():
+        return []
+
+    try:
+        data = json.loads(path.read_text())
+        models_list = data.get("data", [])
+        query_lower = query.lower()
+        candidates = []
+
+        for m in models_list:
+            slug = m.get("slug", "").lower()
+            name = m.get("name", "").lower()
+
+            # Substring match (Highest confidence)
+            if query_lower in slug or query_lower in name:
+                candidates.append({"slug": m.get("slug"), "name": m.get("name")})
+                continue
+
+            # Fuzzy match (Slightly lower confidence)
+            slug_ratio = difflib.SequenceMatcher(None, query_lower, slug).ratio()
+            name_ratio = difflib.SequenceMatcher(None, query_lower, name).ratio()
+            if max(slug_ratio, name_ratio) > 0.6:
+                candidates.append({"slug": m.get("slug"), "name": m.get("name")})
+
+        # Remove duplicates and sort
+        seen = set()
+        unique_candidates = []
+        for c in candidates:
+            if c["slug"] and c["slug"] not in seen:
+                unique_candidates.append(c)
+                seen.add(c["slug"])
+
+        return unique_candidates
+    except Exception:
+        return []
+
+def discover_provider_ids(config: AppConfig, model_id: str, variant_slugs: List[Tuple[str, str]], provider: str | None = None) -> List[Dict[str, Any]]:
+    """Discover potential provider IDs for multiple model variants using AA + string approach."""
     matches = []
 
-    # 1. AA-First Match
-    aa_matches = _match_via_aa(config, model_id)
+    # 1. AA-First Match for all variants
+    aa_matches = _match_via_aa_multi(config, variant_slugs)
     for m in aa_matches:
         matches.append({
             "provider": m["provider"],
             "provider_id": m["provider_id"],
             "method": "aa",
             "score": 1.0,
+            "variant_id": m["variant_id"],
             "aa_name": m.get("aa_name")
         })
 
@@ -111,26 +151,14 @@ def discover_provider_ids(config: AppConfig, model_id: str, provider: str | None
                 "provider": m["provider"],
                 "provider_id": m["provider_id"],
                 "method": "string",
-                "score": m["score"]
+                "score": m["score"],
+                "variant_id": "standard" # Default for string matches
             })
 
     return matches
 
-def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
-    """Match via Artificial Analysis slugs with sanity checking."""
-    res = resolve_model(model_id, config)
-    if not res:
-        return []
-
-    aa_slug = None
-    for var in res["variants"]:
-        if var["variant_id"] == res["default_variant"]:
-            aa_slug = var["aa_slug"]
-            break
-
-    if not aa_slug:
-        return []
-
+def _match_via_aa_multi(config: AppConfig, variant_slugs: List[Tuple[str, str]]) -> List[Dict[str, Any]]:
+    """Match multiple slugs to providers in the AA dataset."""
     path = get_raw_scores_path(config)
     if not path.exists():
         return []
@@ -139,30 +167,35 @@ def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
         data = json.loads(path.read_text())
         models_list = data.get("data", [])
         results = []
-        for m in models_list:
-            if m.get("slug") == aa_slug:
-                providers = m.get("providers", []) or m.get("deployments", [])
-                model_keywords = set(model_id.lower().split("-"))
 
-                for p in providers:
-                    pid = p.get("id", "").lower()
-                    if not pid:
-                        continue
+        for var_id, slug in variant_slugs:
+            if not slug:
+                continue
 
-                    # Sanity check: provider ID should share at least one significant keyword with model_id
-                    # (e.g. "gemma" should be in "openrouter/google/gemma-4-31b-it")
-                    pid_keywords = set(pid.replace("/", " ").replace("_", " ").split("-"))
-                    if model_keywords & pid_keywords:
-                        results.append({
-                            "provider": p.get("provider", "unknown"),
-                            "provider_id": p.get("id"),
-                            "aa_name": m.get("name", "unknown")
-                        })
+            # Find the AA model entry for this slug
+            for m in models_list:
+                if m.get("slug") == slug:
+                    providers = m.get("providers", []) or m.get("deployments", [])
+                    # Use a representative model_id for sanity checking (approximate from slug)
+                    model_keywords = set(slug.lower().split("-"))
+
+                    for p in providers:
+                        pid = p.get("id", "").lower()
+                        if not pid:
+                            continue
+
+                        pid_keywords = set(pid.replace("/", " ").replace("_", " ").split("-"))
+                        if model_keywords & pid_keywords:
+                            results.append({
+                                "provider": p.get("provider", "unknown"),
+                                "provider_id": p.get("id"),
+                                "variant_id": var_id,
+                                "aa_name": m.get("name", "unknown")
+                            })
+                    break # Found the model for this slug
         return results
     except Exception:
-        pass
-
-    return []
+        return []
 
 def _match_via_string(config: AppConfig, model_id: str, provider: str | None = None) -> List[Dict[str, Any]]:
     """Match via string similarity across provider caches, prioritizing substring matches."""

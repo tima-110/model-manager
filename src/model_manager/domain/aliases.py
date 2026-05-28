@@ -63,9 +63,6 @@ def add_alias(config: AppConfig, model_id: str, provider: str | None = None, pro
     # Ensure the conceptual model exists first
     models.add_model(config, model_id, family=family, display_name=display_name)
 
-    if provider is None or provider_id is None:
-        return
-
     data = storage.load_models_data(config)
     model = data["models"][model_id]
     if variant_id not in model["variants"]:
@@ -77,17 +74,18 @@ def add_alias(config: AppConfig, model_id: str, provider: str | None = None, pro
 
     variant = model["variants"][variant_id]
 
-    # Ensure 1-to-1 mapping from ID to Variant
-    for mid, mdata in data["models"].items():
-        for vid, vdata in mdata["variants"].items():
-            for prov, ids in vdata["provider_ids"].items():
-                if provider_id in ids:
-                    ids.remove(provider_id)
+    if provider and provider_id:
+        # Ensure 1-to-1 mapping from ID to Variant
+        for mid, mdata in data["models"].items():
+            for vid, vdata in mdata["variants"].items():
+                for prov, ids in vdata["provider_ids"].items():
+                    if provider_id in ids:
+                        ids.remove(provider_id)
 
-    if provider not in variant["provider_ids"]:
-        variant["provider_ids"][provider] = []
-    if provider_id not in variant["provider_ids"][provider]:
-        variant["provider_ids"][provider].append(provider_id)
+        if provider not in variant["provider_ids"]:
+            variant["provider_ids"][provider] = []
+        if provider_id not in variant["provider_ids"][provider]:
+            variant["provider_ids"][provider].append(provider_id)
 
     if aa_slug:
         variant["aa_slug"] = aa_slug

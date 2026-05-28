@@ -108,8 +108,7 @@ def models_discover(
 ) -> None:
     """Discover and map provider IDs to a conceptual model.
 
-    Uses a hybrid approach: first checking Artificial Analysis (AA) slugs,
-    then performing fuzzy string matching across provider caches.
+    Interactive workflow: Model Identification -> Variant Definition -> Provider Mapping.
     """
     cfg = load_config(config)
 
@@ -157,80 +156,154 @@ def models_discover(
             except Exception as e:
                 console.print(f"[yellow]Warning: Failed to refresh AA scores: {e}[/yellow]")
 
-    matches = models.discover_provider_ids(cfg, model_id, provider)
+    # --- Phase 1: Model Identification ---
+    model_res = models.resolve_model(model_id, cfg)
+    if not model_res:
+        # Ensure model exists in library first
+        models.add_model(cfg, model_id)
+        model_res = models.resolve_model(model_id, cfg)
+
+    default_variant = model_res["default_variant"]
+
+    # Check for AA slug in default variant
+    existing_slug = None
+    for var in model_res["variants"]:
+        if var["variant_id"] == default_variant:
+            existing_slug = var["aa_slug"]
+            break
+
+    if not existing_slug and not yolo:
+        console.print(f"\n[bold]Identifying AA model for {model_id}...[/bold]")
+        candidates = models.search_aa_candidates(cfg, model_id)
+        if candidates:
+            table = Table(title="AA Model Candidates")
+            table.add_column("#", style="dim", width=3)
+            table.add_column("Slug", style="cyan")
+            table.add_column("Name", style="magenta")
+            for i, c in enumerate(candidates, 1):
+                table.add_row(str(i), c["slug"], c["name"])
+            console.print(table)
+
+            choice = typer.prompt("Pick a candidate (1-N) or 'skip'", default="skip")
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(candidates):
+                    picked_slug = candidates[idx]["slug"]
+                    aliases.add_alias(cfg, model_id, variant_id=default_variant, aa_slug=picked_slug)
+                    console.print(f"[green]Set default AA slug to {picked_slug}[/green]")
+                    existing_slug = picked_slug
+        else:
+            console.print("[yellow]No AA candidates found. Proceeding with string matching only.[/yellow]")
+
+    # --- Phase 2: Variant Definition ---
+    if not yolo:
+        add_variants = typer.prompt("Would you like to define additional variants for this model (e.g. 'fast', 'cheap')? (y/n)", default="n")
+        if add_variants.lower() == 'y':
+            while True:
+                var_name = typer.prompt("Variant name (or 'done' to finish)")
+                if var_name.lower() == 'done':
+                    break
+
+                search_slug = typer.prompt(f"Search for AA slug for variant '{var_name}'? (y/n)", default="y")
+                if search_slug.lower() == 'y':
+                    candidates = models.search_aa_candidates(cfg, model_id) # Simplified search
+                    if candidates:
+                        table = Table(title=f"AA Candidates for {var_name}")
+                        table.add_column("#", style="dim", width=3)
+                        table.add_column("Slug", style="cyan")
+                        table.add_column("Name", style="magenta")
+                        for i, c in enumerate(candidates, 1):
+                            table.add_row(str(i), c["slug"], c["name"])
+                        console.print(table)
+
+                        choice = typer.prompt("Pick a candidate (1-N) or 'skip'", default="skip")
+                        if choice.isdigit():
+                            idx = int(choice) - 1
+                            if 0 <= idx < len(candidates):
+                                picked_slug = candidates[idx]["slug"]
+                                aliases.add_alias(cfg, model_id, variant_id=var_name, aa_slug=picked_slug)
+                                console.print(f"[green]Set AA slug for {var_name} to {picked_slug}[/green]")
+                    else:
+                        console.print("[yellow]No AA candidates found.[/yellow]")
+                else:
+                    aliases.add_alias(cfg, model_id, variant_id=var_name)
+
+    # --- Phase 3: Provider Mapping ---
+    # Refresh model resolution after identification/definition phases
+    model_res = models.resolve_model(model_id, cfg)
+    variant_slugs = []
+    for var in model_res["variants"]:
+        if var["aa_slug"]:
+            variant_slugs.append((var["variant_id"], var["aa_slug"]))
+
+    matches = models.discover_provider_ids(cfg, model_id, variant_slugs, provider)
     if not matches:
         console.print(f"[yellow]No provider matches found for {model_id}.[/yellow]")
         return
 
     console.print(f"\n[bold]Discovery results for {model_id}:[/bold]")
 
-    # Resolve default variant for this model
-    model_res = models.resolve_model(model_id, cfg)
-    default_var = model_res["default_variant"] if model_res else "standard"
-
     aa_matches = [m for m in matches if m["method"] == "aa"]
     string_matches = [m for m in matches if m["method"] == "string"]
 
-    # 1. Process AA Matches
+    # 1. Strong Matches (from AA)
     if aa_matches:
-        table = Table(title="Artificial Analysis Matches")
-        table.add_column("#", style="dim", width=3)
+        table = Table(title="Strong Matches (via Artificial Analysis)")
         table.add_column("Provider", style="cyan")
         table.add_column("Provider ID", style="green")
+        table.add_column("Variant", style="yellow")
         table.add_column("AA Name", style="magenta")
 
-        for i, m in enumerate(aa_matches, 1):
-            table.add_row(str(i), m["provider"], m["provider_id"], m.get("aa_name", "Unknown"))
-
+        for m in aa_matches:
+            table.add_row(m["provider"], m["provider_id"], m["variant_id"], m["aa_name"])
         console.print(table)
 
         if yolo:
-            # In yolo mode, first is default, others are standard
-            for i, m in enumerate(aa_matches):
-                var = default_var if i == 0 else "standard"
-                aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var)
-                console.print(f"   [dim]Auto-mapped {m['provider']} to {var}...[/dim]")
+            for m in aa_matches:
+                aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], m["variant_id"])
+                console.print(f"   [dim]Auto-mapped {m['provider']} to {m['variant_id']}...[/dim]")
         else:
-            choice = typer.prompt("Pick a default provider (1-N) or 'none'", default="none")
-            selected_idx = None
-            if choice.isdigit():
-                idx = int(choice) - 1
-                if 0 <= idx < len(aa_matches):
-                    selected_idx = idx
-
-            for i, m in enumerate(aa_matches):
-                if i == selected_idx:
-                    aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], default_var)
-                    console.print(f"   [green]Mapped {m['provider']} as default ({default_var})![/green]")
+            for m in aa_matches:
+                if typer.prompt(f"Accept mapping {m['provider']} to {m['variant_id']}? (y/n)", default="y").lower() == 'y':
+                    aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], m["variant_id"])
+                    console.print(f"   [green]Mapped![/green]")
                 else:
-                    # For non-defaults, ask if they want it as a variant
-                    if typer.prompt(f"Map {m['provider']} to a variant? (y/n)", default="n").lower() == 'y':
-                        var_name = typer.prompt(f"Variant name for {m['provider']} (e.g. 'fast', 'cheap')", default="standard")
-                        aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var_name)
-                        console.print(f"   [green]Mapped {m['provider']} to variant {var_name}![/green]")
-                    else:
-                        console.print(f"   [red]Skipped {m['provider']}.[/red]")
+                    console.print(f"   [red]Skipped.[/red]")
 
-    # 2. Process String Matches
+    # 2. Suggested Matches (from cache)
     if string_matches:
-        console.print("\n[bold]String-based matches:[/bold]")
+        console.print("\n[bold]Suggested Matches (via String Matching):[/bold]")
+        # Get current variants for selection
+        variants = [v["variant_id"] for v in model_res["variants"]]
+
         for m in string_matches:
-            method_color = "cyan"
             score_str = f" (score: {m['score']:.2f})"
-            console.print(f" - [{method_color}]STRING[/{method_color}] {m['provider']}: {m['provider_id']}{score_str}")
+            console.print(f" - {m['provider']}: {m['provider_id']}{score_str}")
 
             if yolo:
-                # If AA already provided a default, these are all standard
-                var = "standard"
+                # Default to standard or first available variant
+                var = variants[0] if variants else "standard"
                 aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var)
                 console.print(f"   [dim]Auto-mapped to {var}...[/dim]")
             else:
-                if typer.prompt("Accept mapping? (y/n)", default="n").lower() == 'y':
-                    var_name = typer.prompt(f"Map to variant (default '{default_var}'): ", default=default_var)
-                    aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var_name)
-                    console.print(f"   [green]Mapped to {var_name}![/green]")
+                # Prompt for variant assignment
+                var_options = "\n".join([f"{i+1}. {v}" for i, v in enumerate(variants)])
+                choice = typer.prompt(
+                    f"Assign {m['provider_id']} to which variant?\n{var_options}\n(or type a new variant name)",
+                    default=variants[0] if variants else "standard"
+                )
+
+                if choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(variants):
+                        var_name = variants[idx]
+                    else:
+                        var_name = choice
                 else:
-                    console.print(f"   [red]Skipped.[/red]")
+                    var_name = choice
+
+                aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var_name)
+                console.print(f"   [green]Mapped to {var_name}![/green]")
 
     console.print(f"\n[green]Discovery process complete.[/green]")
 
@@ -446,7 +519,7 @@ def aliases_audit(
 
     console.print(table)
     if report["missing_ids"]:
-        console.print("\n[red]Missing IDs:[/red]")
+        console.print("\n[red]Missing IDs:[/red] ")
         for mid in report["missing_ids"]:
             console.print(f" - {mid}")
 
@@ -574,7 +647,7 @@ def sync_litellm(
             if choice.lower() == 'y':
                 slug = sug['suggestions'][0]
                 aliases.add_alias(app_cfg, provider, sug['pid'], slug, "standard", family="unknown", display_name=slug, aa_slug=slug)
-                console.print(f"[green]Mapped {sug['pid']} to {slug}[/green]")
+                console.print(f"[green]Mapped {sug['pid']} to {slug}[/green] ")
 
     console.print("\n[green]Sync complete.[/green]")
 
@@ -700,7 +773,7 @@ def discover_nvidia(
             )
 
         console.print(table)
-        console.print(f"\n[green]Saved {len(models)} models to {path}[/green]")
+        console.print(f"\n[green]Saved {len(models)} models to {path}[/green] ")
 
     except Exception as e:
         console.print(f"[red]Error during discovery: {e}[/red]")
