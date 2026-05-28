@@ -36,6 +36,7 @@ The tool uses a hierarchical structure to handle model variants (e.g., quantized
     - `family`: The organization/creator (e.g., `google`, `meta`).
     - `variants`: A dictionary of variants (e.g., `standard`, `quantized-low`).
         - `aa_slug`: The slug used to look up scores in `model_scores.json`.
+        - `scores`: (Optional) A snapshot of the AA scores at the time of allocation.
         - `provider_ids`: A mapping of providers to lists of IDs.
             - `google`: `["google/gemma-4-31b-it"]`
             - `openrouter`: `["gemma-4-31b-it:free"]`
