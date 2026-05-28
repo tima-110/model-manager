@@ -290,9 +290,13 @@ def models_discover(
                 # Prompt for variant assignment
                 var_options = "\n".join([f"{i+1}. {v}" for i, v in enumerate(variants)])
                 choice = typer.prompt(
-                    f"Assign {m['provider_id']} to which variant?\n{var_options}\n(or type a new variant name)",
-                    default=variants[0] if variants else "standard"
+                    f"Assign {m['provider_id']} to which variant?\n{var_options}\n(or press Enter to skip)",
+                    default=""
                 )
+
+                if not choice or choice.lower() == 'skip':
+                    console.print(f"   [dim]Skipped.[/dim]")
+                    continue
 
                 if choice.isdigit():
                     idx = int(choice) - 1
