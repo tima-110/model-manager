@@ -236,6 +236,7 @@ def models_discover(
         if var["aa_slug"]:
             variant_slugs.append((var["variant_id"], var["aa_slug"]))
 
+    console.print(f"\n[bold]Searching for provider IDs...[/bold]")
     matches = models.discover_provider_ids(cfg, model_id, variant_slugs, provider)
     if not matches:
         console.print(f"[yellow]No provider matches found for {model_id}.[/yellow]")
@@ -304,6 +305,8 @@ def models_discover(
 
                 aliases.add_alias(cfg, model_id, m["provider"], m["provider_id"], var_name)
                 console.print(f"   [green]Mapped to {var_name}![/green]")
+    else:
+        console.print("\n[dim]No additional suggested matches found in provider caches.[/dim]")
 
     console.print(f"\n[green]Discovery process complete.[/green]")
 
