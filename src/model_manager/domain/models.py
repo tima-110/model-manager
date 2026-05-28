@@ -98,7 +98,8 @@ def discover_provider_ids(config: AppConfig, model_id: str, provider: str | None
             "provider": m["provider"],
             "provider_id": m["provider_id"],
             "method": "aa",
-            "score": 1.0
+            "score": 1.0,
+            "aa_name": m.get("aa_name")
         })
 
     # 2. String-Based Match
@@ -137,13 +138,10 @@ def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
     try:
         data = json.loads(path.read_text())
         models_list = data.get("data", [])
+        results = []
         for m in models_list:
             if m.get("slug") == aa_slug:
-                providers = m.get("providers", [])
-                if not providers:
-                    providers = m.get("deployments", [])
-
-                results = []
+                providers = m.get("providers", []) or m.get("deployments", [])
                 model_keywords = set(model_id.lower().split("-"))
 
                 for p in providers:
@@ -155,9 +153,12 @@ def _match_via_aa(config: AppConfig, model_id: str) -> List[Dict[str, Any]]:
                     # (e.g. "gemma" should be in "openrouter/google/gemma-4-31b-it")
                     pid_keywords = set(pid.replace("/", " ").replace("_", " ").split("-"))
                     if model_keywords & pid_keywords:
-                        results.append({"provider": p.get("provider", "unknown"), "provider_id": p.get("id")})
-
-                return results
+                        results.append({
+                            "provider": p.get("provider", "unknown"),
+                            "provider_id": p.get("id"),
+                            "aa_name": m.get("name", "unknown")
+                        })
+        return results
     except Exception:
         pass
 
