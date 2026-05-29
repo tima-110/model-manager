@@ -380,6 +380,84 @@ def auth_list() -> None:
 providers_app = typer.Typer(help="Manage supported model providers.")
 app.add_typer(providers_app, name="providers")
 
+# --- Provider Sub-Apps ---
+openrouter_app = typer.Typer(help="OpenRouter provider commands.")
+nvidia_app = typer.Typer(help="NVIDIA provider commands.")
+ollama_app = typer.Typer(help="Ollama provider commands.")
+
+providers_app.add_typer(openrouter_app, name="openrouter")
+providers_app.add_typer(nvidia_app, name="nvidia")
+providers_app.add_typer(ollama_app, name="ollama")
+
+@openrouter_app.command("fetch")
+def openrouter_fetch(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Query current free models from OpenRouter and save their capabilities."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
+    _run_discovery_cli_workflow(provider, probe, config)
+
+@nvidia_app.command("fetch")
+def nvidia_fetch(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Query current available models from NVIDIA and save their capabilities."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
+    _run_discovery_cli_workflow(provider, probe, config)
+
+@ollama_app.command("fetch")
+def ollama_fetch(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Query current available models from Ollama Cloud and save their capabilities."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
+    _run_discovery_cli_workflow(provider, probe, config)
+
+def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None) -> None:
+    """CLI wrapper for the discovery workflow: adds progress bars and reports results."""
+    cfg = load_config(config)
+
+    try:
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+            progress.add_task(description=f"Fetching models from {provider.name}...", total=None)
+
+            # Use a simple lambda or wrapper if we want to track probe progress specifically
+            # but for now, we call the domain workflow.
+            models = providers.run_discovery_workflow(provider, cfg, probe)
+
+        if not models:
+            console.print(f"[yellow]No models discovered for {provider.name}.[/yellow]")
+            return
+
+        table = Table(title=f"Discovered {provider.name} Models ({len(models)})")
+        table.add_column("Model ID", style="cyan")
+        table.add_column("Name", style="magenta")
+        table.add_column("Context", style="green")
+        table.add_column("Architecture", style="yellow")
+
+        for m in models:
+            table.add_row(
+                str(m["id"] or "Unknown"),
+                str(m["name"] or "Unknown"),
+                str(m["context_length"] or "N/A"),
+                str(m["architecture"] or "Unknown")
+            )
+        console.print(table)
+    except Exception as e:
+        console.print(f"[red]Error during {provider.name} discovery: {e}[/red]")
+
+@providers_app.command("fetch")
+def providers_fetch(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Fetch updates for all supported providers."""
+    for provider in providers.list_providers():
+        _run_discovery_cli_workflow(provider, probe, config)
+
 @providers_app.command("list")
 def providers_list() -> None:
     """List supported providers and their authorization status."""
@@ -707,193 +785,6 @@ def sync_litellm(
 
     console.print("\n[green]Sync complete.[/green]")
 
-@app.command("discover-free")
-def discover_free(
-    probe: bool = typer.Option(
-        False, "--probe",
-        help="Verify model availability by sending a minimal request.",
-    ),
-    config: Path | None = typer.Option(
-        None, "--config", "-c",
-    ),
-) -> None:
-    """Query current free models from OpenRouter and save their capabilities."""
-    cfg = load_config(config)
-
-    try:
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            progress.add_task(description="Fetching free models from OpenRouter...", total=None)
-            models = discovery.fetch_openrouter_free_models()
-
-            if probe:
-                api_key = auth.get_secret("OPENROUTER_API_KEY")
-                if not api_key:
-                    console.print("[red]Error: OPENROUTER_API_KEY not found in environment or keychain. Probing disabled.[/red]")
-                else:
-                    progress.add_task(description="Probing models for availability...", total=len(models))
-                    verified_models = []
-                    for m in models:
-                        if discovery.probe_model(m["id"], api_key):
-                            verified_models.append(m)
-                    models = verified_models
-
-            progress.add_task(description="Saving discovery results...", total=None)
-            path = get_free_models_path(cfg)
-            discovery.save_free_models(cfg, models, path)
-
-        if not models:
-            console.print("[yellow]No free models discovered.[/yellow]")
-            return
-
-        table = Table(title=f"Discovered Free Models ({len(models)})")
-        table.add_column("Model ID", style="cyan")
-        table.add_column("Name", style="magenta")
-        table.add_column("Context", style="green")
-        table.add_column("Architecture", style="yellow")
-
-        for m in models:
-            table.add_row(
-                str(m["id"] or "Unknown"),
-                str(m["name"] or "Unknown"),
-                str(m["context_length"] or "N/A"),
-                str(m["architecture"] or "Unknown")
-            )
-
-        console.print(table)
-        console.print(f"\n[green]Saved {len(models)} models to {path}[/green]")
-
-    except Exception as e:
-        console.print(f"[red]Error during discovery: {e}[/red]")
-        raise typer.Exit(1)
-
-@app.command("discover-nvidia")
-def discover_nvidia(
-    probe: bool = typer.Option(
-        False, "--probe",
-        help="Verify model availability by sending a minimal request.",
-    ),
-    config: Path | None = typer.Option(
-        None, "--config", "-c",
-    ),
-) -> None:
-    """Query current available models from NVIDIA and save their capabilities."""
-    cfg = load_config(config)
-
-    try:
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            api_key = auth.get_secret("NVIDIA_API_KEY")
-            if not api_key:
-                console.print("[red]Error: NVIDIA_API_KEY not found in environment or keychain.[/red]")
-                raise typer.Exit(1)
-
-            progress.add_task(description="Fetching models from NVIDIA...", total=None)
-            models = discovery.fetch_nvidia_models(api_key)
-
-            if probe:
-                progress.add_task(description="Probing models for availability...", total=len(models))
-                verified_models = []
-                for m in models:
-                    if discovery.probe_model(m["id"], api_key, provider="nvidia"):
-                        verified_models.append(m)
-                    models = verified_models
-                # Correction: the loop was missing a verified_models.append(m) and
-                # was assignign models = verified_models inside the loop.
-                # I will fix this here as well.
-                # Wait, the original code had:
-                # for m in models:
-                #     if discovery.probe_model(m["id"], api_key, provider="nvidia"):
-                #         verified_models.append(m)
-                # models = verified_models
-                # I will restore the original correct logic.
-
-            progress.add_task(description="Saving discovery results...", total=None)
-            path = get_nvidia_models_path(cfg)
-            discovery.save_free_models(cfg, models, path)
-
-        if not models:
-            console.print("[yellow]No NVIDIA models discovered.[/yellow]")
-            return
-
-        table = Table(title=f"Discovered NVIDIA Models ({len(models)})")
-        table.add_column("Model ID", style="cyan")
-        table.add_column("Name", style="magenta")
-        table.add_column("Context", style="green")
-        table.add_column("Architecture", style="yellow")
-
-        for m in models:
-            table.add_row(
-                str(m["id"] or "Unknown"),
-                str(m["name"] or "Unknown"),
-                str(m["context_length"] or "N/A"),
-                str(m["architecture"] or "Unknown")
-            )
-
-        console.print(table)
-        console.print(f"\n[green]Saved {len(models)} models to {path}[/green] ")
-
-    except Exception as e:
-        console.print(f"[red]Error during discovery: {e}[/red]")
-        raise typer.Exit(1)
-
-@app.command("discover-ollama")
-def discover_ollama(
-    probe: bool = typer.Option(
-        False, "--probe",
-        help="Verify model availability by sending a minimal request.",
-    ),
-    config: Path | None = typer.Option(
-        None, "--config", "-c",
-    ),
-) -> None:
-    """Query current available models from Ollama Cloud and save their capabilities."""
-    cfg = load_config(config)
-
-    try:
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            api_key = auth.get_secret("OLLAMA_API_KEY")
-            if not api_key:
-                console.print("[red]Error: OLLAMA_API_KEY not found in environment or keychain.[/red]")
-                raise typer.Exit(1)
-
-            progress.add_task(description="Fetching models from Ollama...", total=None)
-            models = discovery.fetch_ollama_models(api_key)
-
-            if probe:
-                progress.add_task(description="Probing models for availability...", total=len(models))
-                verified_models = []
-                for m in models:
-                    if discovery.probe_model(m["id"], api_key, provider="ollama"):
-                        verified_models.append(m)
-                models = verified_models
-
-            progress.add_task(description="Saving discovery results...", total=None)
-            path = get_ollama_models_path(cfg)
-            discovery.save_free_models(cfg, models, path)
-
-        if not models:
-            console.print("[yellow]No Ollama models discovered.[/yellow]")
-            return
-
-        table = Table(title=f"Discovered Ollama Models ({len(models)})")
-        table.add_column("Model ID", style="cyan")
-        table.add_column("Name", style="magenta")
-        table.add_column("Context", style="green")
-        table.add_column("Architecture", style="yellow")
-
-        for m in models:
-            table.add_row(
-                str(m["id"] or "Unknown"),
-                str(m["name"] or "Unknown"),
-                str(m["context_length"] or "N/A"),
-                str(m["architecture"] or "Unknown")
-            )
-
-        console.print(table)
-        console.print(f"\n[green]Saved {len(models)} models to {path}[/green] ")
-
-    except Exception as e:
-        console.print(f"[red]Error during discovery: {e}[/red]")
-        raise typer.Exit(1)
 
 @app.command("init")
 def init(
