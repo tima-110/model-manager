@@ -615,6 +615,14 @@ def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) ->
     discovery.save_scan_results(cfg, provider.name, final_results_data)
     console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
 
+@providers_app.command("scan")
+def providers_scan(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Scan health for all supported providers."""
+    for provider in providers.list_providers():
+        _run_scan_cli_workflow(provider, config)
+
 @providers_app.command("fetch")
 def providers_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),

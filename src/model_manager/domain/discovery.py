@@ -6,7 +6,7 @@ import os
 import time
 import urllib.request
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, NamedTuple
@@ -189,7 +189,7 @@ def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrenc
             executor.submit(probe_model, mid, api_key, provider_id): mid
             for mid in model_ids
         }
-        for future in __import__("concurrent.futures").as_completed(future_to_model):
+        for future in as_completed(future_to_model):
             mid = future_to_model[future]
             try:
                 results[mid] = future.result()
