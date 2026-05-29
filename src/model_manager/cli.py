@@ -405,10 +405,14 @@ def openrouter_fetch(
 @openrouter_app.command("scan")
 def openrouter_scan(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
 ) -> None:
     """Scan the current health and performance of OpenRouter models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
-    _run_scan_cli_workflow(provider, config)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
+
 
 @nvidia_app.command("fetch")
 def nvidia_fetch(
@@ -422,10 +426,14 @@ def nvidia_fetch(
 @nvidia_app.command("scan")
 def nvidia_scan(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
 ) -> None:
     """Scan the current health and performance of NVIDIA models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
-    _run_scan_cli_workflow(provider, config)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
+
 
 @ollama_app.command("fetch")
 def ollama_fetch(
@@ -439,10 +447,14 @@ def ollama_fetch(
 @ollama_app.command("scan")
 def ollama_scan(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
 ) -> None:
     """Scan the current health and performance of Ollama models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
-    _run_scan_cli_workflow(provider, config)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
+
 
 def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None) -> None:
     """CLI wrapper for the discovery workflow: adds progress bars and reports results."""
@@ -477,10 +489,17 @@ def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, confi
     except Exception as e:
         console.print(f"[red]Error during {provider.name} discovery: {e}[/red]")
 
-def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) -> None:
+def _run_scan_cli_workflow(
+    provider: providers.Provider,
+    config: Path | None,
+    filter_str: str | None = None,
+    only_up: bool = False,
+    only_down: bool = False,
+) -> None:
     """CLI workflow for scanning provider model health with live updates and final assessment."""
     cfg = load_config(config)
     api_key = auth.get_secret(provider.secret_key)
+
 
     if not api_key and provider.name != "OpenRouter":
         console.print(f"[red]Error: {provider.secret_key} missing from keychain.[/red]")
@@ -494,7 +513,16 @@ def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) ->
 
     with open(cache_path, "r") as f:
         cache_data = json.load(f)
-        model_ids = [m["id"] for m in cache_data.get("models", [])]
+        all_models = cache_data.get("models", [])
+
+        if filter_str:
+            model_ids = [
+                m["id"] for m in all_models
+                if filter_str.lower() in m["id"].lower() or filter_str.lower() in m.get("name", "").lower()
+            ]
+        else:
+            model_ids = [m["id"] for m in all_models]
+
 
     if not model_ids:
         console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
@@ -552,7 +580,17 @@ def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) ->
 
                 for mid in model_ids:
                     res = results.get(mid)
+                    if not res:
+                        continue
+
+                    # Apply status filters
+                    if only_up and res.status != "up":
+                        continue
+                    if only_down and res.status == "up":
+                        continue
+
                     if res: history[mid].append(res)
+
 
                     # Calculate running average
                     m_hist = history[mid]
@@ -618,10 +656,14 @@ def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) ->
 @providers_app.command("scan")
 def providers_scan(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
 ) -> None:
     """Scan health for all supported providers."""
     for provider in providers.list_providers():
-        _run_scan_cli_workflow(provider, config)
+        _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
+
 
 @providers_app.command("fetch")
 def providers_fetch(
