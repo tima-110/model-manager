@@ -15,6 +15,8 @@ class AppConfig(BaseModel):
     data_dir: Path = Path()
     verbose: bool = False
     debug: bool = False
+    scan_frequency: int = 5
+    scan_count: int = 0
 
     def model_post_init(self, __context: object) -> None:
         if self.data_dir == Path():

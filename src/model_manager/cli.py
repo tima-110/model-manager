@@ -4,13 +4,17 @@ from __future__ import annotations
 import sys
 import os
 import yaml
+import json
+import time
 import typer
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.live import Live
 
 from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
 from model_manager.domain import aliases, scores, advisor, discovery, auth, models, providers
@@ -448,6 +452,144 @@ def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, confi
         console.print(table)
     except Exception as e:
         console.print(f"[red]Error during {provider.name} discovery: {e}[/red]")
+
+def _run_scan_cli_workflow(provider: providers.Provider, config: Path | None) -> None:
+    """CLI workflow for scanning provider model health with live updates and final assessment."""
+    cfg = load_config(config)
+    api_key = auth.get_secret(provider.secret_key)
+
+    if not api_key and provider.name != "OpenRouter":
+        console.print(f"[red]Error: {provider.secret_key} missing from keychain.[/red]")
+        raise typer.Exit(1)
+
+    # Get models to scan from the provider's cache
+    cache_path = provider.path_fn(cfg)
+    if not cache_path.exists():
+        console.print(f"[red]Error: Provider cache not found at {cache_path}. Please run 'fetch' first.[/red]")
+        raise typer.Exit(1)
+
+    with open(cache_path, "r") as f:
+        cache_data = json.load(f)
+        model_ids = [m["id"] for m in cache_data.get("models", [])]
+
+    if not model_ids:
+        console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
+        return
+
+    # State tracking
+    history: Dict[str, List[discovery.PingResult]] = {mid: [] for mid in model_ids}
+    cycle_count = 0
+    max_cycles = cfg.scan_count
+
+    def get_status_color(status: str) -> str:
+        if status == "up": return "green"
+        if status == "ratelimit": return "yellow"
+        if status in ("unauthorized", "forbidden"): return "magenta"
+        return "red"
+
+    def calculate_assessment(results: List[discovery.PingResult]) -> tuple[str, str]:
+        """Returns (assessment_label, color)."""
+        if not results: return ("Unknown", "white")
+
+        successes = [r for r in results if r.status == "up"]
+        avail = len(successes) / len(results)
+
+        if avail > 0.9:
+            avg_lat = sum(r.latency_ms for r in successes) / len(successes)
+            if avg_lat < 1000: return ("Good", "green")
+            return ("Slow", "yellow")
+
+        # Analyze dominant failure mode
+        counts = {}
+        for r in results: counts[r.status] = counts.get(r.status, 0) + 1
+        dominant = max(counts, key=counts.get)
+
+        if dominant in ("unauthorized", "forbidden"): return ("Unauthorized", "magenta")
+        if dominant == "not_found": return ("Not Found", "red")
+        if dominant == "ratelimit": return ("Ratelimited", "yellow")
+        if dominant in ("down", "timeout"): return ("Dead", "red")
+        return ("Weak", "yellow")
+
+    # --- Live Scanning Loop ---
+    try:
+        with Live(console=console, refresh_per_second=4) as live:
+            while True:
+                cycle_count += 1
+
+                # 1. Perform parallel scan
+                results = discovery.scan_models(provider.probe_id, api_key or "", model_ids)
+
+                # 2. Update history and build table
+                table = Table(title=f"Health Scan: {provider.name} (Cycle {cycle_count})")
+                table.add_column("Model ID", style="cyan")
+                table.add_column("Status", justify="center")
+                table.add_column("Latency (ms)", justify="right")
+                table.add_column("Avg Latency", justify="right")
+
+                for mid in model_ids:
+                    res = results.get(mid)
+                    if res: history[mid].append(res)
+
+                    # Calculate running average
+                    m_hist = history[mid]
+                    successes = [r.latency_ms for r in m_hist if r.status == "up"]
+                    avg_lat = sum(successes)/len(successes) if successes else 0
+
+                    status_text = res.status if res else "Unknown"
+                    color = get_status_color(status_text)
+                    lat_text = f"{res.latency_ms:.1f}" if res else "N/A"
+
+                    table.add_row(
+                        mid,
+                        f"[{color}]{status_text}[/{color}]",
+                        lat_text,
+                        f"{avg_lat:.1f}" if successes else "N/A"
+                    )
+
+                live.update(table)
+
+                if max_cycles > 0 and cycle_count >= max_cycles:
+                    break
+
+                time.sleep(cfg.scan_frequency)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Scan halted by user.[/yellow]")
+
+    # --- Final Assessment Phase ---
+    console.print("\n[bold]Final Health Assessment[/bold]")
+    summary_table = Table(show_header=True, header_style="bold magenta")
+    summary_table.add_column("Model ID", style="cyan")
+    summary_table.add_column("Availability", justify="center")
+    summary_table.add_column("Avg Latency", justify="right")
+    summary_table.add_column("Assessment", justify="center")
+
+    final_results_data = {"metadata": {"provider": provider.name, "cycles": cycle_count, "timestamp": datetime.now().isoformat()}, "models": {}}
+
+    for mid in model_ids:
+        m_hist = history[mid]
+        successes = [r for r in m_hist if r.status == "up"]
+        avail = len(successes) / len(m_hist) if m_hist else 0
+        avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
+
+        label, color = calculate_assessment(m_hist)
+
+        summary_table.add_row(
+            mid,
+            f"{avail:.1%}",
+            f"{avg_lat:.1f}ms" if successes else "N/A",
+            f"[{color}]{label}[/{color}]"
+        )
+
+        final_results_data["models"][mid] = {
+            "history": [vars(r) for r in m_hist],
+            "summary": {"availability": avail, "avg_latency": avg_lat, "assessment": label}
+        }
+
+    console.print(summary_table)
+
+    # Save to JSON
+    discovery.save_scan_results(cfg, provider.name, final_results_data)
+    console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
 
 @providers_app.command("fetch")
 def providers_fetch(
