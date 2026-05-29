@@ -16,7 +16,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.live import Live
 
-from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
+from model_manager.config import AppConfig, load_config, save_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
 from model_manager.domain import aliases, scores, advisor, discovery, auth, models, providers
 
 app = typer.Typer(
@@ -966,6 +966,11 @@ def init(
 ) -> None:
     """Initialize default config and data directories."""
     cfg = load_config(config)
+
+    # Initialize configuration file
+    config_path = save_config(cfg, config)
+    console.print(f"[green]Initialized configuration at: {config_path}[/green]")
+
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
 
     # Create stub models.json if it doesn't exist

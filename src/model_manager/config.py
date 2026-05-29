@@ -16,7 +16,7 @@ class AppConfig(BaseModel):
     verbose: bool = False
     debug: bool = False
     scan_frequency: int = 5
-    scan_count: int = 0
+    scan_count: int = 24
 
     def model_post_init(self, __context: object) -> None:
         if self.data_dir == Path():
@@ -43,6 +43,28 @@ def load_config(path: Path | None = None) -> AppConfig:
     with open(config_path, "rb") as f:
         raw = tomllib.load(f)
     return AppConfig(**raw)
+
+def save_config(config: AppConfig, path: Path | None = None) -> Path:
+    """Save the current configuration to a TOML file."""
+    target_path = path or find_config()
+    if target_path is None:
+        # This should ideally not happen as find_config has a default
+        raise RuntimeError("Could not determine configuration path")
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Generate simple TOML content from the config model
+    lines = []
+    for key, value in config.model_dump().items():
+        if isinstance(value, Path):
+            lines.append(f'{key} = "{value}"')
+        else:
+            lines.append(f'{key} = {value}')
+
+    with open(target_path, "w") as f:
+        f.write("\n".join(lines))
+
+    return target_path
 
 def get_scores_path(config: AppConfig) -> Path:
     """Return path to the model scores JSON file."""
