@@ -9,7 +9,8 @@ from datetime import datetime
 from pathlib import Path
 
 from model_manager.config import AppConfig, get_raw_scores_path, get_scores_path
-from model_manager.domain import auth
+from model_manager.domain import auth, storage
+
 
 def get_api_key() -> str | None:
     """Load AA API key from environment or keychain."""
@@ -82,3 +83,33 @@ def get_scores_for_slug(config: AppConfig, slug: str) -> dict | None:
     except Exception:
         pass
     return None
+
+
+def sync_scores_to_models(config: AppConfig) -> int:
+    """
+    Update the scores in models.json based on the current values in scores.json.
+    Only updates variants that have an aa_slug.
+    """
+    scores_path = get_scores_path(config)
+    if not scores_path.exists():
+        raise RuntimeError("Processed scores file not found. Please run 'scores fetch' first.")
+
+    try:
+        scores_data = json.loads(scores_path.read_text())
+    except json.JSONDecodeError:
+        raise RuntimeError("Processed scores file is corrupted.")
+
+    processed_models = scores_data.get("models", {})
+    models_data = storage.load_models_data(config)
+    updated_count = 0
+
+    for model_id, model_info in models_data.get("models", {}).items():
+        for variant_id, variant_info in model_info.get("variants", {}).items():
+            slug = variant_info.get("aa_slug")
+            if slug and slug in processed_models:
+                # Update the scores with current values from scores.json
+                variant_info["scores"] = processed_models[slug].get("scores")
+                updated_count += 1
+
+    storage.save_models_data(config, models_data)
+    return updated_count

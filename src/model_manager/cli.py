@@ -400,8 +400,8 @@ def providers_list() -> None:
 scores_app = typer.Typer(help="Manage Artificial Analysis score ingestion.")
 app.add_typer(scores_app, name="scores")
 
-@scores_app.command("sync")
-def scores_sync(
+@scores_app.command("fetch")
+def scores_fetch(
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Fetch latest model scores from Artificial Analysis."""
@@ -424,6 +424,24 @@ def scores_sync(
         processed = scores.process_aa_data(data, cfg)
 
     console.print(f"[green]Successfully synced {processed['meta']['total_models']} models.[/green]")
+
+
+@scores_app.command("sync")
+def scores_sync(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Update model variants in models.json with current scores from the local cache."""
+    cfg = load_config(config)
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+        progress.add_task(description="Syncing scores to models library...", total=None)
+        try:
+            updated_count = scores.sync_scores_to_models(cfg)
+        except RuntimeError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    console.print(f"[green]Successfully updated scores for {updated_count} model variants.[/green]")
 
 # --- Aliases Group ---
 aliases_app = typer.Typer(help="Manage model identifier mappings.")
