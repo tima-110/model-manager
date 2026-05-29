@@ -402,6 +402,14 @@ def openrouter_fetch(
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
     _run_discovery_cli_workflow(provider, probe, config)
 
+@openrouter_app.command("scan")
+def openrouter_scan(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Scan the current health and performance of OpenRouter models."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
+    _run_scan_cli_workflow(provider, config)
+
 @nvidia_app.command("fetch")
 def nvidia_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
@@ -411,6 +419,14 @@ def nvidia_fetch(
     provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
     _run_discovery_cli_workflow(provider, probe, config)
 
+@nvidia_app.command("scan")
+def nvidia_scan(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Scan the current health and performance of NVIDIA models."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
+    _run_scan_cli_workflow(provider, config)
+
 @ollama_app.command("fetch")
 def ollama_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
@@ -419,6 +435,14 @@ def ollama_fetch(
     """Query current available models from Ollama Cloud and save their capabilities."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
     _run_discovery_cli_workflow(provider, probe, config)
+
+@ollama_app.command("scan")
+def ollama_scan(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Scan the current health and performance of Ollama models."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
+    _run_scan_cli_workflow(provider, config)
 
 def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None) -> None:
     """CLI wrapper for the discovery workflow: adds progress bars and reports results."""
