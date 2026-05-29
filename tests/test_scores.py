@@ -14,6 +14,8 @@ def test_process_aa_data(mock_config):
             {
                 "slug": "model-1",
                 "name": "Model One",
+                "median_time_to_first_token_seconds": 0.5,
+                "median_output_tokens_per_second": 100.0,
                 "evaluations": {
                     "artificial_analysis_intelligence_index": 80,
                     "artificial_analysis_coding_index": 70,
@@ -27,6 +29,8 @@ def test_process_aa_data(mock_config):
     assert processed is not None
     assert "model-1" in processed["models"]
     assert processed["models"]["model-1"]["scores"]["intelligence"] == 80
+    assert processed["models"]["model-1"]["scores"]["ttft"] == 0.5
+    assert processed["models"]["model-1"]["scores"]["tps"] == 100.0
     assert processed["meta"]["total_models"] == 1
 
 def test_fetch_aa_data_success(mock_config):

@@ -256,9 +256,18 @@ def models_discover(
         table.add_column("Provider ID", style="green")
         table.add_column("Variant", style="yellow")
         table.add_column("AA Name", style="magenta")
+        table.add_column("TTFT (s)", style="dim")
+        table.add_column("TPS", style="dim")
 
         for m in aa_matches:
-            table.add_row(m["provider"], m["provider_id"], m["variant_id"], m["aa_name"])
+            table.add_row(
+                m["provider"],
+                m["provider_id"],
+                m["variant_id"],
+                m["aa_name"],
+                f"{m.get('ttft', 'N/A')}" if m.get('ttft') is not None else "N/A",
+                f"{m.get('tps', 'N/A')}" if m.get('tps') is not None else "N/A"
+            )
         console.print(table)
 
         if yolo:

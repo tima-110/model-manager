@@ -190,7 +190,9 @@ def _match_via_aa_multi(config: AppConfig, variant_slugs: List[Tuple[str, str]])
                                 "provider": p.get("provider", "unknown"),
                                 "provider_id": p.get("id"),
                                 "variant_id": var_id,
-                                "aa_name": m.get("name", "unknown")
+                                "aa_name": m.get("name", "unknown"),
+                                "ttft": m.get("median_time_to_first_token_seconds"),
+                                "tps": m.get("median_output_tokens_per_second"),
                             })
                     break # Found the model for this slug
         return results

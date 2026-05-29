@@ -59,6 +59,8 @@ def process_aa_data(aa_response: dict, config: AppConfig) -> dict | None:
                 "intelligence": evals.get("artificial_analysis_intelligence_index"),
                 "coding": evals.get("artificial_analysis_coding_index"),
                 "math": evals.get("artificial_analysis_math_index"),
+                "ttft": m.get("median_time_to_first_token_seconds"),
+                "tps": m.get("median_output_tokens_per_second"),
             },
             "last_synced": processed["meta"]["last_updated"]
         }

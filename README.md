@@ -46,6 +46,7 @@ pipx install -e .
 | `aliases add` | Add or update a model mapping (supports skeleton models) | `provider`, `id`, `model`, `variant`, `family`, `display_name`, `aa_slug`, `--config` |
 | `aliases discover` | Suggest mappings for unmapped IDs | `provider`, `ids`, `--config` |
 | `aliases audit` | Report mapping coverage | `ids`, `--config` |
+| `models discover` | Guided discovery and mapping of provider IDs to a conceptual model | `model_id`, `--provider`, `--refresh`, `--yolo`, `--config` |
 | `auth set` | Store an API key in keychain | `key_name`, `value` |
 | `auth delete` | Remove an API key from keychain | `key_name` |
 | `auth list` | List stored keys | *(none)* |
@@ -55,6 +56,18 @@ pipx install -e .
 | `discover-free` | Discover free OpenRouter models | `--probe`, `--config` |
 | `discover-nvidia` | Discover NVIDIA available models | `--probe`, `--config` |
 | `discover-ollama` | Discover Ollama available models | `--probe`, `--config` |
+
+## Guided Discovery Workflow
+
+The `model discover` command provides an interactive, three-phase workflow to map providers to performance identities:
+
+1. **Model Identification**: Search the AA dataset to find and assign the correct `aa_slug` for the model's default variant.
+2. **Variant Definition**: Optionally define additional functional variants (e.g., "fast", "cheap") and associate them with specific AA slugs.
+3. **Provider Mapping**: 
+   - **Strong Matches**: Automatically identified via AA for variants with slugs.
+   - **Suggested Matches**: Fuzzy-matched from local provider caches (OpenRouter, NVIDIA, Ollama). Users can assign these to variants or skip them.
+
+Scores (Intelligence, Coding, Math) are snapshotted directly into the variant data during this process for fast local analysis.
 
 ## Model Mapping Architecture
 
