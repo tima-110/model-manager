@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from model_manager.config import AppConfig, load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
-from model_manager.domain import aliases, scores, advisor, discovery, auth, models
+from model_manager.domain import aliases, scores, advisor, discovery, auth, models, providers
 
 app = typer.Typer(
     name="model-manager",
@@ -373,6 +373,26 @@ def auth_list() -> None:
         val = auth.get_secret(k)
         status = "[green]Stored[/green]" if val else "[red]Missing[/red]"
         table.add_row(k, status)
+
+    console.print(table)
+
+# --- Providers Group ---
+providers_app = typer.Typer(help="Manage supported model providers.")
+app.add_typer(providers_app, name="providers")
+
+@providers_app.command("list")
+def providers_list() -> None:
+    """List supported providers and their authorization status."""
+    supported = providers.list_providers()
+
+    table = Table(title="Supported Providers")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Authorized", style="magenta")
+
+    for p in supported:
+        is_auth = auth.get_secret(p.secret_key)
+        status = "[green]Stored[/green]" if is_auth else "[red]Missing[/red]"
+        table.add_row(p.name, status)
 
     console.print(table)
 
