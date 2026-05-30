@@ -10,6 +10,15 @@ import typer
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+from enum import Enum
+
+class SortOption(str, Enum):
+    alpha = "alpha"
+    int = "int"
+    code = "code"
+    math = "math"
+    ttft = "ttft"
+    tps = "tps"
 
 from rich.console import Console
 from rich.table import Table
@@ -743,6 +752,7 @@ def scores_list(
     filter: str | None = typer.Option(None, "--filter", "-f"),
     refresh: bool = typer.Option(False, "--refresh"),
     selected_models: bool = typer.Option(False, "--selected-models"),
+    sort: SortOption = typer.Option(SortOption.alpha, "--sort", help="Sort the list by the specified metric."),
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
     """List model scores in a table.
@@ -750,6 +760,7 @@ def scores_list(
     --selected-models: Only show models defined in models.json with an aa_slug.
     --filter: Filter the list by name or slug.
     --refresh: Force a refresh of scores from the API before listing.
+    --sort: Sort the list (alpha, int, code, math, ttft, tps).
     """
     cfg = load_config(config)
 
@@ -808,6 +819,20 @@ def scores_list(
     if filter:
         f_lower = filter.lower()
         rows = [r for r in rows if f_lower in r["id1"].lower() or f_lower in r["id2"].lower()]
+
+    # Sorting
+    if sort == SortOption.alpha:
+        rows.sort(key=lambda r: r["id1"].lower())
+    elif sort == SortOption.int:
+        rows.sort(key=lambda r: r["scores"].get("intelligence") or -float('inf'), reverse=True)
+    elif sort == SortOption.code:
+        rows.sort(key=lambda r: r["scores"].get("coding") or -float('inf'), reverse=True)
+    elif sort == SortOption.math:
+        rows.sort(key=lambda r: r["scores"].get("math") or -float('inf'), reverse=True)
+    elif sort == SortOption.ttft:
+        rows.sort(key=lambda r: r["scores"].get("ttft") or float('inf'))
+    elif sort == SortOption.tps:
+        rows.sort(key=lambda r: r["scores"].get("tps") or -float('inf'), reverse=True)
 
     if not rows:
         console.print("[yellow]No models found matching the criteria.[/yellow]")
