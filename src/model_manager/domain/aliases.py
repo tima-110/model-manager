@@ -20,7 +20,13 @@ def resolve_id(provider_id: str, config: AppConfig) -> dict | None:
     for model_id, model_data in data.get("models", {}).items():
         for variant_id, variant_data in model_data.get("variants", {}).items():
             for provider, ids in variant_data.get("provider_ids", {}).items():
-                if provider_id in ids:
+                # Handle both old list and new dict structure
+                if isinstance(ids, list):
+                    found = provider_id in ids
+                else:
+                    found = provider_id in ids
+
+                if found:
                     aa_slug = variant_data.get("aa_slug")
                     score_data = scores.get("models", {}).get(aa_slug)
                     return {
@@ -81,12 +87,21 @@ def add_alias(config: AppConfig, model_id: str, provider: str | None = None, pro
             for vid, vdata in mdata["variants"].items():
                 for prov, ids in vdata["provider_ids"].items():
                     if provider_id in ids:
-                        ids.remove(provider_id)
+                        if isinstance(ids, list):
+                            ids.remove(provider_id)
+                        else:
+                            del ids[provider_id]
 
         if provider not in variant["provider_ids"]:
-            variant["provider_ids"][provider] = []
+            variant["provider_ids"][provider] = {}
+
+        # Convert list to dict if this is an old mapping
+        if isinstance(variant["provider_ids"][provider], list):
+            old_ids = variant["provider_ids"][provider]
+            variant["provider_ids"][provider] = {pid: {} for pid in old_ids}
+
         if provider_id not in variant["provider_ids"][provider]:
-            variant["provider_ids"][provider].append(provider_id)
+            variant["provider_ids"][provider][provider_id] = {}
 
     if aa_slug:
         variant["aa_slug"] = aa_slug
