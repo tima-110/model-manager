@@ -737,6 +737,107 @@ def scores_sync(
 
     console.print(f"[green]Successfully updated scores for {updated_count} model variants.[/green]")
 
+
+@scores_app.command("list")
+def scores_list(
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    refresh: bool = typer.Option(False, "--refresh"),
+    selected_models: bool = typer.Option(False, "--selected-models"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """List model scores in a table.
+
+    --selected-models: Only show models defined in models.json with an aa_slug.
+    --filter: Filter the list by name or slug.
+    --refresh: Force a refresh of scores from the API before listing.
+    """
+    cfg = load_config(config)
+
+    if refresh:
+        api_key = scores.get_api_key()
+        if not api_key:
+            console.print("[red]Error: ARTIFICIAL_ANALYSIS_API_KEY missing. Cannot refresh.[/red]")
+            raise typer.Exit(1)
+
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+            progress.add_task(description="Refreshing scores from AA...", total=None)
+            raw = scores.fetch_aa_data(api_key, cfg)
+            if raw:
+                scores.process_aa_data(raw, cfg)
+            else:
+                console.print("[yellow]Warning: Failed to fetch latest scores. Using cached data.[/yellow]")
+
+    all_scores = scores.list_all_scores(cfg)
+    if not all_scores:
+        console.print("[yellow]No processed scores found. Run 'scores fetch' first.[/yellow]")
+        return
+
+    # Prepare data for table
+    rows = []
+    if selected_models:
+        models_data = models.storage.load_models_data(cfg) # Note: using models.storage instead of storage directly as it's imported as 'models' in domain
+        # Wait, 'models' is the module src/model_manager/domain/models.py
+        # In cli.py, 'from model_manager.domain import aliases, scores, advisor, discovery, auth, models, providers'
+        # So 'models' is the module. 'models.storage' is correct if 'storage' is imported in models.py.
+        # Let's check if I should use storage.load_models_data(cfg) directly.
+        # Looking at cli.py, storage is NOT imported at the top.
+        # I will use models.storage.load_models_data(cfg) or import storage.
+
+        # Wait, src/model_manager/domain/models.py has 'from model_manager.domain import storage'
+        # So models.storage is the domain.storage module.
+
+        lib_models = models_data.get("models", {})
+        for mid, m_info in lib_models.items():
+            for vid, v_info in m_info.get("variants", {}).items():
+                slug = v_info.get("aa_slug")
+                if slug and slug in all_scores:
+                    rows.append({
+                        "id1": mid,
+                        "id2": vid,
+                        "scores": all_scores[slug].get("scores", {})
+                    })
+    else:
+        for slug, s_data in all_scores.items():
+            rows.append({
+                "id1": s_data.get("name", slug),
+                "id2": slug,
+                "scores": s_data.get("scores", {})
+            })
+
+    # Filter
+    if filter:
+        f_lower = filter.lower()
+        rows = [r for r in rows if f_lower in r["id1"].lower() or f_lower in r["id2"].lower()]
+
+    if not rows:
+        console.print("[yellow]No models found matching the criteria.[/yellow]")
+        return
+
+    # Render Table
+    title = "Selected Model Scores" if selected_models else "All Model Scores"
+    table = Table(title=title)
+    table.add_column("Model/Name", style="cyan")
+    table.add_column("Variant/Slug", style="magenta")
+    table.add_column("Intel", justify="right", style="green")
+    table.add_column("Coding", justify="right", style="green")
+    table.add_column("Math", justify="right", style="green")
+    table.add_column("TTFT (s)", justify="right", style="dim")
+    table.add_column("TPS", justify="right", style="dim")
+
+    for r in rows:
+        s = r["scores"]
+        table.add_row(
+            r["id1"],
+            r["id2"],
+            str(s.get("intelligence", "N/A")),
+            str(s.get("coding", "N/A")),
+            str(s.get("math", "N/A")),
+            str(s.get("ttft", "N/A")),
+            str(s.get("tps", "N/A"))
+        )
+
+    console.print(table)
+
 # --- Aliases Group ---
 aliases_app = typer.Typer(help="Manage model identifier mappings.")
 app.add_typer(aliases_app, name="aliases")

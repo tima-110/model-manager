@@ -85,6 +85,19 @@ def get_scores_for_slug(config: AppConfig, slug: str) -> dict | None:
     return None
 
 
+def list_all_scores(config: AppConfig) -> dict:
+    """Return all processed scores from the local cache."""
+    path = get_scores_path(config)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        return data.get("models", {})
+    except Exception:
+        return {}
+
+
+
 def sync_scores_to_models(config: AppConfig) -> int:
     """
     Update the scores in models.json based on the current values in scores.json.
