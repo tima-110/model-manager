@@ -658,6 +658,26 @@ def _run_scan_cli_workflow(
 
     console.print(summary_table)
 
+    # Update mapped models in models.json with new metrics
+    models_data = models.storage.load_models_data(cfg)
+    updated = False
+    for mid, scan_data in final_results_data["models"].items():
+        summary = scan_data["summary"]
+        for model_id, model_info in models_data.get("models", {}).items():
+            for variant_id, variant_info in model_info.get("variants", {}).items():
+                for prov, pids in variant_info.get("provider_ids", {}).items():
+                    if prov.lower() == provider.name.lower():
+                        if isinstance(pids, dict) and mid in pids:
+                            pids[mid].update({
+                                "availability": summary["availability"],
+                                "avg_latency": summary["avg_latency"],
+                                "assessment": summary["assessment"]
+                            })
+                            updated = True
+    if updated:
+        models.storage.save_models_data(cfg, models_data)
+        console.print(f"[dim]Updated mapped models in models.json with current health data[/dim]")
+
     # Save to JSON
     discovery.save_scan_results(cfg, provider.name, final_results_data)
     console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
