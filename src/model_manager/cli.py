@@ -67,11 +67,16 @@ app.add_typer(models_app, name="models")
 @models_app.command("list")
 def models_list(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """List all defined conceptual models with variants, providers, and scan status."""
     cfg = load_config(config)
     models_data = models.storage.load_models_data(cfg)
     lib_models = models_data.get("models", {})
+
+    if json_output:
+        console.print(json.dumps(models_data, indent=2))
+        return
 
     if not lib_models:
         console.print("[yellow]No conceptual models defined in models.json.[/yellow]")
@@ -82,7 +87,7 @@ def models_list(
     table = Table(title="Conceptual Model Library")
     table.add_column("Conceptual Model", style="cyan")
     table.add_column("Variant (Scores)", style="magenta")
-    table.add_column("Provider", style="blue")
+    table.add_column("Provider", style="cyan")
     table.add_column("Provider Model ID", style="green")
     table.add_column("Status", justify="center")
     table.add_column("Avail", justify="right", style="dim")
@@ -91,12 +96,10 @@ def models_list(
     last_model = None
     last_variant = None
 
-    # Follow the order in the JSON file
     for mid, m_info in lib_models.items():
-        model_display = mid if mid != last_model else ""
-
         variants = m_info.get("variants", {})
         if not variants:
+            model_display = mid if mid != last_model else ""
             table.add_row(model_display, "[dim]no variants[/dim]", "-", "-", "-", "-", "-")
             last_model = mid
             continue
@@ -116,10 +119,10 @@ def models_list(
                 if scores_list:
                     score_str = f" ({', '.join(scores_list)})"
 
-            variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
-
             provider_ids = v_info.get("provider_ids", {})
             if not provider_ids:
+                model_display = mid if mid != last_model else ""
+                variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
                 table.add_row(model_display, variant_display, "-", "-", "-", "-", "-")
                 last_model = mid
                 last_variant = vid
@@ -127,10 +130,18 @@ def models_list(
 
             for prov, pids in provider_ids.items():
                 if not isinstance(pids, dict):
+                    model_display = mid if mid != last_model else ""
+                    variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
                     table.add_row(model_display, variant_display, prov, "[red]Invalid data[/red]", "-", "-", "-")
+                    last_model = mid
+                    last_variant = vid
                     continue
 
                 for pid, scan_data in pids.items():
+                    # Determine if we should display model and variant names (grouping)
+                    model_display = mid if mid != last_model else ""
+                    variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
+
                     status = scan_data.get("assessment", "Unknown")
                     # Match status colors from scan workflow
                     status_colors = {
@@ -159,9 +170,8 @@ def models_list(
                         avail_str,
                         lat_str
                     )
-
-            last_model = mid
-            last_variant = vid
+                    last_model = mid
+                    last_variant = vid
 
     console.print(table)
 
@@ -172,6 +182,7 @@ def models_add(
     display_name: str | None = typer.Option(None, "--display-name", "-d"),
     default_variant: str | None = typer.Option(None, "--default-variant", "-v"),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Add or update a conceptual model.
 
@@ -179,19 +190,30 @@ def models_add(
     """
     cfg = load_config(config)
     models.add_model(cfg, model, family=family, display_name=display_name, default_variant=default_variant)
-    console.print(f"[green]Successfully added/updated conceptual model {model}[/green]")
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model}, indent=2))
+    else:
+        console.print(f"[green]Successfully added/updated conceptual model {model}[/green]")
 
 @models_app.command("remove")
 def models_remove(
     model: str,
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Remove a conceptual model from the library."""
     cfg = load_config(config)
     if models.remove_model(cfg, model):
-        console.print(f"[green]Successfully removed conceptual model {model}[/green]")
+        if json_output:
+            console.print(json.dumps({"status": "success", "model": model}, indent=2))
+        else:
+            console.print(f"[green]Successfully removed conceptual model {model}[/green]")
     else:
-        console.print(f"[red]Error: Conceptual model {model} not found.[/red]")
+        if json_output:
+            console.print(json.dumps({"status": "error", "message": f"Conceptual model {model} not found."}, indent=2))
+            raise typer.Exit(1)
+        else:
+            console.print(f"[red]Error: Conceptual model {model} not found.[/red]")
 
 @models_app.command("discover")
 def models_discover(
@@ -856,6 +878,7 @@ def scores_list(
     selected_models: bool = typer.Option(False, "--selected-models"),
     sort: SortOption = typer.Option(SortOption.alpha, "--sort", help="Sort the list by the specified metric."),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """List model scores in a table.
 
@@ -885,20 +908,17 @@ def scores_list(
         console.print("[yellow]No processed scores found. Run 'scores fetch' first.[/yellow]")
         return
 
+    # If JSON requested and no modifications are made, output the full file
+    if json_output and not filter and not selected_models and sort == SortOption.alpha:
+        scores_path = scores.get_scores_path(cfg)
+        if scores_path.exists():
+            console.print(scores_path.read_text())
+            return
+
     # Prepare data for table
     rows = []
     if selected_models:
-        models_data = models.storage.load_models_data(cfg) # Note: using models.storage instead of storage directly as it's imported as 'models' in domain
-        # Wait, 'models' is the module src/model_manager/domain/models.py
-        # In cli.py, 'from model_manager.domain import aliases, scores, advisor, discovery, auth, models, providers'
-        # So 'models' is the module. 'models.storage' is correct if 'storage' is imported in models.py.
-        # Let's check if I should use storage.load_models_data(cfg) directly.
-        # Looking at cli.py, storage is NOT imported at the top.
-        # I will use models.storage.load_models_data(cfg) or import storage.
-
-        # Wait, src/model_manager/domain/models.py has 'from model_manager.domain import storage'
-        # So models.storage is the domain.storage module.
-
+        models_data = models.storage.load_models_data(cfg)
         lib_models = models_data.get("models", {})
         for mid, m_info in lib_models.items():
             for vid, v_info in m_info.get("variants", {}).items():
@@ -906,7 +926,7 @@ def scores_list(
                 if slug and slug in all_scores:
                     rows.append({
                         "id1": mid,
-                        "id2": vid,
+                        "id2": slug,
                         "scores": all_scores[slug].get("scores", {})
                     })
     else:
@@ -937,7 +957,22 @@ def scores_list(
         rows.sort(key=lambda r: r["scores"].get("tps") or -float('inf'), reverse=True)
 
     if not rows:
-        console.print("[yellow]No models found matching the criteria.[/yellow]")
+        if json_output:
+            console.print(json.dumps({"models": {}}, indent=2))
+        else:
+            console.print("[yellow]No models found matching the criteria.[/yellow]")
+        return
+
+    if json_output:
+        # Return in the same format as model_scores.json: { "models": { "slug": { "name": ..., "scores": ... } } }
+        json_models = {}
+        for r in rows:
+            slug = r["id2"]
+            json_models[slug] = {
+                "name": r["id1"],
+                "scores": r["scores"]
+            }
+        console.print(json.dumps({"models": json_models}, indent=2))
         return
 
     # Render Table
