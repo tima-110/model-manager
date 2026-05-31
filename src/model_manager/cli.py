@@ -68,18 +68,100 @@ app.add_typer(models_app, name="models")
 def models_list(
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
-    """List all defined conceptual model IDs."""
+    """List all defined conceptual models with variants, providers, and scan status."""
     cfg = load_config(config)
-    model_ids = models.list_models(cfg)
+    models_data = models.storage.load_models_data(cfg)
+    lib_models = models_data.get("models", {})
 
-    if not model_ids:
+    if not lib_models:
         console.print("[yellow]No conceptual models defined in models.json.[/yellow]")
         return
 
-    table = Table(title="Conceptual Models")
-    table.add_column("Model ID", style="cyan")
-    for mid in model_ids:
-        table.add_row(mid)
+    all_scores = scores.list_all_scores(cfg)
+
+    table = Table(title="Conceptual Model Library")
+    table.add_column("Conceptual Model", style="cyan")
+    table.add_column("Variant (Scores)", style="magenta")
+    table.add_column("Provider", style="blue")
+    table.add_column("Provider Model ID", style="green")
+    table.add_column("Status", justify="center")
+    table.add_column("Avail", justify="right", style="dim")
+    table.add_column("Latency", justify="right", style="dim")
+
+    last_model = None
+    last_variant = None
+
+    # Follow the order in the JSON file
+    for mid, m_info in lib_models.items():
+        model_display = mid if mid != last_model else ""
+
+        variants = m_info.get("variants", {})
+        if not variants:
+            table.add_row(model_display, "[dim]no variants[/dim]", "-", "-", "-", "-", "-")
+            last_model = mid
+            continue
+
+        for vid, v_info in variants.items():
+            # Format scores for the variant
+            score_str = ""
+            slug = v_info.get("aa_slug")
+            if slug and slug in all_scores:
+                s = all_scores[slug].get("scores", {})
+                metrics = [
+                    ("I", s.get("intelligence")),
+                    ("C", s.get("coding")),
+                    ("M", s.get("math")),
+                ]
+                scores_list = [f"{label}: {val}" for label, val in metrics if val is not None]
+                if scores_list:
+                    score_str = f" ({', '.join(scores_list)})"
+
+            variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
+
+            provider_ids = v_info.get("provider_ids", {})
+            if not provider_ids:
+                table.add_row(model_display, variant_display, "-", "-", "-", "-", "-")
+                last_model = mid
+                last_variant = vid
+                continue
+
+            for prov, pids in provider_ids.items():
+                if not isinstance(pids, dict):
+                    table.add_row(model_display, variant_display, prov, "[red]Invalid data[/red]", "-", "-", "-")
+                    continue
+
+                for pid, scan_data in pids.items():
+                    status = scan_data.get("assessment", "Unknown")
+                    # Match status colors from scan workflow
+                    status_colors = {
+                        "Good": "green",
+                        "Slow": "yellow",
+                        "Weak": "yellow",
+                        "Ratelimited": "yellow",
+                        "Unauthorized": "magenta",
+                        "Not Found": "red",
+                        "Dead": "red",
+                    }
+                    color = status_colors.get(status, "white")
+                    colored_status = f"[{color}]{status}[/{color}]"
+
+                    avail = scan_data.get("availability")
+                    avail_str = f"{avail:.1%}" if avail is not None else "N/A"
+                    lat = scan_data.get("avg_latency")
+                    lat_str = f"{lat:.1f}ms" if lat is not None else "N/A"
+
+                    table.add_row(
+                        model_display,
+                        variant_display,
+                        prov,
+                        pid,
+                        colored_status,
+                        avail_str,
+                        lat_str
+                    )
+
+            last_model = mid
+            last_variant = vid
 
     console.print(table)
 
