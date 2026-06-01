@@ -501,10 +501,12 @@ app.add_typer(providers_app, name="providers")
 openrouter_app = typer.Typer(help="OpenRouter provider commands.")
 nvidia_app = typer.Typer(help="NVIDIA provider commands.")
 ollama_app = typer.Typer(help="Ollama provider commands.")
+gemini_app = typer.Typer(help="Gemini provider commands.")
 
 providers_app.add_typer(openrouter_app, name="openrouter")
 providers_app.add_typer(nvidia_app, name="nvidia")
 providers_app.add_typer(ollama_app, name="ollama")
+providers_app.add_typer(gemini_app, name="gemini")
 
 @openrouter_app.command("fetch")
 def openrouter_fetch(
@@ -570,6 +572,28 @@ def ollama_scan(
 ) -> None:
     """Scan the current health and performance of Ollama models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
+
+@gemini_app.command("fetch")
+def gemini_fetch(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Query current available models from Gemini and save their capabilities."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "gemini")
+    _run_discovery_cli_workflow(provider, probe, config, json_output)
+
+@gemini_app.command("scan")
+def gemini_scan(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Scan the current health and performance of Gemini models."""
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "gemini")
     _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
 
 def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None, json_output: bool = False) -> None:

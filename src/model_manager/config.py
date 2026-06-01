@@ -89,3 +89,7 @@ def get_nvidia_models_path(config: AppConfig) -> Path:
 def get_ollama_models_path(config: AppConfig) -> Path:
     """Return path to the Ollama available models JSON file."""
     return config.data_dir / "ollama_available_models.json"
+
+def get_gemini_models_path(config: AppConfig) -> Path:
+    """Return path to the Gemini available models JSON file."""
+    return config.data_dir / "gemini_available_models.json"

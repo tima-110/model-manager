@@ -21,6 +21,8 @@ NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/models"
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 OLLAMA_API_URL = "https://ollama.com/api/tags"
 OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_CHAT_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 STATUS_MAP = {
     "200": "up",
@@ -124,6 +126,32 @@ def fetch_ollama_models(api_key: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from Ollama: {e}")
 
+def fetch_gemini_models(api_key: str) -> List[Dict[str, Any]]:
+    """Fetch models from Gemini (Google AI Studio)."""
+    try:
+        url = f"{GEMINI_API_URL}?key={api_key}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            all_models = data.get("models", [])
+
+            models = []
+            for m in all_models:
+                # Only include models that support content generation
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    model_id = m.get("name", "").replace("models/", "")
+                    models.append({
+                        "id": model_id,
+                        "name": m.get("displayName"),
+                        "context_length": m.get("inputTokenLimit"),
+                        "architecture": None,
+                        "description": m.get("description"),
+                        "tags": [],
+                    })
+            return models
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch models from Gemini: {e}")
+
 def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter") -> PingResult:
     """Check if a model is responsive and measure TTFB latency."""
     if not api_key:
@@ -133,6 +161,8 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
         chat_url = OLLAMA_CHAT_URL
     elif provider == "nvidia":
         chat_url = NVIDIA_CHAT_URL
+    elif provider == "gemini":
+        chat_url = f"{GEMINI_CHAT_URL_TEMPLATE.format(model=model_id)}?key={api_key}"
     else:
         chat_url = OPENROUTER_CHAT_URL
 
@@ -141,15 +171,24 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
         "Content-Type": "application/json",
     }
 
+    if provider == "gemini":
+        # Gemini uses API key in URL, not Bearer token
+        headers.pop("Authorization", None)
+
     if provider == "openrouter":
         headers["HTTP-Referer"] = "https://github.com/castor-claw/model-manager"
         headers["X-Title"] = "Model Manager Discovery"
 
-    data = {
-        "model": model_id,
-        "messages": [{"role": "user", "content": "hi"}],
-        "max_tokens": 1
-    }
+    if provider == "gemini":
+        data = {
+            "contents": [{"parts": [{"text": "hi"}]}]
+        }
+    else:
+        data = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 1
+        }
 
     if provider == "ollama":
         data["stream"] = False

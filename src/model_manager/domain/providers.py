@@ -10,6 +10,7 @@ from model_manager.config import (
     get_free_models_path,
     get_nvidia_models_path,
     get_ollama_models_path,
+    get_gemini_models_path,
 )
 from model_manager.domain import auth, discovery
 
@@ -44,6 +45,13 @@ SUPPORTED_PROVIDERS = [
         fetch_fn=discovery.fetch_ollama_models,
         path_fn=get_ollama_models_path,
         probe_id="ollama",
+    ),
+    Provider(
+        name="Gemini",
+        secret_key="GEMINI_API_KEY",
+        fetch_fn=discovery.fetch_gemini_models,
+        path_fn=get_gemini_models_path,
+        probe_id="gemini",
     ),
 ]
 
