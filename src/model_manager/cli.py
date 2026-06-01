@@ -9,7 +9,7 @@ import time
 import typer
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 from enum import Enum
 
 class SortOption(str, Enum):
@@ -342,8 +342,8 @@ def models_discover(
                                 picked_scores = scores.get_scores_for_slug(cfg, picked_slug)
                                 aliases.add_alias(cfg, model_id, variant_id=var_name, aa_slug=picked_slug, scores=picked_scores)
                                 console.print(f"[green]Set AA slug for {var_name} to {picked_slug}[/green]")
-                    else:
-                        console.print("[yellow]No AA candidates found.[/yellow]")
+                        else:
+                            console.print("[yellow]No AA candidates found.[/yellow]")
                 else:
                     aliases.add_alias(cfg, model_id, variant_id=var_name)
 
@@ -510,10 +510,11 @@ providers_app.add_typer(ollama_app, name="ollama")
 def openrouter_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Query current free models from OpenRouter and save their capabilities."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
-    _run_discovery_cli_workflow(provider, probe, config)
+    _run_discovery_cli_workflow(provider, probe, config, json_output)
 
 @openrouter_app.command("scan")
 def openrouter_scan(
@@ -521,20 +522,21 @@ def openrouter_scan(
     filter: str | None = typer.Option(None, "--filter", "-f"),
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Scan the current health and performance of OpenRouter models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
-
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
 
 @nvidia_app.command("fetch")
 def nvidia_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Query current available models from NVIDIA and save their capabilities."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
-    _run_discovery_cli_workflow(provider, probe, config)
+    _run_discovery_cli_workflow(provider, probe, config, json_output)
 
 @nvidia_app.command("scan")
 def nvidia_scan(
@@ -542,20 +544,21 @@ def nvidia_scan(
     filter: str | None = typer.Option(None, "--filter", "-f"),
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Scan the current health and performance of NVIDIA models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
-
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
 
 @ollama_app.command("fetch")
 def ollama_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Query current available models from Ollama Cloud and save their capabilities."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
-    _run_discovery_cli_workflow(provider, probe, config)
+    _run_discovery_cli_workflow(provider, probe, config, json_output)
 
 @ollama_app.command("scan")
 def ollama_scan(
@@ -563,26 +566,34 @@ def ollama_scan(
     filter: str | None = typer.Option(None, "--filter", "-f"),
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Scan the current health and performance of Ollama models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
 
-
-def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None) -> None:
+def _run_discovery_cli_workflow(provider: providers.Provider, probe: bool, config: Path | None, json_output: bool = False) -> None:
     """CLI wrapper for the discovery workflow: adds progress bars and reports results."""
     cfg = load_config(config)
 
     try:
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            progress.add_task(description=f"Fetching models from {provider.name}...", total=None)
-
-            # Use a simple lambda or wrapper if we want to track probe progress specifically
-            # but for now, we call the domain workflow.
+        if not json_output:
+            with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+                progress.add_task(description=f"Fetching models from {provider.name}...", total=None)
+                models = providers.run_discovery_workflow(provider, cfg, probe)
+        else:
             models = providers.run_discovery_workflow(provider, cfg, probe)
 
         if not models:
             console.print(f"[yellow]No models discovered for {provider.name}.[/yellow]")
+            return
+
+        if json_output:
+            cache_path = provider.path_fn(cfg)
+            if cache_path.exists():
+                console.print(cache_path.read_text())
+            else:
+                console.print(json.dumps({"error": "Cache file not found"}, indent=2))
             return
 
         table = Table(title=f"Discovered {provider.name} Models ({len(models)})")
@@ -608,11 +619,11 @@ def _run_scan_cli_workflow(
     filter_str: str | None = None,
     only_up: bool = False,
     only_down: bool = False,
+    json_output: bool = False,
 ) -> None:
     """CLI workflow for scanning provider model health with live updates and final assessment."""
     cfg = load_config(config)
     api_key = auth.get_secret(provider.secret_key)
-
 
     if not api_key and provider.name != "OpenRouter":
         console.print(f"[red]Error: {provider.secret_key} missing from keychain.[/red]")
@@ -635,7 +646,6 @@ def _run_scan_cli_workflow(
             ]
         else:
             model_ids = [m["id"] for m in all_models]
-
 
     if not model_ids:
         console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
@@ -675,16 +685,21 @@ def _run_scan_cli_workflow(
         if dominant in ("down", "timeout"): return ("Dead", "red")
         return ("Weak", "yellow")
 
-    # --- Live Scanning Loop ---
+    # --- Scanning Loop ---
     try:
-        with Live(console=console, refresh_per_second=4) as live:
-            while True:
-                cycle_count += 1
+        live = None
+        if not json_output:
+            live = Live(console=console, refresh_per_second=4)
+            live.start()
 
-                # 1. Perform parallel scan
-                results = discovery.scan_models(provider.probe_id, api_key or "", model_ids)
+        while True:
+            cycle_count += 1
 
-                # 2. Update history and build table
+            # 1. Perform parallel scan
+            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids)
+
+            # 2. Update history and build table
+            if not json_output:
                 table = Table(title=f"Health Scan: {provider.name} (Cycle {cycle_count})")
                 table.add_column("Model ID", style="cyan")
                 table.add_column("Status", justify="center")
@@ -704,7 +719,6 @@ def _run_scan_cli_workflow(
 
                     if res: history[mid].append(res)
 
-
                     # Calculate running average
                     m_hist = history[mid]
                     successes = [r.latency_ms for r in m_hist if r.status == "up"]
@@ -720,24 +734,33 @@ def _run_scan_cli_workflow(
                         lat_text,
                         f"{avg_lat:.1f}" if successes else "N/A"
                     )
-
                 live.update(table)
+            else:
+                # Still update history in silent mode
+                for mid in model_ids:
+                    res = results.get(mid)
+                    if res:
+                        # Apply status filters for history as well to match table behavior
+                        if only_up and res.status != "up":
+                            continue
+                        if only_down and res.status == "up":
+                            continue
+                        history[mid].append(res)
 
-                if max_cycles > 0 and cycle_count >= max_cycles:
-                    break
+            if max_cycles > 0 and cycle_count >= max_cycles:
+                break
 
-                time.sleep(cfg.scan_frequency)
+            time.sleep(cfg.scan_frequency)
+
+        if live:
+            live.stop()
     except KeyboardInterrupt:
-        console.print("\n[yellow]Scan halted by user.[/yellow]")
+        if not json_output:
+            console.print("\n[yellow]Scan halted by user.[/yellow]")
+        if live:
+            live.stop()
 
     # --- Final Assessment Phase ---
-    console.print("\n[bold]Final Health Assessment[/bold]")
-    summary_table = Table(show_header=True, header_style="bold magenta")
-    summary_table.add_column("Model ID", style="cyan")
-    summary_table.add_column("Availability", justify="center")
-    summary_table.add_column("Avg Latency", justify="right")
-    summary_table.add_column("Assessment", justify="center")
-
     final_results_data = {"metadata": {"provider": provider.name, "cycles": cycle_count, "timestamp": datetime.now().isoformat()}, "models": {}}
 
     for mid in model_ids:
@@ -748,19 +771,35 @@ def _run_scan_cli_workflow(
 
         label, color = calculate_assessment(m_hist)
 
-        summary_table.add_row(
-            mid,
-            f"{avail:.1%}",
-            f"{avg_lat:.1f}ms" if successes else "N/A",
-            f"[{color}]{label}[/{color}]"
-        )
-
         final_results_data["models"][mid] = {
             "history": [vars(r) for r in m_hist],
             "summary": {"availability": avail, "avg_latency": avg_lat, "assessment": label}
         }
 
-    console.print(summary_table)
+    if json_output:
+        console.print(json.dumps(final_results_data, indent=2))
+    else:
+        console.print("\n[bold]Final Health Assessment[/bold]")
+        summary_table = Table(show_header=True, header_style="bold magenta")
+        summary_table.add_column("Model ID", style="cyan")
+        summary_table.add_column("Availability", justify="center")
+        summary_table.add_column("Avg Latency", justify="right")
+        summary_table.add_column("Assessment", justify="center")
+
+        for mid in model_ids:
+            m_hist = history[mid]
+            successes = [r for r in m_hist if r.status == "up"]
+            avail = len(successes) / len(m_hist) if m_hist else 0
+            avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
+            label, color = calculate_assessment(m_hist)
+
+            summary_table.add_row(
+                mid,
+                f"{avail:.1%}",
+                f"{avg_lat:.1f}ms" if successes else "N/A",
+                f"[{color}]{label}[/{color}]"
+            )
+        console.print(summary_table)
 
     # Update mapped models in models.json with new metrics
     models_data = models.storage.load_models_data(cfg)
@@ -780,515 +819,10 @@ def _run_scan_cli_workflow(
                             updated = True
     if updated:
         models.storage.save_models_data(cfg, models_data)
-        console.print(f"[dim]Updated mapped models in models.json with current health data[/dim]")
+        if not json_output:
+            console.print(f"[dim]Updated mapped models in models.json with current health data[/dim]")
 
     # Save to JSON
     discovery.save_scan_results(cfg, provider.name, final_results_data)
-    console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
-
-@providers_app.command("scan")
-def providers_scan(
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    filter: str | None = typer.Option(None, "--filter", "-f"),
-    only_up: bool = typer.Option(False, "--only-up"),
-    only_down: bool = typer.Option(False, "--only-down"),
-) -> None:
-    """Scan health for all supported providers."""
-    for provider in providers.list_providers():
-        _run_scan_cli_workflow(provider, config, filter, only_up, only_down)
-
-
-@providers_app.command("fetch")
-def providers_fetch(
-    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Fetch updates for all supported providers."""
-    for provider in providers.list_providers():
-        _run_discovery_cli_workflow(provider, probe, config)
-
-@providers_app.command("list")
-def providers_list() -> None:
-    """List supported providers and their authorization status."""
-    supported = providers.list_providers()
-
-    table = Table(title="Supported Providers")
-    table.add_column("Provider", style="cyan")
-    table.add_column("Authorized", style="magenta")
-
-    for p in supported:
-        is_auth = auth.get_secret(p.secret_key)
-        status = "[green]Stored[/green]" if is_auth else "[red]Missing[/red]"
-        table.add_row(p.name, status)
-
-    console.print(table)
-
-# --- Scores Group ---
-scores_app = typer.Typer(help="Manage Artificial Analysis score ingestion.")
-app.add_typer(scores_app, name="scores")
-
-@scores_app.command("fetch")
-def scores_fetch(
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Fetch latest model scores from Artificial Analysis."""
-    cfg = load_config(config)
-    api_key = scores.get_api_key()
-
-    if not api_key:
-        console.print("[red]Error: ARTIFICIAL_ANALYSIS_API_KEY not found in environment.[/red]")
-        raise typer.Exit(1)
-
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-        progress.add_task(description="Fetching data from AA...", total=None)
-        data = scores.fetch_aa_data(api_key, cfg)
-
-        if not data:
-            console.print("[red]Error: Failed to fetch data from AA API.[/red]")
-            raise typer.Exit(1)
-
-        progress.add_task(description="Processing and saving scores...", total=None)
-        processed = scores.process_aa_data(data, cfg)
-
-    console.print(f"[green]Successfully synced {processed['meta']['total_models']} models.[/green]")
-
-
-@scores_app.command("sync")
-def scores_sync(
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Update model variants in models.json with current scores from the local cache."""
-    cfg = load_config(config)
-
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-        progress.add_task(description="Syncing scores to models library...", total=None)
-        try:
-            updated_count = scores.sync_scores_to_models(cfg)
-        except RuntimeError as e:
-            console.print(f"[red]Error: {e}[/red]")
-            raise typer.Exit(1)
-
-    console.print(f"[green]Successfully updated scores for {updated_count} model variants.[/green]")
-
-
-@scores_app.command("list")
-def scores_list(
-    filter: str | None = typer.Option(None, "--filter", "-f"),
-    refresh: bool = typer.Option(False, "--refresh"),
-    selected_models: bool = typer.Option(False, "--selected-models"),
-    sort: SortOption = typer.Option(SortOption.alpha, "--sort", help="Sort the list by the specified metric."),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    json_output: bool = typer.Option(False, "--json"),
-) -> None:
-    """List model scores in a table.
-
-    --selected-models: Only show models defined in models.json with an aa_slug.
-    --filter: Filter the list by name or slug.
-    --refresh: Force a refresh of scores from the API before listing.
-    --sort: Sort the list (alpha, int, code, math, ttft, tps).
-    """
-    cfg = load_config(config)
-
-    if refresh:
-        api_key = scores.get_api_key()
-        if not api_key:
-            console.print("[red]Error: ARTIFICIAL_ANALYSIS_API_KEY missing. Cannot refresh.[/red]")
-            raise typer.Exit(1)
-
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            progress.add_task(description="Refreshing scores from AA...", total=None)
-            raw = scores.fetch_aa_data(api_key, cfg)
-            if raw:
-                scores.process_aa_data(raw, cfg)
-            else:
-                console.print("[yellow]Warning: Failed to fetch latest scores. Using cached data.[/yellow]")
-
-    all_scores = scores.list_all_scores(cfg)
-    if not all_scores:
-        console.print("[yellow]No processed scores found. Run 'scores fetch' first.[/yellow]")
-        return
-
-    # If JSON requested and no modifications are made, output the full file
-    if json_output and not filter and not selected_models and sort == SortOption.alpha:
-        scores_path = scores.get_scores_path(cfg)
-        if scores_path.exists():
-            console.print(scores_path.read_text())
-            return
-
-    # Prepare data for table
-    rows = []
-    if selected_models:
-        models_data = models.storage.load_models_data(cfg)
-        lib_models = models_data.get("models", {})
-        for mid, m_info in lib_models.items():
-            for vid, v_info in m_info.get("variants", {}).items():
-                slug = v_info.get("aa_slug")
-                if slug and slug in all_scores:
-                    rows.append({
-                        "id1": mid,
-                        "id2": slug,
-                        "scores": all_scores[slug].get("scores", {})
-                    })
-    else:
-        for slug, s_data in all_scores.items():
-            rows.append({
-                "id1": s_data.get("name", slug),
-                "id2": slug,
-                "scores": s_data.get("scores", {})
-            })
-
-    # Filter
-    if filter:
-        f_lower = filter.lower()
-        rows = [r for r in rows if f_lower in r["id1"].lower() or f_lower in r["id2"].lower()]
-
-    # Sorting
-    if sort == SortOption.alpha:
-        rows.sort(key=lambda r: r["id1"].lower())
-    elif sort == SortOption.int:
-        rows.sort(key=lambda r: r["scores"].get("intelligence") or -float('inf'), reverse=True)
-    elif sort == SortOption.code:
-        rows.sort(key=lambda r: r["scores"].get("coding") or -float('inf'), reverse=True)
-    elif sort == SortOption.math:
-        rows.sort(key=lambda r: r["scores"].get("math") or -float('inf'), reverse=True)
-    elif sort == SortOption.ttft:
-        rows.sort(key=lambda r: r["scores"].get("ttft") or float('inf'))
-    elif sort == SortOption.tps:
-        rows.sort(key=lambda r: r["scores"].get("tps") or -float('inf'), reverse=True)
-
-    if not rows:
-        if json_output:
-            console.print(json.dumps({"models": {}}, indent=2))
-        else:
-            console.print("[yellow]No models found matching the criteria.[/yellow]")
-        return
-
-    if json_output:
-        # Return in the same format as model_scores.json: { "models": { "slug": { "name": ..., "scores": ... } } }
-        json_models = {}
-        for r in rows:
-            slug = r["id2"]
-            json_models[slug] = {
-                "name": r["id1"],
-                "scores": r["scores"]
-            }
-        console.print(json.dumps({"models": json_models}, indent=2))
-        return
-
-    # Render Table
-    title = "Selected Model Scores" if selected_models else "All Model Scores"
-    table = Table(title=title)
-    table.add_column("Model/Name", style="cyan")
-    table.add_column("Variant/Slug", style="magenta")
-    table.add_column("Intel", justify="right", style="green")
-    table.add_column("Coding", justify="right", style="green")
-    table.add_column("Math", justify="right", style="green")
-    table.add_column("TTFT (s)", justify="right", style="dim")
-    table.add_column("TPS", justify="right", style="dim")
-
-    for r in rows:
-        s = r["scores"]
-        table.add_row(
-            r["id1"],
-            r["id2"],
-            str(s.get("intelligence", "N/A")),
-            str(s.get("coding", "N/A")),
-            str(s.get("math", "N/A")),
-            str(s.get("ttft", "N/A")),
-            str(s.get("tps", "N/A"))
-        )
-
-    console.print(table)
-
-# --- Aliases Group ---
-aliases_app = typer.Typer(help="Manage model identifier mappings.")
-app.add_typer(aliases_app, name="aliases")
-
-@aliases_app.command("resolve")
-def aliases_resolve(
-    identifier: str,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Resolve a provider ID or a conceptual model ID to its details and scores."""
-    cfg = load_config(config)
-
-    # Try forward resolution first (conceptual model ID)
-    model_res = models.resolve_model(identifier, cfg)
-    if model_res:
-        table = Table(title=f"Model Summary: {model_res['display_name']}")
-        table.add_column("Field", style="cyan")
-        table.add_column("Value", style="magenta")
-        table.add_row("ID", model_res["model"])
-        table.add_row("Family", model_res["family"])
-        table.add_row("Default Variant", model_res["default_variant"])
-        console.print(table)
-
-        for var in model_res["variants"]:
-            var_table = Table(title=f"Variant: {var['variant_id']}")
-            var_table.add_column("Provider", style="cyan")
-            var_table.add_column("IDs", style="green")
-
-            for prov, pids in var["provider_ids"].items():
-                var_table.add_row(prov, ", ".join(pids))
-
-            console.print(var_table)
-            if var["aa_slug"]:
-                console.print(f"  [bold]AA Slug:[/bold] {var['aa_slug']}")
-        return
-
-    # Fallback to reverse resolution (provider ID)
-    result = aliases.resolve_id(identifier, cfg)
-
-    if not result:
-        console.print(f"[red]Error: No mapping found for {identifier}[/red]")
-        raise typer.Exit(1)
-
-    table = Table(title=f"Resolution for {identifier}")
-    table.add_column("Field", style="cyan")
-    table.add_column("Value", style="magenta")
-
-    table.add_row("Model", result["model"])
-    table.add_row("Variant", result["variant"])
-    table.add_row("AA Slug", result["aa_slug"])
-
-    console.print(table)
-
-    if result["scores"]:
-        s = result["scores"]["scores"]
-        score_table = Table(title="Scores")
-        score_table.add_column("Metric", style="cyan")
-        score_table.add_column("Value", style="green")
-        score_table.add_row("Intelligence", str(s.get("intelligence")))
-        score_table.add_row("Coding", str(s.get("coding")))
-        score_table.add_row("Math", str(s.get("math")))
-        console.print(score_table)
-    else:
-        console.print("[yellow]No scores found for this AA slug.[/yellow]")
-
-@aliases_app.command("add")
-def aliases_add(
-    model: str,
-    variant: str = "standard",
-    family: str | None = None,
-    display_name: str | None = None,
-    aa_slug: str | None = None,
-    provider: str | None = None,
-    provider_id: str | None = None,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Add or update a model mapping.
-
-    To create a skeleton model, omit the provider and provider_id.
-    """
-    cfg = load_config(config)
-    aliases.add_alias(cfg, model, provider, provider_id, variant, family, display_name, aa_slug)
-    if provider and provider_id:
-        console.print(f"[green]Mapped {provider_id} to {model} ({variant})[/green]")
-    else:
-        console.print(f"[green]Created skeleton model {model}[/green]")
-
-@aliases_app.command("discover")
-def aliases_discover(
-    provider: str,
-    ids: str,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Suggest mappings for unmapped IDs."""
-    cfg = load_config(config)
-    id_list = ids.split(",")
-    suggestions = aliases.discover_aliases(cfg, provider, id_list)
-
-    if not suggestions:
-        console.print("[yellow]No suggestions found or all IDs already mapped.[/yellow]")
-        return
-
-    for sug in suggestions:
-        console.print(f"\n[bold]Unmapped ID:[/bold] {sug['pid']}")
-        for i, s in enumerate(sug['suggestions'], 1):
-            console.print(f"  {i}. {s}")
-
-        choice = typer.prompt("Accept first suggestion? (y/n)", default="n")
-        if choice.lower() == 'y':
-            slug = sug['suggestions'][0]
-            aliases.add_alias(cfg, provider, sug['pid'], slug, "standard", family="unknown", display_name=slug, aa_slug=slug)
-            console.print(f"[green]Mapped {sug['pid']} to {slug}[/green]")
-
-@aliases_app.command("audit")
-def aliases_audit(
-    ids: str,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Audit mapping coverage for a list of IDs."""
-    cfg = load_config(config)
-    id_list = ids.split(",")
-    report = aliases.audit_mappings(cfg, id_list)
-
-    table = Table(title="Mapping Audit Report")
-    table.add_column("Metric", style="cyan")
-    table.add_column("Value", style="magenta")
-    table.add_row("Total", str(report["total"]))
-    table.add_row("Mapped", str(report["mapped"]))
-    table.add_row("Missing", str(report["missing"]))
-
-    console.print(table)
-    if report["missing_ids"]:
-        console.print("\n[red]Missing IDs:[/red] ")
-        for mid in report["missing_ids"]:
-            console.print(f" - {mid}")
-
-# --- Advisor Group ---
-advisor_app = typer.Typer(help="High-level model selection and comparison.")
-app.add_typer(advisor_app, name="advisor")
-
-@advisor_app.command("compare")
-def advisor_compare(
-    ids: str,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Compare multiple models side-by-side."""
-    cfg = load_config(config)
-    id_list = ids.split(",")
-    results = advisor.compare_models(cfg, id_list)
-
-    table = Table(title="Model Comparison")
-    table.add_column("Provider ID", style="cyan")
-    table.add_column("Model", style="magenta")
-    table.add_column("Variant", style="yellow")
-    table.add_column("Intel", style="green")
-    table.add_column("Coding", style="green")
-    table.add_column("Math", style="green")
-
-    for r in results:
-        if "error" in r:
-            table.add_row(r["provider_id"], "[red]Error[/red]", "-", "-", "-", "-")
-        else:
-            s = r["scores"]
-            table.add_row(
-                r["provider_id"],
-                r["model"],
-                r["variant"],
-                str(s.get("intelligence", "N/A")),
-                str(s.get("coding", "N/A")),
-                str(s.get("math", "N/A"))
-            )
-
-    console.print(table)
-
-@advisor_app.command("best")
-def advisor_best(
-    metric: str = typer.Option("intelligence", help="Metric to optimize (intelligence, coding, math)"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Find the best mapped model for a specific metric."""
-    cfg = load_config(config)
-    best = advisor.find_best_model(cfg, metric)
-
-    if not best:
-        console.print("[red]No models with scores found.[/red]")
-        raise typer.Exit(1)
-
-    console.print(f"  Model:   [green]{best['model']}[/green] ({best['variant']})")
-    console.print(f"  Slug:    {best['slug']}")
-    console.print(f"  Score:   [bold]{best['score']}[/bold]")
-
-@advisor_app.command("gaps")
-def advisor_gaps(
-    ids: str,
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Report mapping gaps for a list of IDs."""
-    cfg = load_config(config)
-    id_list = ids.split(",")
-    missing = advisor.get_mapping_gaps(cfg, id_list)
-
-    if not missing:
-        console.print("[green]No mapping gaps found![/green]")
-    else:
-        console.print(f"Found {len(missing)} missing mappings:")
-        for mid in missing:
-            console.print(f" - {mid}")
-
-# --- LiteLLM Integration ---
-@app.command("sync-litellm")
-def sync_litellm(
-    config_path: Path = typer.Option("/etc/litellm/litellm.yaml", "--config", "-c"),
-    provider: str = typer.Option("openrouter", help="Default provider for discovery"),
-) -> None:
-    """Sync mappings based on LiteLLM config."""
-    app_cfg = load_config(None)
-
-    if not config_path.exists():
-        console.print(f"[red]Error: LiteLLM config not found at {config_path}[/red]")
-        raise typer.Exit(1)
-
-    try:
-        with open(config_path, "r") as f:
-            yaml_data = yaml.safe_load(f)
-    except Exception as e:
-        console.print(f"[red]Error parsing YAML: {e}[/red]")
-        raise typer.Exit(1)
-
-    model_ids = []
-    model_list = yaml_data.get("model_list", [])
-    for m in model_list:
-        if "model_name" in m:
-            model_ids.append(m["model_name"])
-
-    if not model_ids:
-        console.print("[yellow]No models found in LiteLLM config.[/yellow]")
-        return
-
-    console.print(f"Found {len(model_ids)} models in LiteLLM config. Starting audit...")
-
-    report = aliases.audit_mappings(app_cfg, model_ids)
-    console.print(f"Mapped: {report['mapped']} / {report['total']}")
-
-    if report["missing"]:
-        console.print(f"Discovering mappings for {len(report['missing'])} missing models...")
-        suggestions = aliases.discover_aliases(app_cfg, provider, report["missing"])
-
-        if not suggestions:
-            console.print("[yellow]No suggestions found for missing models.[/yellow]")
-            return
-
-        for sug in suggestions:
-            console.print(f"\n[bold]Unmapped ID:[/bold] {sug['pid']}")
-            for i, s in enumerate(sug['suggestions'], 1):
-                console.print(f"  {i}. {s}")
-
-            choice = typer.prompt("Accept first suggestion? (y/n)", default="n")
-            if choice.lower() == 'y':
-                slug = sug['suggestions'][0]
-                aliases.add_alias(app_cfg, provider, sug['pid'], slug, "standard", family="unknown", display_name=slug, aa_slug=slug)
-                console.print(f"[green]Mapped {sug['pid']} to {slug}[/green] ")
-
-    console.print("\n[green]Sync complete.[/green]")
-
-
-@app.command("init")
-def init(
-    config: Path | None = typer.Option(None, "--config", "-c"),
-) -> None:
-    """Initialize default config and data directories."""
-    cfg = load_config(config)
-
-    # Initialize configuration file
-    config_path = save_config(cfg, config)
-    console.print(f"[green]Initialized configuration at: {config_path}[/green]")
-
-    cfg.data_dir.mkdir(parents=True, exist_ok=True)
-
-    # Create stub models.json if it doesn't exist
-    from model_manager.domain import storage
-    from model_manager.config import get_models_path
-    path = get_models_path(cfg)
-    if not path.exists():
-        storage.save_models_data(cfg, {"meta": {}, "models": {}})
-        console.print(f"[green]Created stub models.json at: {path}[/green]")
-    else:
-        console.print(f"[yellow]models.json already exists at: {path}[/yellow]")
-
-    console.print(f"[green]Initialized data directory at: {cfg.data_dir}[/green]")
-
-if __name__ == "__main__":
-    app()
+    if not json_output:
+        console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
