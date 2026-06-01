@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from model_manager.config import AppConfig, get_raw_scores_path, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
+from model_manager.config import AppConfig, get_raw_scores_path, get_free_models_path, get_nvidia_models_path, get_ollama_models_path, get_gemini_models_path
 from model_manager.domain import storage
 
 def list_models(config: AppConfig) -> list[str]:
@@ -205,6 +205,7 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
         "openrouter": get_free_models_path(config),
         "nvidia": get_nvidia_models_path(config),
         "ollama": get_ollama_models_path(config),
+        "gemini": get_gemini_models_path(config),
     }
 
     matches = []
