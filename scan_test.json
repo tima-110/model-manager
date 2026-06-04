@@ -1,0 +1,3834 @@
+{
+  "metadata": {
+    "provider": "OpenRouter",
+    "cycles": 24,
+    "timestamp": "2026-06-01T08:50:15.058655"
+  },
+  "models": {
+    "openrouter/owl-alpha": {
+      "history": [
+        {
+          "status": "up",
+          "latency_ms": 2608.0141940619797,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 2262.032179860398,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1080.2766832057387,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1551.2304089497775,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1410.5004649609327,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 833.0903279129416,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1361.8971479590982,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 3124.051421880722,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1142.26003899239,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 2446.1009928490967,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1492.114766035229,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1241.1560779437423,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1049.4231439661235,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1963.9068529941142,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1271.4078288991004,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 905.6335610803217,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1994.9912300799042,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 2186.33595504798,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1676.9714001566172,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1632.0274649187922,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1182.115174131468,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 2678.001836175099,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 852.6561199687421,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1619.3753241095692,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 1.0,
+        "avg_latency": 1648.5654415058282,
+        "assessment": "Slow"
+      }
+    },
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 195.89588791131973,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 99.35780917294323,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 1119.4383399561048,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 66.41776696778834,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.52698687463999,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.815160991624,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.85771805234253,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 285.7845388352871,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 359.68357510864735,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 155.63236107118428,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.92444191686809,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 61.86297885142267,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 74.11909801885486,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 68.95418395288289,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 418.32187795080245,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 279.20486801303923,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.44385111518204,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 64.46100305765867,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 119.07827714458108,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 83.12240592204034,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 98.51216804236174,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 92.90303592570126,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.40330884046853,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 463.11106299981475,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.20833333333333334,
+        "avg_latency": 361.2211845815182,
+        "assessment": "Ratelimited"
+      }
+    },
+    "poolside/laguna-xs.2:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 228.8897279649973,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 61.90260220319033,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 100.84402887150645,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 67.06150784157217,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 94.40435306169093,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.75394194200635,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.54673704504967,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 658.3062938880175,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 173.1267950963229,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 93.16429099999368,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.02576404437423,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 98.3478119596839,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.78044491633773,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 107.81419579870999,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 200.26918197982013,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 172.58901381865144,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 91.59302315674722,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 83.08172901161015,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 94.5865900721401,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.19994415715337,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 149.11440201103687,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 86.7811709176749,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 48.22050896473229,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 41.34187800809741,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.16666666666666666,
+        "avg_latency": 301.072821195703,
+        "assessment": "Ratelimited"
+      }
+    },
+    "poolside/laguna-m.1:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 216.6458370629698,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 43.21195697411895,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 103.81876002065837,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 78.9871399756521,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 61.04799220338464,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 92.00306585989892,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.49649808183312,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 898.0810090433806,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1743.219672003761,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 80.37292794324458,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 48.28744498081505,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 94.7456220164895,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 48.09042904525995,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 40.088919922709465,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 1402.4424308445305,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1351.760087069124,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 98.10328716412187,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 104.0967209264636,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.26695217937231,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 180.2261690609157,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 212.1241360437125,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 59.37740416266024,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 52.06046695820987,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 858.805833151564,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.20833333333333334,
+        "avg_latency": 1250.861806422472,
+        "assessment": "Ratelimited"
+      }
+    },
+    "moonshotai/kimi-k2.6:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 230.084375012666,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 63.21333395317197,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.17750496603549,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.53805713541806,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 63.39873792603612,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 63.82931210100651,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 53.81219205446541,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 399.68348015099764,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 43.49996685050428,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 67.77738709934056,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 64.04521688818932,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.873833019286394,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.38679498247802,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.19394690543413,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 359.8872949369252,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.54411399923265,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 87.8079840913415,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 65.63429511152208,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 101.44761600531638,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 85.02270793542266,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 101.06198489665985,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.02660795114934,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 638.210617005825,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 370.2111749444157,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.08333333333333333,
+        "avg_latency": 504.21089597512037,
+        "assessment": "Ratelimited"
+      }
+    },
+    "google/gemma-4-26b-a4b-it:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 261.1436208244413,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.2745220027864,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.87897409312427,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 68.7679520342499,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 45.72696588002145,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 51.58263701014221,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.37517697364092,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 162.9369189031422,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 167.23027196712792,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 194.15918900631368,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 57.777327951043844,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 87.1661570854485,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 93.23891578242183,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 54.3521021027118,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 194.12080221809447,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 42.8379459772259,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.07286402769387,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 193.1104448158294,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 94.38762697391212,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.7125750426203,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 80.52336098626256,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 90.41114710271358,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 172.05232684500515,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 127.45142495259643,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "google/gemma-4-31b-it:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 358.42697811312973,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 192.33736908063293,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 110.95061991363764,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 519.8281621560454,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 186.7440310306847,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.36817400343716,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 154.32284912094474,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 259.2531822156161,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 1696.1936990264803,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 126.96576700545847,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 231.19458695873618,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.53885694034398,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 996.931558009237,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 175.44609098695219,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 264.49828199110925,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 1194.3155250046402,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 209.28428904153407,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 383.4871018771082,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 255.32064703293145,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 178.4912389703095,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 494.33021200820804,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 209.70570901408792,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 592.0563959516585,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 374.7451410163194,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.16666666666666666,
+        "avg_latency": 964.3276902497746,
+        "assessment": "Ratelimited"
+      }
+    },
+    "google/lyria-3-pro-preview": {
+      "history": [
+        {
+          "status": "down",
+          "latency_ms": 1104.189031990245,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 676.8586821854115,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 731.7952800076455,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 715.9208878874779,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 1099.489453015849,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 786.9609959889203,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 834.1897940263152,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 1005.7431240566075,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 619.8884539771825,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 754.0571358986199,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 756.2478529289365,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 797.8026319760829,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 699.4786581490189,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 670.3639281913638,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 984.5886018592864,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 659.2723508365452,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 716.6447159834206,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 706.6626769956201,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 802.1301459521055,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 719.6226608939469,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 786.1984011251479,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 926.2995240278542,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 904.1831919457763,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 650.5331459920853,
+          "code": "502",
+          "error": "Bad Gateway"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Dead"
+      }
+    },
+    "google/lyria-3-clip-preview": {
+      "history": [
+        {
+          "status": "down",
+          "latency_ms": 783.4414239041507,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 889.924650080502,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 850.6460490170866,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 1236.989111173898,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 991.0954691004008,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 858.6251230444759,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 719.62431515567,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 760.705639841035,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 872.7133441716433,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 715.7096778973937,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 822.9779000394046,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 707.5202008709311,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 682.1956411004066,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 726.5425261575729,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 900.2194709610194,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 670.9669749252498,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 586.0148861538619,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 775.5659210961312,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 817.0099731069058,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 808.214879129082,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 1374.4725978467613,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 1029.5303808525205,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 711.7218910716474,
+          "code": "502",
+          "error": "Bad Gateway"
+        },
+        {
+          "status": "down",
+          "latency_ms": 918.2497439906001,
+          "code": "502",
+          "error": "Bad Gateway"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Dead"
+      }
+    },
+    "nvidia/nemotron-3-super-120b-a12b:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 242.99172591418028,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 77.43696705438197,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 80.81714902073145,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.14421611651778,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.43403795734048,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 108.66140620782971,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 836.4636928308755,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 6045.613456983119,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 349.56860705278814,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 62.990434002131224,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 65.44612091965973,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.93269504792988,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 99.05492095276713,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 147.4395669065416,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 384.2477910220623,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 3627.8347009792924,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 89.00624793022871,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 47.42667102254927,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 92.91923115961254,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 96.04138485156,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 63.913054997101426,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 68.81443900056183,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 55.20820012316108,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 375.2871521282941,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.20833333333333334,
+        "avg_latency": 2156.5103416331112,
+        "assessment": "Ratelimited"
+      }
+    },
+    "openrouter/free": {
+      "history": [
+        {
+          "status": "up",
+          "latency_ms": 816.928339889273,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 301.76540720276535,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 660.1920470129699,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 835.485182935372,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 116.82846420444548,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 833.8782619684935,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 405.79659678041935,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 145.6449800170958,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 199.80761501938105,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1064.6343040280044,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 5278.463655849919,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 4241.40271008946,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 803.870121948421,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 328.90116795897484,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 179.6928159892559,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1263.5579821653664,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 860.6204651296139,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 702.7271192055196,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 664.6713900845498,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 934.2515538446605,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 504.1539641097188,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 388.2727811578661,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 199.0974680520594,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 620.7791410852224,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.8333333333333334,
+        "avg_latency": 1054.992843826767,
+        "assessment": "Weak"
+      }
+    },
+    "liquid/lfm-2.5-1.2b-thinking:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 64.2366399988532,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.57618198916316,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 104.53047906048596,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 101.6260189935565,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.02342308685184,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 69.10003116354346,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.27618510276079,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 117.47729498893023,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 154.77660903707147,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 86.8478980846703,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.3973519206047,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.89070803485811,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 74.14895691908896,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 118.48586099222302,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 163.25062699615955,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 133.14414909109473,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 45.18095403909683,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.95457906834781,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.38300186954439,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 454.67501087114215,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 120.51769089885056,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 49.01453689672053,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 131.2904809601605,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 245.2018689364195,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.25,
+        "avg_latency": 157.52350500163934,
+        "assessment": "Ratelimited"
+      }
+    },
+    "liquid/lfm-2.5-1.2b-instruct:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 61.08038988895714,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 40.75497295707464,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 37.79823100194335,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.2186449766159,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 45.65787594765425,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 108.73267403803766,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 62.82647280022502,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 35.56135087274015,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 142.68763805739582,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 52.571481792256236,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 42.140684090554714,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.26290484890342,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 361.81730101816356,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 85.48014494590461,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 143.04360491223633,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.5497408285737,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.29966896213591,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 87.13207906112075,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.35438406839967,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 88.53806997649372,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 85.41677612811327,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 107.14859911240637,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 175.1954781357199,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 171.25653917901218,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.16666666666666666,
+        "avg_latency": 158.04581507109106,
+        "assessment": "Ratelimited"
+      }
+    },
+    "nvidia/nemotron-3-nano-30b-a3b:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 183.5148090030998,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 80.38295898586512,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.36982207745314,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 74.43502801470459,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 78.59491812996566,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 71.90382410772145,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 57.11663910187781,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 357.8967950306833,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 65.38715097121894,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.09240508079529,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 46.084793051704764,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 80.6313541252166,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.74445386976004,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 127.88494094274938,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 270.3560551162809,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 49.878982827067375,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 90.58719896711409,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.47156817279756,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.73775290884078,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.50800601951778,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 90.16482718288898,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 95.0995848979801,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 47.13311092928052,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 286.27340216189623,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.125,
+        "avg_latency": 304.8420841029535,
+        "assessment": "Ratelimited"
+      }
+    },
+    "nvidia/nemotron-nano-12b-v2-vl:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.594959089532495,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 37.562842946499586,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 53.017704049125314,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.215019991621375,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.85507200099528,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 98.65116910077631,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 58.66340221837163,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 271.34723984636366,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 69.67219011858106,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.48574099503458,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 143.35559611208737,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 35.856543807312846,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 128.4674338530749,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 185.43113116174936,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 165.69947497919202,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 83.63457699306309,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.07273108139634,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 64.06561518087983,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 41.83431388810277,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 91.8691719416529,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 137.66258815303445,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 84.46730696596205,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 325.9251290000975,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 220.16719495877624,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.16666666666666666,
+        "avg_latency": 245.78475969610736,
+        "assessment": "Ratelimited"
+      }
+    },
+    "qwen/qwen3-next-80b-a3b-instruct:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 113.90946479514241,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 196.7050728853792,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 186.90589303150773,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 241.2308359052986,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 62.71368497982621,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.77829200029373,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 59.14012296125293,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 134.47578088380396,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 122.88250308483839,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 155.02681187354028,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 316.1068770568818,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 166.90380196087062,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 165.60313804075122,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 520.752009935677,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 160.29807506129146,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 119.7295340243727,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 153.99978193454444,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 166.69628489762545,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.0971998795867,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 160.71758302859962,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.6333069447428,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 89.50724406167865,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 108.61432296223938,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 165.60702002607286,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "nvidia/nemotron-nano-9b-v2:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 84.31953703984618,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.4956169296056,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 89.77147517725825,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.51195005141199,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 78.80954816937447,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.81071485765278,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.59173890389502,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 47.679372830316424,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 526.1364160105586,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 39.21369882300496,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 43.597490061074495,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 61.941929161548615,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 87.81855297274888,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 75.95780305564404,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 422.7856299839914,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 36.71748796477914,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 87.00867486186326,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 187.7350378781557,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 82.91067718528211,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.5528249964118,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 92.16143190860748,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 96.3875069282949,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 38.56600192375481,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 631.3967909663916,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.08333333333333333,
+        "avg_latency": 527.0912104751915,
+        "assessment": "Ratelimited"
+      }
+    },
+    "openai/gpt-oss-120b:free": {
+      "history": [
+        {
+          "status": "up",
+          "latency_ms": 673.0754470918328,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 648.010334931314,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 635.6158941052854,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 614.6530529949814,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 487.0429430156946,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 807.3550430126488,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 780.6373878847808,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 669.5251460187137,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 2373.4359520021826,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 695.9819730836898,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 5245.695129036903,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 4939.168335869908,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 743.9490349497646,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 697.1125309355557,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 768.1427749339491,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 757.0130438543856,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 815.7032979652286,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 664.397177984938,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 567.7374789956957,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 657.4703950900584,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 625.2032450865954,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 570.2455199789256,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1430.2969840355217,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 5509.078829083592,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 1.0,
+        "avg_latency": 1349.0227896642562,
+        "assessment": "Slow"
+      }
+    },
+    "openai/gpt-oss-20b:free": {
+      "history": [
+        {
+          "status": "up",
+          "latency_ms": 340.3180369641632,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 340.7490139361471,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 349.3786589242518,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 491.175594041124,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1199.365773005411,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 306.08389410190284,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 314.35209698975086,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 405.93176684342325,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 1758.3667759317905,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 322.2819638904184,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 4770.0008729007095,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 4160.777247976512,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 4259.522553998977,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 289.4408309366554,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 282.53638301976025,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 283.45739585347474,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 322.13581213727593,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 436.06712901964784,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 564.3942260649055,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 266.6034959256649,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 303.23212896473706,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 282.73542784154415,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 986.3185780122876,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "up",
+          "latency_ms": 256.4682438969612,
+          "code": "200",
+          "error": null
+        }
+      ],
+      "summary": {
+        "availability": 0.875,
+        "avg_latency": 1067.3101791513286,
+        "assessment": "Weak"
+      }
+    },
+    "z-ai/glm-4.5-air:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 665.4807049781084,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 100.63005401752889,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 139.87181382253766,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 50.81902793608606,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.76955712586641,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 66.20184890925884,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.93727705068886,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 1065.23841409944,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.47700092941523,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 73.69885011576116,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 39.41491199657321,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 59.8776051774621,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 81.70274086296558,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 93.06002105586231,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 42.49917692504823,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 221.3625148870051,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 92.37880213186145,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 65.64115989021957,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 57.30365798808634,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.58590818755329,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 141.59350702539086,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 93.91244989819825,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "up",
+          "latency_ms": 1060.3944270405918,
+          "code": "200",
+          "error": null
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 88.00438698381186,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.08333333333333333,
+        "avg_latency": 1062.816420570016,
+        "assessment": "Ratelimited"
+      }
+    },
+    "qwen/qwen3-coder:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 135.36582584492862,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 169.89348689094186,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 341.45669802092016,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.77774683944881,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.29059399105608,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.725267149508,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 89.43672012537718,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 129.9456669948995,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 133.82121198810637,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 175.12512695975602,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.65477796271443,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 198.97897983901203,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 140.9841370768845,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 255.06158079952002,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 169.50028901919723,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 247.6628408767283,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 164.92849215865135,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 246.60393805243075,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 143.86644819751382,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 125.41322503238916,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 88.55053805746138,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 63.89120011590421,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 137.29287195019424,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 182.38440598361194,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 153.0269798822701,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 162.5665749888867,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 128.84691101498902,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 128.30017996020615,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 196.59458682872355,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.94723800197244,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 53.385095903649926,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 113.16285911016166,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 283.64105988293886,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 142.9122348781675,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 166.06503003276885,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 161.3487859722227,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.26436497829854,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 217.45941205881536,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 177.77325515635312,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 131.3368659466505,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 139.0031159389764,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 140.88540407828987,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 175.148457987234,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.48713090457022,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 139.15778300724924,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 141.6262169368565,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 157.79812913388014,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 123.4890699852258,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "meta-llama/llama-3.3-70b-instruct:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 140.90441283769906,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 156.29054699093103,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 133.91171279363334,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 231.2932179775089,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 177.60864295996726,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 66.2396710831672,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 77.3223068099469,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 122.53747903741896,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 122.8085970506072,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 160.7076721265912,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 172.01146599836648,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 144.2610239610076,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 136.82383787818253,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 88.99558801203966,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 138.48397694528103,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 134.43918409757316,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 150.0085568986833,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 152.0412969402969,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 155.8937740046531,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.22647691331804,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 72.37750687636435,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 79.58216685801744,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 154.4371540658176,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 149.7669538948685,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "meta-llama/llama-3.2-3b-instruct:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 119.61825308389962,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 125.14816992916167,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 139.1081758774817,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 118.35492704994977,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 135.2498719934374,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 64.8809028789401,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 60.75387913733721,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 108.51342091336846,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 362.73002182133496,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 152.1741810720414,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.8224400933832,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 134.6151928883046,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.50926797650754,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 101.29066184163094,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 182.28576192632318,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 147.89737714454532,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.75988292321563,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 156.65277000516653,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 173.74747712165117,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 156.2255520839244,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 137.65939022414386,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 70.79635816626251,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.0414249803871,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 146.59552602097392,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    },
+    "nousresearch/hermes-3-llama-3.1-405b:free": {
+      "history": [
+        {
+          "status": "ratelimit",
+          "latency_ms": 265.5411781743169,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 133.4012148436159,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 119.44056302309036,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 113.10557508841157,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 128.11240903101861,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 127.35470500774682,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 65.34006493166089,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 139.18583700433373,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 168.2236019987613,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 117.11213202215731,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 181.7907819058746,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 129.57619689404964,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 76.666021021083,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 146.52557810768485,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 143.10232806019485,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 143.600839888677,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 218.43672706745565,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 127.88571510463953,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 159.46580097079277,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 162.42891014553607,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 151.16809192113578,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 86.81823406368494,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 451.6858959104866,
+          "code": "429",
+          "error": "Too Many Requests"
+        },
+        {
+          "status": "ratelimit",
+          "latency_ms": 194.44959610700607,
+          "code": "429",
+          "error": "Too Many Requests"
+        }
+      ],
+      "summary": {
+        "availability": 0.0,
+        "avg_latency": 0,
+        "assessment": "Ratelimited"
+      }
+    }
+  }
+}

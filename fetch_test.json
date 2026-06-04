@@ -1,0 +1,537 @@
+{
+  "count": 25,
+  "models": [
+    {
+      "id": "openrouter/owl-alpha",
+      "name": "Owl Alpha",
+      "context_length": 1048756,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Owl Alpha is a high-performance foundation model designed 
+for agentic workloads. Natively supports tool use, and long-context tasks, with 
+strong performance in code generation, automated workflows, and complex 
+instruction execution....",
+      "tags": []
+    },
+    {
+      "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "name": "NVIDIA: Nemotron 3 Nano Omni (free)",
+      "context_length": 256000,
+      "architecture": {
+        "modality": "text+image+audio+video->text",
+        "input_modalities": [
+          "text",
+          "audio",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "NVIDIA Nemotron\u2122 3 Nano Omni is a 30B-A3B open 
+multimodal model designed to function as a perception and context sub-agent in 
+enterprise agent systems. It accepts text, image, video, and...",
+      "tags": []
+    },
+    {
+      "id": "poolside/laguna-xs.2:free",
+      "name": "Poolside: Laguna XS.2 (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Laguna XS.2 is the second-generation model in the XS size 
+class from [Poolside](https://poolside.ai), their efficient coding agent series.
+It combines tool calling and reasoning capabilities with a compact footprint, 
+offering...",
+      "tags": []
+    },
+    {
+      "id": "poolside/laguna-m.1:free",
+      "name": "Poolside: Laguna M.1 (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Laguna M.1 is the flagship coding agent model from 
+[Poolside](https://poolside.ai), optimized for complex software engineering 
+tasks. Designed for agentic coding workflows, it supports tool calling and 
+reasoning, with a 128K...",
+      "tags": []
+    },
+    {
+      "id": "moonshotai/kimi-k2.6:free",
+      "name": "MoonshotAI: Kimi K2.6 (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text+image->text",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Kimi K2.6 is Moonshot AI's next-generation multimodal 
+model, designed for long-horizon coding, coding-driven UI/UX generation, and 
+multi-agent orchestration. It handles complex end-to-end coding tasks across 
+Python, Rust, and Go, and...",
+      "tags": []
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-it:free",
+      "name": "Google: Gemma 4 26B A4B  (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text+image+video->text",
+        "input_modalities": [
+          "image",
+          "text",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Gemma",
+        "instruct_type": null
+      },
+      "description": "Gemma 4 26B A4B IT is an instruction-tuned 
+Mixture-of-Experts (MoE) model from Google DeepMind. Despite 25.2B total 
+parameters, only 3.8B activate per token during inference \u2014 delivering 
+near-31B quality at...",
+      "tags": []
+    },
+    {
+      "id": "google/gemma-4-31b-it:free",
+      "name": "Google: Gemma 4 31B (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text+image+video->text",
+        "input_modalities": [
+          "image",
+          "text",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Gemma",
+        "instruct_type": null
+      },
+      "description": "Gemma 4 31B Instruct is Google DeepMind's 30.7B dense 
+multimodal model supporting text and image input with text output. Features a 
+256K token context window, configurable thinking/reasoning mode, native 
+function...",
+      "tags": []
+    },
+    {
+      "id": "google/lyria-3-pro-preview",
+      "name": "Google: Lyria 3 Pro Preview",
+      "context_length": 1048576,
+      "architecture": {
+        "modality": "text+image->text+audio",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text",
+          "audio"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Full-length songs are priced at $0.08 per song. Lyria 3 is
+Google's family of music generation models, available through the Gemini API. 
+With Lyria 3, you can generate high-quality, 48kHz...",
+      "tags": []
+    },
+    {
+      "id": "google/lyria-3-clip-preview",
+      "name": "Google: Lyria 3 Clip Preview",
+      "context_length": 1048576,
+      "architecture": {
+        "modality": "text+image->text+audio",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text",
+          "audio"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "30 second duration clips are priced at $0.04 per clip. 
+Lyria 3 is Google's family of music generation models, available through the 
+Gemini API. With Lyria 3, you can generate...",
+      "tags": []
+    },
+    {
+      "id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "name": "NVIDIA: Nemotron 3 Super (free)",
+      "context_length": 1000000,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid 
+MoE model, activating just 12B parameters for maximum compute efficiency and 
+accuracy in complex multi-agent applications. Built on a hybrid 
+Mamba-Transformer...",
+      "tags": []
+    },
+    {
+      "id": "openrouter/free",
+      "name": "Free Models Router",
+      "context_length": 200000,
+      "architecture": {
+        "modality": "text+image->text",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Router",
+        "instruct_type": null
+      },
+      "description": "The simplest way to get free inference. openrouter/free is
+a router that selects free models at random from the models available on 
+OpenRouter. The router smartly filters for models that...",
+      "tags": []
+    },
+    {
+      "id": "liquid/lfm-2.5-1.2b-thinking:free",
+      "name": "LiquidAI: LFM2.5-1.2B-Thinking (free)",
+      "context_length": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "LFM2.5-1.2B-Thinking is a lightweight reasoning-focused 
+model optimized for agentic tasks, data extraction, and RAG\u2014while still 
+running comfortably on edge devices. It supports long context (up to 32K tokens)
+and is...",
+      "tags": []
+    },
+    {
+      "id": "liquid/lfm-2.5-1.2b-instruct:free",
+      "name": "LiquidAI: LFM2.5-1.2B-Instruct (free)",
+      "context_length": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "LFM2.5-1.2B-Instruct is a compact, high-performance 
+instruction-tuned model built for fast on-device AI. It delivers strong chat 
+quality in a 1.2B parameter footprint, with efficient edge inference and broad 
+runtime support.",
+      "tags": []
+    },
+    {
+      "id": "nvidia/nemotron-3-nano-30b-a3b:free",
+      "name": "NVIDIA: Nemotron 3 Nano 30B A3B (free)",
+      "context_length": 256000,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE 
+model with highest compute efficiency and accuracy for developers to build 
+specialized agentic AI systems. The model is fully...",
+      "tags": []
+    },
+    {
+      "id": "nvidia/nemotron-nano-12b-v2-vl:free",
+      "name": "NVIDIA: Nemotron Nano 12B 2 VL (free)",
+      "context_length": 128000,
+      "architecture": {
+        "modality": "text+image+video->text",
+        "input_modalities": [
+          "image",
+          "text",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "NVIDIA Nemotron Nano 2 VL is a 12-billion-parameter open 
+multimodal reasoning model designed for video understanding and document 
+intelligence. It introduces a hybrid Transformer-Mamba architecture, combining 
+transformer-level accuracy with Mamba\u2019s...",
+      "tags": []
+    },
+    {
+      "id": "qwen/qwen3-next-80b-a3b-instruct:free",
+      "name": "Qwen: Qwen3 Next 80B A3B Instruct (free)",
+      "context_length": 262144,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Qwen3",
+        "instruct_type": null
+      },
+      "description": "Qwen3-Next-80B-A3B-Instruct is an instruction-tuned chat 
+model in the Qwen3-Next series optimized for fast, stable responses without 
+\u201cthinking\u201d traces. It targets complex tasks across reasoning, code 
+generation, knowledge QA, and multilingual...",
+      "tags": []
+    },
+    {
+      "id": "nvidia/nemotron-nano-9b-v2:free",
+      "name": "NVIDIA: Nemotron Nano 9B V2 (free)",
+      "context_length": 128000,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "NVIDIA-Nemotron-Nano-9B-v2 is a large language model (LLM)
+trained from scratch by NVIDIA, and designed as a unified model for both 
+reasoning and non-reasoning tasks. It responds to user queries and...",
+      "tags": []
+    },
+    {
+      "id": "openai/gpt-oss-120b:free",
+      "name": "OpenAI: gpt-oss-120b (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instruct_type": null
+      },
+      "description": "gpt-oss-120b is an open-weight, 117B-parameter 
+Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning,
+agentic, and general-purpose production use cases. It activates 5.1B parameters 
+per forward pass and is optimized...",
+      "tags": []
+    },
+    {
+      "id": "openai/gpt-oss-20b:free",
+      "name": "OpenAI: gpt-oss-20b (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "GPT",
+        "instruct_type": null
+      },
+      "description": "gpt-oss-20b is an open-weight 21B parameter model released
+by OpenAI under the Apache 2.0 license. It uses a Mixture-of-Experts (MoE) 
+architecture with 3.6B active parameters per forward pass, optimized for...",
+      "tags": []
+    },
+    {
+      "id": "z-ai/glm-4.5-air:free",
+      "name": "Z.ai: GLM 4.5 Air (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "GLM-4.5-Air is the lightweight variant of our latest 
+flagship model family, also purpose-built for agent-centric applications. Like 
+GLM-4.5, it adopts the Mixture-of-Experts (MoE) architecture but with a more 
+compact parameter...",
+      "tags": []
+    },
+    {
+      "id": "qwen/qwen3-coder:free",
+      "name": "Qwen: Qwen3 Coder 480B A35B (free)",
+      "context_length": 1048576,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Qwen3",
+        "instruct_type": null
+      },
+      "description": "Qwen3-Coder-480B-A35B-Instruct is a Mixture-of-Experts 
+(MoE) code generation model developed by the Qwen team. It is optimized for 
+agentic coding tasks such as function calling, tool use, and long-context 
+reasoning over...",
+      "tags": []
+    },
+    {
+      "id": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+      "name": "Venice: Uncensored (free)",
+      "context_length": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Other",
+        "instruct_type": null
+      },
+      "description": "Venice Uncensored Dolphin Mistral 24B Venice Edition is a 
+fine-tuned variant of Mistral-Small-24B-Instruct-2501, developed by dphn.ai in 
+collaboration with Venice.ai. This model is designed as an 
+\u201cuncensored\u201d instruct-tuned LLM, preserving...",
+      "tags": []
+    },
+    {
+      "id": "meta-llama/llama-3.3-70b-instruct:free",
+      "name": "Meta: Llama 3.3 70B Instruct (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Llama3",
+        "instruct_type": "llama3"
+      },
+      "description": "The Meta Llama 3.3 multilingual large language model (LLM)
+is a pretrained and instruction tuned generative model in 70B (text in/text 
+out). The Llama 3.3 instruction tuned text only model...",
+      "tags": []
+    },
+    {
+      "id": "meta-llama/llama-3.2-3b-instruct:free",
+      "name": "Meta: Llama 3.2 3B Instruct (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Llama3",
+        "instruct_type": "llama3"
+      },
+      "description": "Llama 3.2 3B is a 3-billion-parameter multilingual large 
+language model, optimized for advanced natural language processing tasks like 
+dialogue generation, reasoning, and summarization. Designed with the latest 
+transformer architecture, it...",
+      "tags": []
+    },
+    {
+      "id": "nousresearch/hermes-3-llama-3.1-405b:free",
+      "name": "Nous: Hermes 3 405B Instruct (free)",
+      "context_length": 131072,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "Llama3",
+        "instruct_type": "chatml"
+      },
+      "description": "Hermes 3 is a generalist language model with many 
+improvements over Hermes 2, including advanced agentic capabilities, much better
+roleplaying, reasoning, multi-turn conversation, long context coherence, and 
+improvements across the...",
+      "tags": []
+    }
+  ]
+}

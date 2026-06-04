@@ -1,0 +1,164 @@
+{
+  "models": {
+    "gemma-3-12b": {
+      "name": "Gemma 3 12B Instruct",
+      "scores": {
+        "intelligence": 8.8,
+        "coding": 6.3,
+        "math": 18.3,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3-1b": {
+      "name": "Gemma 3 1B Instruct",
+      "scores": {
+        "intelligence": 5.6,
+        "coding": 0.2,
+        "math": 3.3,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3-270m": {
+      "name": "Gemma 3 270M",
+      "scores": {
+        "intelligence": 7.7,
+        "coding": 0,
+        "math": 2.3,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3-27b": {
+      "name": "Gemma 3 27B Instruct",
+      "scores": {
+        "intelligence": 10.3,
+        "coding": 9.6,
+        "math": 20.7,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3-4b": {
+      "name": "Gemma 3 4B Instruct",
+      "scores": {
+        "intelligence": 6.3,
+        "coding": 2.9,
+        "math": 12.7,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3n-e2b": {
+      "name": "Gemma 3n E2B Instruct",
+      "scores": {
+        "intelligence": 4.8,
+        "coding": 2.2,
+        "math": 10.3,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-3n-e4b": {
+      "name": "Gemma 3n E4B Instruct",
+      "scores": {
+        "intelligence": 6.4,
+        "coding": 4.2,
+        "math": 14.3,
+        "ttft": 0.547,
+        "tps": 53.56
+      }
+    },
+    "gemma-3n-e4b-preview-0520": {
+      "name": "Gemma 3n E4B Instruct Preview (May '25)",
+      "scores": {
+        "intelligence": 10.1,
+        "coding": null,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-4-26b-a4b-non-reasoning": {
+      "name": "Gemma 4 26B A4B (Non-reasoning)",
+      "scores": {
+        "intelligence": 27.1,
+        "coding": 29.1,
+        "math": null,
+        "ttft": 0.802,
+        "tps": 71.134
+      }
+    },
+    "gemma-4-26b-a4b": {
+      "name": "Gemma 4 26B A4B (Reasoning)",
+      "scores": {
+        "intelligence": 31.2,
+        "coding": 22.4,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-4-31b-non-reasoning": {
+      "name": "Gemma 4 31B (Non-reasoning)",
+      "scores": {
+        "intelligence": 32.3,
+        "coding": 33.9,
+        "math": null,
+        "ttft": 0.601,
+        "tps": 18.023
+      }
+    },
+    "gemma-4-31b": {
+      "name": "Gemma 4 31B (Reasoning)",
+      "scores": {
+        "intelligence": 39.2,
+        "coding": 38.7,
+        "math": null,
+        "ttft": 0.998,
+        "tps": 35.324
+      }
+    },
+    "gemma-4-e2b-non-reasoning": {
+      "name": "Gemma 4 E2B (Non-reasoning)",
+      "scores": {
+        "intelligence": 12.1,
+        "coding": 8.3,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-4-e2b": {
+      "name": "Gemma 4 E2B (Reasoning)",
+      "scores": {
+        "intelligence": 15.2,
+        "coding": 9,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-4-e4b-non-reasoning": {
+      "name": "Gemma 4 E4B (Non-reasoning)",
+      "scores": {
+        "intelligence": 14.8,
+        "coding": 6.4,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "gemma-4-e4b": {
+      "name": "Gemma 4 E4B (Reasoning)",
+      "scores": {
+        "intelligence": 18.8,
+        "coding": 13.7,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    }
+  }
+}

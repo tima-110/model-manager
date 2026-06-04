@@ -1,0 +1,74 @@
+{
+  "models": {
+    "deepseek-v4-pro-high": {
+      "name": "deepseek-v4",
+      "scores": {
+        "intelligence": 49.8,
+        "coding": 43.2,
+        "math": null,
+        "ttft": 1.173,
+        "tps": 53.457
+      }
+    },
+    "deepseek-v4-flash-high": {
+      "name": "deepseek-v4",
+      "scores": {
+        "intelligence": 46,
+        "coding": 39.8,
+        "math": null,
+        "ttft": 0,
+        "tps": 0
+      }
+    },
+    "deepseek-v4-pro-non-reasoning": {
+      "name": "deepseek-v4",
+      "scores": {
+        "intelligence": 39.3,
+        "coding": 38.4,
+        "math": null,
+        "ttft": 1.175,
+        "tps": 53.314
+      }
+    },
+    "gemma-4-31b": {
+      "name": "gemma-4-31b-it",
+      "scores": {
+        "intelligence": 39.2,
+        "coding": 38.7,
+        "math": null,
+        "ttft": 0.998,
+        "tps": 35.324
+      }
+    },
+    "gemma-4-31b-non-reasoning": {
+      "name": "gemma-4-31b-it",
+      "scores": {
+        "intelligence": 32.3,
+        "coding": 33.9,
+        "math": null,
+        "ttft": 0.601,
+        "tps": 18.023
+      }
+    },
+    "glm-5-1": {
+      "name": "glm-5.1",
+      "scores": {
+        "intelligence": 51.4,
+        "coding": 43.4,
+        "math": null,
+        "ttft": 0.864,
+        "tps": 61.231
+      }
+    },
+    "glm-5-1-non-reasoning": {
+      "name": "glm-5.1",
+      "scores": {
+        "intelligence": 43.8,
+        "coding": 35.8,
+        "math": null,
+        "ttft": 1.025,
+        "tps": 48.73
+      }
+    }
+  }
+}
