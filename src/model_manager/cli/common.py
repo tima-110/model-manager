@@ -75,6 +75,7 @@ def _run_scan_cli_workflow(
     only_down: bool = False,
     json_output: bool = False,
     max_scans: int | None = None,
+    debug: bool = False,
 ) -> None:
     """CLI workflow for scanning provider model health with live updates and final assessment."""
     cfg = load_config(config)
@@ -108,6 +109,7 @@ def _run_scan_cli_workflow(
 
     # State tracking
     history: Dict[str, List[discovery.PingResult]] = {mid: [] for mid in model_ids}
+    debug_logs = []
     cycle_count = 0
     max_cycles = max_scans if max_scans is not None else cfg.scan_count
 
@@ -147,7 +149,16 @@ def _run_scan_cli_workflow(
 
         while True:
             cycle_count += 1
-            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids)
+            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids, debug=debug)
+
+            if debug:
+                for mid, res in results.items():
+                    if res and res.debug_info:
+                        debug_logs.append({
+                            "cycle": cycle_count,
+                            "model_id": mid,
+                            "debug": res.debug_info
+                        })
 
             if not json_output:
                 table = Table(title=f"Health Scan: {provider.name} (Cycle {cycle_count})")
@@ -187,6 +198,27 @@ def _run_scan_cli_workflow(
     except KeyboardInterrupt:
         if not json_output: console.print("\n[yellow]Scan halted by user.[/yellow]")
         if live: live.stop()
+
+    if debug and debug_logs:
+        debug_data = {
+            "metadata": {
+                "provider": provider.name,
+                "cycles": cycle_count,
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            "logs": debug_logs
+        }
+        debug_json = json.dumps(debug_data, indent=2)
+
+        # Output to stdout
+        console.print("\n[bold cyan]Debug Scan Logs[/bold cyan]")
+        console.print(debug_json)
+
+        # Output to file
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        debug_file = cfg.data_dir / f"debug_scan_{provider.name.lower()}_{ts}.json"
+        debug_file.write_text(debug_json)
+        console.print(f"[dim]Debug logs saved to {debug_file}[/dim]")
 
     final_results_data = {"metadata": {"provider": provider.name, "cycles": cycle_count, "timestamp": datetime.utcnow().isoformat()}, "models": {}}
 

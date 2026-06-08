@@ -45,6 +45,7 @@ class PingResult:
     latency_ms: float
     code: str
     error: Optional[str] = None
+    debug_info: Optional[Dict[str, Any]] = None
 
 def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     """Fetch all models from OpenRouter and filter for free ones."""
@@ -152,7 +153,7 @@ def fetch_gemini_models(api_key: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from Gemini: {e}")
 
-def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter") -> PingResult:
+def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter", debug: bool = False) -> PingResult:
     """Check if a model is responsive and measure TTFB latency."""
     if not api_key:
         return PingResult(status="unauthorized", latency_ms=0, code="401", error="API key missing")
@@ -194,10 +195,12 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
         data["stream"] = False
 
     t0 = time.perf_counter()
+    debug_info = None
     try:
+        payload = json.dumps(data).encode()
         req = urllib.request.Request(
             chat_url,
-            data=json.dumps(data).encode(),
+            data=payload,
             headers=headers,
             method="POST"
         )
@@ -207,25 +210,51 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
             latency = (time.perf_counter() - t0) * 1000
             code = str(response.getcode())
             status = STATUS_MAP.get(code, "down")
-            return PingResult(status=status, latency_ms=latency, code=code)
+
+            if debug:
+                response_body = response.read().decode(errors="replace")
+                debug_info = {
+                    "request": {"url": chat_url, "headers": headers, "payload": data},
+                    "response": {"code": code, "body": response_body}
+                }
+
+            return PingResult(status=status, latency_ms=latency, code=code, debug_info=debug_info)
     except urllib.error.HTTPError as e:
         latency = (time.perf_counter() - t0) * 1000
         code = str(e.code)
         status = STATUS_MAP.get(code, "down")
-        return PingResult(status=status, latency_ms=latency, code=code, error=e.reason)
+
+        if debug:
+            response_body = e.read().decode(errors="replace")
+            debug_info = {
+                "request": {"url": chat_url, "headers": headers, "payload": data},
+                "response": {"code": code, "body": response_body}
+            }
+
+        return PingResult(status=status, latency_ms=latency, code=code, error=e.reason, debug_info=debug_info)
     except urllib.error.URLError as e:
         latency = (time.perf_counter() - t0) * 1000
-        return PingResult(status="down", latency_ms=latency, code="000", error=str(e.reason))
+        if debug:
+            debug_info = {
+                "request": {"url": chat_url, "headers": headers, "payload": data},
+                "response": {"error": str(e.reason)}
+            }
+        return PingResult(status="down", latency_ms=latency, code="000", error=str(e.reason), debug_info=debug_info)
     except Exception as e:
         latency = (time.perf_counter() - t0) * 1000
-        return PingResult(status="down", latency_ms=latency, code="ERR", error=str(e))
+        if debug:
+            debug_info = {
+                "request": {"url": chat_url, "headers": headers, "payload": data},
+                "response": {"error": str(e)}
+            }
+        return PingResult(status="down", latency_ms=latency, code="ERR", error=str(e), debug_info=debug_info)
 
-def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrency: int = 10) -> Dict[str, PingResult]:
+def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrency: int = 10, debug: bool = False) -> Dict[str, PingResult]:
     """Ping a list of models in parallel and return results."""
     results = {}
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         future_to_model = {
-            executor.submit(probe_model, mid, api_key, provider_id): mid
+            executor.submit(probe_model, mid, api_key, provider_id, debug): mid
             for mid in model_ids
         }
         for future in as_completed(future_to_model):
