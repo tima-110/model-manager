@@ -41,10 +41,11 @@ def openrouter_scan(
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
     json_output: bool = typer.Option(False, "--json"),
+    max_scans: int | None = typer.Option(None, "--max-scans"),
 ) -> None:
     """Scan the current health and performance of OpenRouter models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans)
 
 @nvidia_app.command("fetch")
 def nvidia_fetch(
@@ -63,10 +64,11 @@ def nvidia_scan(
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
     json_output: bool = typer.Option(False, "--json"),
+    max_scans: int | None = typer.Option(None, "--max-scans"),
 ) -> None:
     """Scan the current health and performance of NVIDIA models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans)
 
 @ollama_app.command("fetch")
 def ollama_fetch(
@@ -85,10 +87,11 @@ def ollama_scan(
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
     json_output: bool = typer.Option(False, "--json"),
+    max_scans: int | None = typer.Option(None, "--max-scans"),
 ) -> None:
     """Scan the current health and performance of Ollama models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "ollama")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans)
 
 @gemini_app.command("fetch")
 def gemini_fetch(
@@ -107,7 +110,8 @@ def gemini_scan(
     only_up: bool = typer.Option(False, "--only-up"),
     only_down: bool = typer.Option(False, "--only-down"),
     json_output: bool = typer.Option(False, "--json"),
+    max_scans: int | None = typer.Option(None, "--max-scans"),
 ) -> None:
     """Scan the current health and performance of Gemini models."""
-    provider = next(p for p in providers.list_providers() if p.name.lower() == "nvidia")
-    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output)
+    provider = next(p for p in providers.list_providers() if p.name.lower() == "gemini")
+    _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans)

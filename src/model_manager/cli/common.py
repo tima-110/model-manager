@@ -74,6 +74,7 @@ def _run_scan_cli_workflow(
     only_up: bool = False,
     only_down: bool = False,
     json_output: bool = False,
+    max_scans: int | None = None,
 ) -> None:
     """CLI workflow for scanning provider model health with live updates and final assessment."""
     cfg = load_config(config)
@@ -108,7 +109,7 @@ def _run_scan_cli_workflow(
     # State tracking
     history: Dict[str, List[discovery.PingResult]] = {mid: [] for mid in model_ids}
     cycle_count = 0
-    max_cycles = cfg.scan_count
+    max_cycles = max_scans if max_scans is not None else cfg.scan_count
 
     def get_status_color(status: str) -> str:
         if status == "up": return "green"
