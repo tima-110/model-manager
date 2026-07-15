@@ -17,6 +17,8 @@ class AppConfig(BaseModel):
     debug: bool = False
     scan_frequency: int = 5
     scan_count: int = 24
+    litellm_service_dir: Path = Path("/etc/litellm")
+    litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:
         if self.data_dir == Path():
@@ -93,3 +95,11 @@ def get_ollama_models_path(config: AppConfig) -> Path:
 def get_gemini_models_path(config: AppConfig) -> Path:
     """Return path to the Gemini available models JSON file."""
     return config.data_dir / "gemini_available_models.json"
+
+def get_litellm_cost_overrides_path(config: AppConfig) -> Path:
+    """Return path to the local cost map overrides JSON file."""
+    return config.data_dir / "litellm_cost_overrides.json"
+
+def get_litellm_cost_map_output_path(config: AppConfig) -> Path:
+    """Return path to the final merged cost map file for LiteLLM service."""
+    return config.litellm_service_dir / "model_prices_and_context_window.json"

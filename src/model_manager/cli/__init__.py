@@ -11,6 +11,7 @@ from .aliases import aliases_app
 from .advisor import advisor_app
 from .providers import providers_app
 from .auth import auth_app
+from .litellm import litellm_app
 
 app = typer.Typer(
     name="model-manager",
@@ -44,3 +45,4 @@ app.add_typer(aliases_app, name="aliases")
 app.add_typer(advisor_app, name="advisor")
 app.add_typer(providers_app, name="providers")
 app.add_typer(auth_app, name="auth")
+app.add_typer(litellm_app, name="litellm")

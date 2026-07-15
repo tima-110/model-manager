@@ -11,6 +11,8 @@ This document describes the configuration and data storage for `model-manager`.
 | `data_dir` | Path | `platformdirs.user_data_dir` | Directory where JSON state files are stored. |
 | `verbose` | Boolean | `false` | Enables verbose output to stdout. |
 | `debug` | Boolean | `false` | Enables debug-level logging to stderr. |
+| `litellm_service_dir` | Path | `/etc/litellm` | Directory where the merged cost map is written for LiteLLM. |
+| `litellm_cost_map_url` | String | `https://raw.githubusercontent.com/...` | Source URL for the upstream cost map. |
 
 ## Data Storage
 The tool maintains six primary JSON files in the `data_dir`.
@@ -54,6 +56,14 @@ A cache of models discovered from the NVIDIA API.
 
 ### 6. `ollama_available_models.json`
 A cache of models discovered from the Ollama Cloud API.
+
+### 7. `litellm_cost_overrides.json`
+A local map used to override upstream LiteLLM pricing or context windows. This file is merged with the upstream GitHub JSON during a `litellm cost-map build`.
+
+**Schema:**
+A dictionary where keys are **Model IDs** and values are partial or full model metadata blocks.
+- `_meta`: (Optional) Metadata about the local overrides.
+- `model-id`: Dictionary containing fields to override (e.g., `input_cost_per_token`, `max_tokens`).
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:
