@@ -29,21 +29,48 @@ def test_merge_cost_maps_basic():
     # model-c should be added
     assert merged["model-c"]["price"] == 0.03
 
-def test_merge_cost_maps_meta():
-    """Verify that _meta is handled separately and doesn't treat it as a model."""
+def test_merge_cost_maps_overrides_after_sample_spec():
+    """Verify overrides are inserted after sample_spec, not at the end."""
     upstream = {
-        "_meta": {"version": "1.0"},
+        "sample_spec": {"description": "Sample"},
         "model-a": {"price": 0.01},
+        "model-z": {"price": 0.99},
     }
     overrides = {
-        "_meta": {"version": "1.1", "author": "local"},
-        "model-a": {"price": 0.005},
+        "custom-model": {"price": 0.05},
+        "another-custom": {"price": 0.10},
     }
 
     merged = cost_map.merge_cost_maps(upstream, overrides)
-    assert merged["_meta"]["version"] == "1.1"
-    assert merged["_meta"]["author"] == "local"
-    assert merged["model-a"]["price"] == 0.005
+    keys = list(merged.keys())
+
+    # sample_spec should still be first
+    assert keys[0] == "sample_spec"
+    # Overrides should be next, before other upstream entries
+    assert "custom-model" in keys
+    assert "another-custom" in keys
+    # Verify ordering: overrides come right after sample_spec
+    sample_idx = keys.index("sample_spec")
+    custom_idx = keys.index("custom-model")
+    model_a_idx = keys.index("model-a")
+    assert custom_idx > sample_idx, "Overrides should come after sample_spec"
+    assert custom_idx < model_a_idx, "Overrides should come before other upstream entries"
+
+def test_merge_cost_maps_no_sample_spec():
+    """Verify behavior when upstream has no sample_spec entry."""
+    upstream = {
+        "model-a": {"price": 0.01},
+    }
+    overrides = {
+        "custom-model": {"price": 0.05},
+    }
+
+    merged = cost_map.merge_cost_maps(upstream, overrides)
+    keys = list(merged.keys())
+
+    # Without sample_spec, overrides should be first
+    assert keys[0] == "custom-model"
+    assert merged["model-a"]["price"] == 0.01
 
 def test_fetch_upstream_cost_map_success():
     """Verify that fetch_upstream_cost_map parses valid JSON."""
@@ -89,8 +116,9 @@ def test_build_local_cost_map_end_to_end(tmp_path, mock_config):
     }
     overrides_path.write_text(json.dumps(overrides_data))
 
-    # Mock the network fetch
+    # Mock the network fetch with sample_spec as first entry
     upstream_data = {
+        "sample_spec": {"description": "Sample"},
         "model-a": {"price": 0.01, "context": 4096},
         "model-b": {"price": 0.02, "context": 8192},
     }
@@ -104,6 +132,13 @@ def test_build_local_cost_map_end_to_end(tmp_path, mock_config):
         assert output_path.name == "model_prices_and_context_window.json"
 
         result = json.loads(output_path.read_text())
+        keys = list(result.keys())
+
+        # Verify ordering: sample_spec first, then overrides, then upstream
+        assert keys[0] == "sample_spec"
+        assert "model-a" in keys
+        assert "model-b" in keys
+        assert "custom-model" in keys
 
         # model-a should be overridden
         assert result["model-a"]["price"] == 0.001

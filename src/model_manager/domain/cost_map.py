@@ -35,31 +35,44 @@ def merge_cost_maps(upstream: Dict[str, Any], overrides: Dict[str, Any]) -> Dict
     """
     Merge upstream cost map with local overrides.
 
+    Local overrides are inserted right after the 'sample_spec' entry (or at
+    the top if 'sample_spec' is absent) so they appear near the top of the
+    output file for easy review, while preserving upstream ordering.
+
     Local overrides win. If a model exists in both, the local override's
     fields are merged into the upstream block to preserve any fields
     not specifically overridden.
     """
     # Deep copy of upstream to avoid mutating original
-    merged = json.loads(json.dumps(upstream))
+    merged_upstream = json.loads(json.dumps(upstream))
 
-    # Handle metadata separately if it exists in overrides
-    if "_meta" in overrides:
-        merged["_meta"] = overrides["_meta"]
-        # Remove _meta from the remaining overrides to avoid treating it as a model
-        overrides = {k: v for k, v in overrides.items() if k != "_meta"}
-
+    # Merge overrides into upstream (local wins)
     for model_id, override_data in overrides.items():
         if not isinstance(override_data, dict):
             continue
-
-        if model_id in merged:
-            # Merge fields into the existing model block
-            merged[model_id].update(override_data)
+        if model_id in merged_upstream:
+            merged_upstream[model_id].update(override_data)
         else:
-            # Add new model block
-            merged[model_id] = override_data
+            merged_upstream[model_id] = override_data
 
-    return merged
+    # Reorder: keep sample_spec first (if present), then overrides (with merged values), then rest of upstream
+    final: Dict[str, Any] = {}
+
+    # 1. Preserve sample_spec at the very top if it exists
+    if "sample_spec" in merged_upstream:
+        final["sample_spec"] = merged_upstream["sample_spec"]
+
+    # 2. Insert override keys right after sample_spec (in their original order from the stub)
+    for key in overrides.keys():
+        if key != "sample_spec" and key in merged_upstream:
+            final[key] = merged_upstream[key]
+
+    # 3. Append remaining upstream entries (in their original order)
+    for key, value in merged_upstream.items():
+        if key not in final:
+            final[key] = value
+
+    return final
 
 def build_local_cost_map(config: AppConfig, source_url: str | None = None) -> Path:
     """
