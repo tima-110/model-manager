@@ -17,7 +17,7 @@ class AppConfig(BaseModel):
     debug: bool = False
     scan_frequency: int = 5
     scan_count: int = 24
-    litellm_service_dir: Path = Path("/etc/litellm")
+    litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:
