@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.request
 import urllib.error
@@ -18,7 +19,12 @@ from model_manager.config import AppConfig
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/models"
+NVIDIA_NVCF_API_URL = "https://api.nvcf.nvidia.com/v2/nvcf/functions"
 NVIDIA_CHAT_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+OLLAMA_API_URL = "https://ollama.com/api/tags"
+OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_CHAT_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OLLAMA_API_URL = "https://ollama.com/api/tags"
 OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -73,8 +79,50 @@ def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from OpenRouter: {e}")
 
-def fetch_nvidia_models(api_key: str) -> List[Dict[str, Any]]:
-    """Fetch models from NVIDIA and filter for free tier ones."""
+def _parse_model_id(model_id: str) -> dict:
+    """Extract owner, short name, and param count from a model ID.
+
+    NVIDIA v1 model IDs follow the pattern {owner}/{model-family}-{size}b-{suffix}.
+    Example: meta/llama-3.1-8b-instruct -> owner=meta, name=llama-3.1-8b-instruct, size=8
+    """
+    parts = model_id.split("/")
+    owner = parts[0] if len(parts) > 1 else "unknown"
+    short_name = parts[-1]
+    match = re.search(r'(\d+)b', short_name)
+    param_count = int(match.group(1)) if match else None
+    return {
+        "owner": owner,
+        "short_name": short_name,
+        "param_count_b": param_count,
+    }
+
+
+def _normalize_v1_to_nvcf(model_id: str) -> str:
+    """Normalize a v1 model ID to match the NVCF function naming convention.
+
+    v1: meta/llama-3.1-8b-instruct -> NVCF: ai-llama-3_1-8b-instruct
+    The owner prefix is stripped and dots are replaced with underscores.
+    """
+    short = model_id.split("/")[-1].lower()
+    return short.replace(".", "_")
+
+
+def fetch_nvidia_models(api_key: str, enrich_nvcf: bool = True) -> List[Dict[str, Any]]:
+    """Fetch models from NVIDIA API.
+
+    Fetches the base model list from /v1/models, parses model IDs for owner
+    and param count, and optionally enriches with NVCF deployment status.
+
+    Args:
+        api_key: NVIDIA API key.
+        enrich_nvcf: If True, also fetch from the NVCF functions API to get
+            deployment status (ACTIVE/INACTIVE/DEGRADING) and health endpoint
+            info for each model.
+
+    Returns:
+        List of model dicts with id, name, owner, param_count_b, and (when
+        enriched) nvcf_status and health_uri.
+    """
     try:
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -85,20 +133,70 @@ def fetch_nvidia_models(api_key: str) -> List[Dict[str, Any]]:
             data = json.loads(response.read().decode())
             all_models = data.get("data", [])
 
-            free_models = []
-            for m in all_models:
-                model_id = m.get("id", "")
-                free_models.append({
-                    "id": model_id,
-                    "name": m.get("id"),
-                    "context_length": None,
-                    "architecture": None,
-                    "description": None,
-                    "tags": [],
-                })
-            return free_models
+        # Optionally fetch NVCF enrichment
+        nvcf_lookup: dict[str, dict] = {}
+        if enrich_nvcf:
+            nvcf_lookup = _fetch_nvcf_enrichment(api_key)
+
+        free_models = []
+        for m in all_models:
+            model_id = m.get("id", "")
+            parsed = _parse_model_id(model_id)
+            normalized = _normalize_v1_to_nvcf(model_id)
+            nvcf = nvcf_lookup.get(normalized, {})
+
+            free_models.append({
+                "id": model_id,
+                "name": model_id,
+                "owner": parsed["owner"],
+                "short_name": parsed["short_name"],
+                "param_count_b": parsed["param_count_b"],
+                "context_length": None,
+                "architecture": None,
+                "description": nvcf.get("description", ""),
+                "tags": [],
+                "nvcf_status": nvcf.get("status", "unknown"),
+            })
+        return free_models
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from NVIDIA: {e}")
+
+
+def _fetch_nvcf_enrichment(api_key: str) -> dict[str, dict]:
+    """Fetch NVCF function statuses and build a lookup keyed by normalized name.
+
+    Returns:
+        Dict mapping normalized model names (e.g. 'llama-3_1-8b-instruct')
+        to their NVCF data (status, health_uri, description, etc.).
+    """
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(NVIDIA_NVCF_API_URL, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode())
+    except Exception:
+        return {}
+
+    functions = body.get("functions", [])
+    lookup: dict[str, dict] = {}
+    for fn in functions:
+        name = fn.get("name", "")
+        # Strip "ai-" prefix to match normalized v1 names
+        normalized = name.lower()
+        if normalized.startswith("ai-"):
+            normalized = normalized[3:]
+        lookup[normalized] = {
+            "status": fn.get("status", "unknown"),
+            "health_uri": fn.get("healthUri", ""),
+            "health_port": fn.get("health", {}).get("port"),
+            "created_at": fn.get("createdAt", ""),
+            "description": fn.get("description", ""),
+        }
+
+    return lookup
 
 def fetch_ollama_models(api_key: str) -> List[Dict[str, Any]]:
     """Fetch models from Ollama Cloud and map to internal representation."""
