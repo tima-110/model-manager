@@ -8,4 +8,10 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Context:** Mapping provider-specific model IDs to Artificial Analysis (AA) scores.
 **Insight:** A simple key-value alias map is insufficient because different providers may offer different versions (variants) of the same model (e.g., quantized vs. full), each with different performance indices.
 **Apply when:** Building a mapping layer where one conceptual entity can have multiple performance profiles across different providers.
+
+### 2026-07-25: NVIDIA API Model Metadata via NVCF Functions
+**Context:** Enriching NVIDIA model fetch with deployment status and model details.
+**Insight:** The `/v1/models` endpoint at `integrate.api.nvidia.com` is an OpenAI-compatible listing with only 4 fields (id, object, created, owned_by). Model metadata is available via the separate NVCF functions API at `api.nvcf.nvidia.com/v2/nvcf/functions`, which returns deployment status (ACTIVE/INACTIVE/DEGRADING), health endpoints, and creation timestamps. Matching between the two APIs requires name normalization: strip the owner prefix from v1 IDs and the `ai-` prefix from NVCF function names. About 47% of v1 models can be matched to NVCF functions. There is no public pricing/free-tier API — the only way to determine availability is to probe endpoints directly.
+**Apply when:** Working with NVIDIA's model catalog API.
+**Global?** Yes — NVIDIA's API structure is consistent across projects.`
 **Global?** No — specific to this project's domain of model rankings.
