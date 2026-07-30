@@ -41,7 +41,7 @@ def auth_delete(
 @auth_app.command("list")
 def auth_list() -> None:
     """List keys currently stored in the keychain for this app."""
-    tracked_keys = ["OPENROUTER_API_KEY", "ARTIFICIAL_ANALYSIS_API_KEY", "NVIDIA_API_KEY", "OLLAMA_API_KEY"]
+    tracked_keys = ["OPENROUTER_API_KEY", "ARTIFICIAL_ANALYSIS_API_KEY", "NVIDIA_API_KEY", "OLLAMA_API_KEY", "GEMINI_API_KEY"]
 
     table = Table(title="Stored Secrets")
     table.add_column("Key", style="cyan")

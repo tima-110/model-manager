@@ -48,6 +48,56 @@ def openrouter_scan(
     provider = next(p for p in providers.list_providers() if p.name.lower() == "openrouter")
     _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans, debug)
 
+@providers_app.command("fetch-all")
+def providers_fetch_all(
+    probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Query current models from all supported providers and save their capabilities."""
+    all_providers = providers.list_providers()
+    errors: list[str] = []
+
+    for provider in all_providers:
+        try:
+            _run_discovery_cli_workflow(provider, probe, config, json_output)
+        except Exception as e:
+            errors.append(f"{provider.name}: {e}")
+
+    if errors:
+        console.print("\n[red]Errors during fetch-all:[/red]")
+        for err in errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(1)
+
+
+@providers_app.command("scan-all")
+def providers_scan_all(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    filter: str | None = typer.Option(None, "--filter", "-f"),
+    only_up: bool = typer.Option(False, "--only-up"),
+    only_down: bool = typer.Option(False, "--only-down"),
+    json_output: bool = typer.Option(False, "--json"),
+    max_scans: int | None = typer.Option(None, "--max-scans"),
+    debug: bool = typer.Option(False, "--debug", help="Log requests and responses to a JSON file and stdout."),
+) -> None:
+    """Scan the current health and performance of all supported providers."""
+    all_providers = providers.list_providers()
+    errors: list[str] = []
+
+    for provider in all_providers:
+        try:
+            _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans, debug)
+        except Exception as e:
+            errors.append(f"{provider.name}: {e}")
+
+    if errors:
+        console.print("\n[red]Errors during scan-all:[/red]")
+        for err in errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(1)
+
+
 @nvidia_app.command("fetch")
 def nvidia_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
