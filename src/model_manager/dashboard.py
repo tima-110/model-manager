@@ -75,6 +75,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                     assessment = scan_data.get("assessment", "Unknown")
                     availability = scan_data.get("availability")
                     latency = scan_data.get("avg_latency")
+                    scan_ts = scan_data.get("scan_timestamp")
 
                     health_rows.append({
                         "model": mid,
@@ -85,6 +86,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                         "assessment": assessment,
                         "availability": availability,
                         "latency": latency,
+                        "scan_timestamp": scan_ts,
                         "has_scores": has_scores,
                     })
 
@@ -180,7 +182,12 @@ def _parse_provider_cache(path: Path) -> dict:
     try:
         data = json.loads(path.read_text())
         models_list = data.get("models", [])
-        return {"count": len(models_list), "available": True}
+        fetched_at = data.get("fetched_at")
+        return {
+            "count": len(models_list),
+            "available": True,
+            "fetched_at": fetched_at,
+        }
     except Exception:
         return {"count": 0, "available": False}
 
@@ -245,11 +252,12 @@ def _render_html(data: dict) -> str:
         entries = r["score_rankings"].get(metric, [])
         score_sections += f'<div class="ranking-column"><h3>{html.escape(label)}</h3>'
         if entries:
-            score_sections += '<table class="ranking-table"><tr><th>#</th><th>Model</th><th>Score</th></tr>'
+            score_sections += '<table class="ranking-table"><tr><th>#</th><th>Model</th><th>Variant</th><th>Score</th></tr>'
             for i, e in enumerate(entries, 1):
                 mn = html.escape(e["model"])
+                vr = html.escape(e["variant"])
                 sc = e["value"]
-                score_sections += f"<tr><td>{i}</td><td>{mn}</td><td class='score-cell'>{sc}</td></tr>"
+                score_sections += f"<tr><td>{i}</td><td>{mn}</td><td>{vr}</td><td class='score-cell'>{sc}</td></tr>"
             score_sections += "</table>"
         else:
             score_sections += '<div class="no-data">No score data</div>'
@@ -259,12 +267,14 @@ def _render_html(data: dict) -> str:
     health_rows = r["health_rows"]
     health_table = ""
     if health_rows:
-        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th></tr>'
+        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th><th>Scanned</th></tr>'
         for row in health_rows:
             status = html.escape(row["assessment"])
             color = _status_color(status)
             avail = f"{row['availability']:.0%}" if row["availability"] is not None else "N/A"
             lat = f"{row['latency']:.1f}ms" if row["latency"] is not None else "N/A"
+            scanned = row.get("scan_timestamp")
+            scanned_fmt = scanned[:10] if scanned else "N/A"
             health_table += (
                 f"<tr>"
                 f"<td>{html.escape(row['model'])}</td>"
@@ -274,6 +284,7 @@ def _render_html(data: dict) -> str:
                 f"<td class='status-dot' style='--status-color:{color}'>{status}</td>"
                 f"<td>{avail}</td>"
                 f"<td>{lat}</td>"
+                f"<td>{scanned_fmt}</td>"
                 f"</tr>"
             )
         health_table += "</table>"
@@ -287,8 +298,14 @@ def _render_html(data: dict) -> str:
         count = snap["count"]
         mapped = snap["mapped"]
         available = snap["available"]
+        fetched_at = snap.get("fetched_at")
         status_color = "#9ece6a" if available else "#565f89"
-        status_text = "Fetched" if available else "Not fetched"
+        if available and fetched_at:
+            status_text = f"Fetched {html.escape(fetched_at[:10])}"
+        elif available:
+            status_text = "Fetched (date unknown)"
+        else:
+            status_text = "Not fetched"
         prov_sections += f"""
         <div class="card">
           <div class="provider-name">{label}</div>

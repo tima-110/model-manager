@@ -365,9 +365,11 @@ def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrenc
 
 def save_free_models(config: AppConfig, models: List[Dict[str, Any]], path: Path) -> None:
     """Save the list of free models to a JSON file."""
+    from datetime import datetime
     with open(path, "w") as f:
         json.dump({
             "count": len(models),
+            "fetched_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "models": models
         }, f, indent=2)
 

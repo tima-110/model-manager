@@ -10,7 +10,7 @@ from .common import console
 dashboard_app = typer.Typer(help="Generate a status dashboard.")
 
 
-@dashboard_app.command()
+@dashboard_app.callback(invoke_without_command=True)
 def dashboard(
     no_open: bool = typer.Option(False, "--no-open", help="Generate without opening browser"),
     config: Path | None = typer.Option(None, "--config", "-c", help="Path to custom config.toml"),

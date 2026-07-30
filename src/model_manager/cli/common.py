@@ -261,7 +261,7 @@ def _run_scan_cli_workflow(
                 for prov, pids in variant_info.get("provider_ids", {}).items():
                     if prov.lower() == provider.name.lower():
                         if isinstance(pids, dict) and mid in pids:
-                            pids[mid].update({"availability": summary["availability"], "avg_latency": summary["avg_latency"], "assessment": summary["assessment"]})
+                            pids[mid].update({"availability": summary["availability"], "avg_latency": summary["avg_latency"], "assessment": summary["assessment"], "scan_timestamp": final_results_data["metadata"]["timestamp"]})
                             updated = True
     if updated:
         models.storage.save_models_data(cfg, models_data)
