@@ -255,8 +255,8 @@ def _count_mapped_for_provider(lib_models: dict, provider_label: str) -> int:
 
 
 def _build_score_rankings(lib_models: dict, all_scores: dict) -> dict:
-    """Build top-10 rankings for intelligence, coding, and math."""
-    metrics = ["intelligence", "coding", "math"]
+    """Build rankings for intelligence and coding."""
+    metrics = ["intelligence", "coding"]
     rankings: dict = {}
     for metric in metrics:
         entries = []
@@ -274,7 +274,7 @@ def _build_score_rankings(lib_models: dict, all_scores: dict) -> dict:
                         "value": val,
                     })
         entries.sort(key=lambda x: x["value"], reverse=True)
-        rankings[metric] = entries[:10]
+        rankings[metric] = entries
     return rankings
 
 
@@ -297,7 +297,7 @@ def _render_html(data: dict) -> str:
 
     # --- Score rankings ---
     score_sections = ""
-    METRIC_LABELS = {"intelligence": "Intelligence", "coding": "Coding", "math": "Math"}
+    METRIC_LABELS = {"intelligence": "Intelligence", "coding": "Coding"}
     for metric, label in METRIC_LABELS.items():
         entries = r["score_rankings"].get(metric, [])
         score_sections += f'<div class="ranking-column"><h3>{html.escape(label)}</h3>'
@@ -451,7 +451,7 @@ def _render_html(data: dict) -> str:
   .stat {{ margin: 0 0.3rem; }}
   .stat-val {{ font-weight: 600; color: #7aa2f7; }}
   .provider-status {{ font-size: 0.78rem; margin-top: 0.25rem; }}
-  .rankings {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }}
+  .rankings {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }}
   .ranking-column h3 {{ font-size: 0.95rem; color: #c0caf5; margin: 0 0 0.4rem; }}
   .data-table, .ranking-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
   .data-table th, .ranking-table th {{ text-align: left; color: #565f89; font-weight: 600; padding: 0.4rem 0.5rem; border-bottom: 1px solid #24283b; }}

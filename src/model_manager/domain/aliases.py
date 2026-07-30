@@ -127,7 +127,7 @@ def discover_aliases(config: AppConfig, provider: str, ids: list[str]) -> list[d
         if resolve_id(pid, config):
             continue
 
-        clean_id = pid.split("/")[-1].split(":")[0].lower()
+        clean_id = pid.split("/")[-1].split(":")[0].lower().replace(".", "-")
         slug_matches = difflib.get_close_matches(clean_id, all_aa_slugs, n=3, cutoff=0.4)
         name_matches = difflib.get_close_matches(clean_id, all_aa_names, n=3, cutoff=0.4)
         candidates = slug_matches + [s for s in name_matches if s not in slug_matches]

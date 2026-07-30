@@ -96,7 +96,7 @@ def search_aa_candidates(config: AppConfig, query: str) -> List[Dict[str, str]]:
     try:
         data = json.loads(path.read_text())
         models_list = data.get("data", [])
-        query_lower = query.lower()
+        query_lower = query.lower().replace(".", "-")
         candidates = []
 
         for m in models_list:
@@ -184,7 +184,7 @@ def _match_via_aa_multi(config: AppConfig, variant_slugs: List[Tuple[str, str]])
                         if not pid:
                             continue
 
-                        pid_keywords = set(pid.replace("/", " ").replace("_", " ").split("-"))
+                        pid_keywords = set(pid.replace("/", " ").replace("_", " ").replace(".", "-").split("-"))
                         if model_keywords & pid_keywords:
                             results.append({
                                 "provider": p.get("provider", "unknown"),
@@ -209,7 +209,7 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
     }
 
     matches = []
-    model_id_lower = model_id.lower()
+    model_id_lower = model_id.lower().replace(".", "-")
 
     for p_name, path in provider_paths.items():
         if provider and p_name != provider:
@@ -225,8 +225,12 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
                 mid = m.get("id", "").lower()
                 name = m.get("name", "").lower()
 
+                # Normalize dots for comparison (provider IDs use dots, AA slugs use hyphens)
+                mid_norm = mid.replace(".", "-")
+                name_norm = name.replace(".", "-")
+
                 # 1. Substring Match (Highest Confidence)
-                if model_id_lower in mid or model_id_lower in name:
+                if model_id_lower in mid_norm or model_id_lower in name_norm:
                     matches.append({
                         "provider": p_name,
                         "provider_id": m.get("id", ""),
@@ -237,8 +241,9 @@ def _match_via_string(config: AppConfig, model_id: str, provider: str | None = N
                 # 2. Fuzzy Match on stripped ID
                 # Remove common provider prefixes to get a better ratio
                 stripped_id = mid.split("/")[-1]
-                score_id = difflib.SequenceMatcher(None, model_id_lower, stripped_id).ratio()
-                score_name = difflib.SequenceMatcher(None, model_id_lower, name).ratio()
+                stripped_id_norm = stripped_id.replace(".", "-")
+                score_id = difflib.SequenceMatcher(None, model_id_lower, stripped_id_norm).ratio()
+                score_name = difflib.SequenceMatcher(None, model_id_lower, name_norm).ratio()
                 best_score = max(score_id, score_name)
 
                 if best_score > 0.6:
