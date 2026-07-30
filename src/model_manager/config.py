@@ -9,6 +9,13 @@ from pathlib import Path
 import platformdirs
 from pydantic import BaseModel, field_validator
 
+class ProviderScanConfig(BaseModel):
+    """Per-provider overrides for scan behavior."""
+    scan_concurrency: int | None = None
+    scan_delay_between_models_ms: int | None = None
+    cycle_delay_sec: int | None = None
+
+
 class AppConfig(BaseModel):
     """Top-level application config."""
 
@@ -17,6 +24,7 @@ class AppConfig(BaseModel):
     debug: bool = False
     scan_frequency: int = 5
     scan_count: int = 24
+    providers: dict[str, ProviderScanConfig] = {}
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 

@@ -22,6 +22,9 @@ class Provider:
     fetch_fn: Callable[..., List[Dict[str, Any]]]
     path_fn: Callable[[AppConfig], Path]
     probe_id: str
+    scan_concurrency: int = 10
+    scan_delay_between_models_ms: int = 0
+    cycle_delay_sec: int | None = None
 
 # The current list of supported providers.
 SUPPORTED_PROVIDERS = [
@@ -52,6 +55,8 @@ SUPPORTED_PROVIDERS = [
         fetch_fn=discovery.fetch_gemini_models,
         path_fn=get_gemini_models_path,
         probe_id="gemini",
+        scan_concurrency=1,
+        scan_delay_between_models_ms=600,
     ),
 ]
 

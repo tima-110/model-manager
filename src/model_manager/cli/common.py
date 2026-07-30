@@ -117,14 +117,23 @@ def _run_scan_cli_workflow(
         if status == "up": return "green"
         if status == "ratelimit": return "yellow"
         if status in ("unauthorized", "forbidden"): return "magenta"
+        if status == "unsupported": return "cyan"
         return "red"
 
     def calculate_assessment(results: List[discovery.PingResult]) -> tuple[str, str]:
-        """Returns (assessment_label, color)."""
+        """Returns (assessment_label, color).
+
+        Excludes 'unsupported' results from availability calculation
+        since those models can't be probed via this scan method.
+        """
         if not results: return ("Unknown", "white")
 
-        successes = [r for r in results if r.status == "up"]
-        avail = len(successes) / len(results)
+        relevant = [r for r in results if r.status != "unsupported"]
+        if not relevant:
+            return ("Unsupported", "cyan")
+
+        successes = [r for r in relevant if r.status == "up"]
+        avail = len(successes) / len(relevant)
 
         if avail > 0.9:
             avg_lat = sum(r.latency_ms for r in successes) / len(successes)
@@ -132,7 +141,7 @@ def _run_scan_cli_workflow(
             return ("Slow", "yellow")
 
         counts = {}
-        for r in results: counts[r.status] = counts.get(r.status, 0) + 1
+        for r in relevant: counts[r.status] = counts.get(r.status, 0) + 1
         dominant = max(counts, key=counts.get)
 
         if dominant in ("unauthorized", "forbidden"): return ("Unauthorized", "magenta")
@@ -140,6 +149,12 @@ def _run_scan_cli_workflow(
         if dominant == "ratelimit": return ("Ratelimited", "yellow")
         if dominant in ("down", "timeout"): return ("Dead", "red")
         return ("Weak", "yellow")
+
+    # Provider-specific scan tuning
+    prov_cfg = cfg.providers.get(provider.name.lower(), {})
+    scan_concurrency = prov_cfg.scan_concurrency if prov_cfg.scan_concurrency is not None else provider.scan_concurrency
+    scan_delay = prov_cfg.scan_delay_between_models_ms if prov_cfg.scan_delay_between_models_ms is not None else provider.scan_delay_between_models_ms
+    cycle_delay = prov_cfg.cycle_delay_sec if prov_cfg.cycle_delay_sec is not None else provider.cycle_delay_sec if provider.cycle_delay_sec is not None else cfg.scan_frequency
 
     try:
         live = None
@@ -149,7 +164,7 @@ def _run_scan_cli_workflow(
 
         while True:
             cycle_count += 1
-            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids, debug=debug)
+            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids, concurrency=scan_concurrency, delay_between_models_ms=scan_delay, debug=debug)
 
             if debug:
                 for mid, res in results.items():
@@ -193,7 +208,7 @@ def _run_scan_cli_workflow(
 
             if max_cycles > 0 and cycle_count >= max_cycles:
                 break
-            time.sleep(cfg.scan_frequency)
+            time.sleep(cycle_delay)
         if live: live.stop()
     except KeyboardInterrupt:
         if not json_output: console.print("\n[yellow]Scan halted by user.[/yellow]")
@@ -224,8 +239,9 @@ def _run_scan_cli_workflow(
 
     for mid in model_ids:
         m_hist = history[mid]
-        successes = [r for r in m_hist if r.status == "up"]
-        avail = len(successes) / len(m_hist) if m_hist else 0
+        relevant = [r for r in m_hist if r.status != "unsupported"]
+        successes = [r for r in relevant if r.status == "up"]
+        avail = len(successes) / len(relevant) if relevant else 0
         avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
         label, color = calculate_assessment(m_hist)
         final_results_data["models"][mid] = {
@@ -245,8 +261,9 @@ def _run_scan_cli_workflow(
 
         for mid in model_ids:
             m_hist = history[mid]
-            successes = [r for r in m_hist if r.status == "up"]
-            avail = len(successes) / len(m_hist) if m_hist else 0
+            relevant = [r for r in m_hist if r.status != "unsupported"]
+            successes = [r for r in relevant if r.status == "up"]
+            avail = len(successes) / len(relevant) if relevant else 0
             avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
             label, color = calculate_assessment(m_hist)
             summary_table.add_row(mid, f"{avail:.1%}", f"{avg_lat:.1f}ms" if successes else "N/A", f"[{color}]{label}[/{color}]")

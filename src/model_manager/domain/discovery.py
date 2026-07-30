@@ -328,8 +328,20 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
                 "request": {"url": chat_url, "headers": headers, "payload": data},
                 "response": {"code": code, "body": response_body}
             }
+        else:
+            response_body = e.read().decode(errors="replace")
 
-        return PingResult(status=status, latency_ms=latency, code=code, error=e.reason, debug_info=debug_info)
+        # Detect models that can't be probed via generateContent
+        if code in ("400", "404"):
+            body_lower = response_body.lower()
+            if "only supports interactions api" in body_lower or "interactions api" in body_lower:
+                status = "unsupported"
+            elif "accepts the following combination of response modalities" in body_lower:
+                status = "unsupported"
+            elif "no longer available" in body_lower or "is no longer available" in body_lower:
+                status = "unsupported"
+
+        return PingResult(status=status, latency_ms=latency, code=code, error=e.reason, debug_info=debug_info if debug else None)
     except urllib.error.URLError as e:
         latency = (time.perf_counter() - t0) * 1000
         if debug:
@@ -347,20 +359,34 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
             }
         return PingResult(status="down", latency_ms=latency, code="ERR", error=str(e), debug_info=debug_info)
 
-def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrency: int = 10, debug: bool = False) -> Dict[str, PingResult]:
-    """Ping a list of models in parallel and return results."""
+def scan_models(provider_id: str, api_key: str, model_ids: List[str], concurrency: int = 10, delay_between_models_ms: int = 0, debug: bool = False) -> Dict[str, PingResult]:
+    """Ping a list of models in parallel and return results.
+
+    When delay_between_models_ms > 0, probes are staggered by that delay
+    to avoid overwhelming provider rate limits.
+    """
     results = {}
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        future_to_model = {
-            executor.submit(probe_model, mid, api_key, provider_id, debug): mid
-            for mid in model_ids
-        }
-        for future in as_completed(future_to_model):
-            mid = future_to_model[future]
+    if delay_between_models_ms > 0:
+        # Serial with delay — concurrency is effectively 1 when staggering
+        for i, mid in enumerate(model_ids):
+            if i > 0:
+                time.sleep(delay_between_models_ms / 1000.0)
             try:
-                results[mid] = future.result()
+                results[mid] = probe_model(mid, api_key, provider_id, debug)
             except Exception as e:
                 results[mid] = PingResult(status="down", latency_ms=0, code="ERR", error=str(e))
+    else:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            future_to_model = {
+                executor.submit(probe_model, mid, api_key, provider_id, debug): mid
+                for mid in model_ids
+            }
+            for future in as_completed(future_to_model):
+                mid = future_to_model[future]
+                try:
+                    results[mid] = future.result()
+                except Exception as e:
+                    results[mid] = PingResult(status="down", latency_ms=0, code="ERR", error=str(e))
     return results
 
 def save_free_models(config: AppConfig, models: List[Dict[str, Any]], path: Path) -> None:
