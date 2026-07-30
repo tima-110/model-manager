@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from model_manager.config import (
     AppConfig,
     get_free_models_path,
@@ -109,6 +111,23 @@ def _collect_data(cfg: AppConfig) -> dict:
         provider_snapshots[key] = snapshot
 
     # --- Cost map ---
+    # --- LiteLLM config ---
+    litellm_config_path = cfg.litellm_config_path
+    litellm_config_valid = False
+    litellm_config_error = None
+    if litellm_config_path.exists():
+        try:
+            yaml.safe_load(litellm_config_path.read_text())
+            litellm_config_valid = True
+        except yaml.YAMLError as e:
+            litellm_config_error = str(e)
+        except PermissionError:
+            litellm_config_error = "Permission denied"
+        except OSError as e:
+            litellm_config_error = str(e)
+    else:
+        litellm_config_error = "File not found"
+
     cost_overrides_path = get_litellm_cost_overrides_path(cfg)
     cost_output_path = get_litellm_cost_map_output_path(cfg)
     cost_overrides_count = 0
@@ -167,10 +186,17 @@ def _collect_data(cfg: AppConfig) -> dict:
         "cost_map_entries": cost_map_upstream_count,
         "cost_overrides_path": str(cost_overrides_path),
         "cost_map_output_path": str(cost_output_path),
+        "litellm_config": {
+            "path": str(litellm_config_path),
+            "valid": litellm_config_valid,
+            "error": litellm_config_error,
+            "exists": litellm_config_path.exists(),
+        },
         "config": {
             "data_dir": str(cfg.data_dir),
             "scan_frequency": cfg.scan_frequency,
             "litellm_service_dir": str(cfg.litellm_service_dir),
+            "litellm_config_path": str(cfg.litellm_config_path),
             "litellm_cost_map_url": cfg.litellm_cost_map_url,
         },
         "paths": {
@@ -366,6 +392,16 @@ def _render_html(data: dict) -> str:
       <tr><td>Output path</td><td class="mono">{html.escape(r['cost_map_output_path'])}</td></tr>
     </table>"""
 
+    # --- LiteLLM config section ---
+    lc = r["litellm_config"]
+    lc_status = "Valid YAML" if lc["valid"] else html.escape(lc["error"] or "Unknown")
+    lc_color = "#9ece6a" if lc["valid"] else ("#e0af68" if not lc["exists"] else "#f7768e")
+    lc_section = f"""
+    <table class="data-table">
+      <tr><td>Config path</td><td class="mono">{html.escape(lc['path'])}</td></tr>
+      <tr><td>Status</td><td><span style="color:{lc_color}">&#9679;</span> {lc_status}</td></tr>
+    </table>"""
+
     # --- Config table ---
     cfg_table = ""
     for key, val in r["config"].items():
@@ -457,6 +493,9 @@ def _render_html(data: dict) -> str:
 
   <h2>LiteLLM Cost Map</h2>
   {cost_section}
+
+  <h2>LiteLLM Config</h2>
+  {lc_section}
 
   <h2>Configuration</h2>
   <table class="data-table">{cfg_table}</table>

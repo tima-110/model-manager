@@ -13,6 +13,7 @@ from .providers import providers_app
 from .auth import auth_app
 from .litellm import litellm_app
 from .dashboard import dashboard_app
+from .doctor import doctor_app
 
 app = typer.Typer(
     name="model-manager",
@@ -48,3 +49,4 @@ app.add_typer(providers_app, name="providers")
 app.add_typer(auth_app, name="auth")
 app.add_typer(litellm_app, name="litellm")
 app.add_typer(dashboard_app, name="dashboard")
+app.add_typer(doctor_app, name="doctor")
