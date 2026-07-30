@@ -125,6 +125,29 @@ def _collect_data(cfg: AppConfig) -> dict:
         except Exception:
             pass
 
+    # --- Model reference table ---
+    model_rows: list[dict] = []
+    for mid, m_info in lib_models.items():
+        display_name = m_info.get("display_name", mid)
+        family = m_info.get("family", "unknown")
+        variants = m_info.get("variants", {})
+        default_variant = m_info.get("default_variant", "standard")
+
+        variant_names = sorted(variants.keys())
+        providers = set()
+        for vid, v_info in variants.items():
+            for p in v_info.get("provider_ids", {}):
+                providers.add(p)
+
+        model_rows.append({
+            "model_id": mid,
+            "display_name": display_name,
+            "family": family,
+            "variants": ", ".join(variant_names),
+            "default_variant": default_variant,
+            "providers": ", ".join(sorted(providers)),
+        })
+
     last_updated = meta.get("last_updated", None)
 
     return {
@@ -137,6 +160,7 @@ def _collect_data(cfg: AppConfig) -> dict:
         "last_updated": last_updated,
         "health_rows": health_rows,
         "score_rankings": score_rankings,
+        "model_rows": model_rows,
         "provider_snapshots": provider_snapshots,
         "provider_coverage": f"{sum(1 for s in provider_snapshots.values() if s['count'] > 0)}/{len(providers)}",
         "cost_overrides_count": cost_overrides_count,
@@ -291,6 +315,24 @@ def _render_html(data: dict) -> str:
     else:
         health_table = '<div class="no-data">No provider mappings found. Run <code>model-manager models discover</code> to add mappings.</div>'
 
+    # --- Model reference table ---
+    model_rows = r["model_rows"]
+    model_table = ""
+    if model_rows:
+        model_table = '<table class="data-table"><tr><th>Model ID</th><th>Display Name</th><th>Variants</th><th>Providers</th></tr>'
+        for row in model_rows:
+            model_table += (
+                f"<tr>"
+                f"<td class='mono'>{html.escape(row['model_id'])}</td>"
+                f"<td>{html.escape(row['display_name'])}</td>"
+                f"<td>{html.escape(row['variants'])}</td>"
+                f"<td>{html.escape(row['providers'])}</td>"
+                f"</tr>"
+            )
+        model_table += "</table>"
+    else:
+        model_table = '<div class="no-data">No models defined. Add models with <code>model-manager models add</code>.</div>'
+
     # --- Provider snapshots ---
     prov_sections = ""
     for key, snap in r["provider_snapshots"].items():
@@ -409,6 +451,9 @@ def _render_html(data: dict) -> str:
 
   <h2>Model Health</h2>
   {health_table}
+
+  <h2>Model Reference</h2>
+  {model_table}
 
   <h2>LiteLLM Cost Map</h2>
   {cost_section}
