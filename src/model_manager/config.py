@@ -16,6 +16,22 @@ class ProviderScanConfig(BaseModel):
     cycle_delay_sec: int | None = None
 
 
+class ProviderOutputConfig(BaseModel):
+    """Per-provider config for YAML generation output."""
+    keys: list[str] = []
+    output_path: Path | None = None
+    litellm_prefix: str = ""
+    rpm: int | None = None
+    api_base: str | None = None
+
+
+class ProviderConfig(ProviderScanConfig, ProviderOutputConfig):
+    """Combined per-provider config from [providers.xxx] TOML sections.
+
+    Contains both scan-behavior overrides and YAML output configuration.
+    """
+
+
 class AppConfig(BaseModel):
     """Top-level application config."""
 
@@ -24,7 +40,7 @@ class AppConfig(BaseModel):
     debug: bool = False
     scan_frequency: int = 5
     scan_count: int = 24
-    providers: dict[str, ProviderScanConfig] = {}
+    providers: dict[str, ProviderConfig] = {}
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"

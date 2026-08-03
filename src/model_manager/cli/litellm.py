@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from model_manager.config import load_config
-from model_manager.domain import cost_map
+from model_manager.domain import cost_map, yaml_gen
 from .common import console
 
 litellm_app = typer.Typer(help="Manage LiteLLM service configuration.")
@@ -69,3 +69,46 @@ def cost_map_build(
     except Exception as e:
         console.print(f"[red]An unexpected error occurred: {e}[/red]")
         raise typer.Exit(1)
+
+
+# --- generate-config ---
+
+generate_app = typer.Typer(help="Generate LiteLLM YAML config from models.json.")
+litellm_app.add_typer(generate_app, name="generate")
+
+@generate_app.command("config")
+def generate_config(
+    provider: str = typer.Argument(
+        ..., help="Provider name (nvidia, gemini, ollama, openrouter)."
+    ),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    output: Path | None = typer.Option(None, "--output", "-o",
+        help="Override output path for the generated YAML file."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="Print the generated YAML to stdout instead of writing to file."),
+) -> None:
+    """Generate a LiteLLM YAML config file for a specific provider.
+
+    Reads models.json and scan results, derives LiteLLM model names from
+    the provider_id mappings, and generates one entry per configured API key.
+
+    Models with scan status "unauthorized" are excluded; all others are included.
+    """
+    cfg = load_config(config)
+
+    try:
+        result = yaml_gen.generate_provider_yaml(
+            cfg, provider.lower(),
+            dry_run=dry_run,
+            output_path=output,
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if dry_run and result:
+        console.print(result)
+    elif not dry_run:
+        out_path = output or (cfg.providers.get(provider.lower()) and cfg.providers[provider.lower()].output_path)
+        path_str = str(out_path) if out_path else "configured path"
+        console.print(f"[green]Generated config for [bold]{provider}[/bold] at: {path_str}[/green]")
