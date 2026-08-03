@@ -14,6 +14,47 @@ from .common import console, _run_discovery_cli_workflow
 
 models_app = typer.Typer(help="Manage the conceptual model library.")
 
+# Variant sub-commands
+variant_app = typer.Typer(help="Manage model variants.")
+models_app.add_typer(variant_app, name="variant")
+
+@variant_app.command("update")
+def variant_update(
+    model: str,
+    variant: str,
+    litellm_disable: bool = typer.Option(False, "--litellm-disable",
+        help="Exclude this variant from LiteLLM config generation."),
+    litellm_enable: bool = typer.Option(False, "--litellm-enable",
+        help="Re-include this variant in LiteLLM config generation."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Update settings for a model variant.
+
+    Example: model-manager model variant update gpt-4 8b-q4 --litellm-disable
+    """
+    cfg = load_config(config)
+
+    if litellm_disable and litellm_enable:
+        console.print("[red]Error: Cannot use --litellm-disable and --litellm-enable together.[/red]")
+        raise typer.Exit(1)
+
+    include_in_litellm: bool | None = None
+    if litellm_disable:
+        include_in_litellm = False
+    elif litellm_enable:
+        include_in_litellm = True
+
+    if models.update_variant(cfg, model, variant, include_in_litellm=include_in_litellm):
+        action = "updated"
+        if include_in_litellm is False:
+            action = "excluded from LiteLLM config"
+        elif include_in_litellm is True:
+            action = "included in LiteLLM config"
+        console.print(f"[green]Variant [bold]{model}/{variant}[/bold] {action}.[/green]")
+    else:
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+        raise typer.Exit(1)
+
 @models_app.command("list")
 def models_list(
     config: Path | None = typer.Option(None, "--config", "-c"),
@@ -55,6 +96,9 @@ def models_list(
             continue
 
         for vid, v_info in variants.items():
+            excluded = v_info.get("include_in_litellm") is False
+            exclude_mark = " [red](excluded)[/red]" if excluded else ""
+
             score_str = ""
             slug = v_info.get("aa_slug")
             if slug and slug in all_scores:
@@ -71,7 +115,7 @@ def models_list(
             provider_ids = v_info.get("provider_ids", {})
             if not provider_ids:
                 model_display = mid if mid != last_model else ""
-                variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
+                variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
                 table.add_row(model_display, variant_display, "-", "-", "-", "-", "-")
                 last_model = mid
                 last_variant = vid
@@ -80,7 +124,7 @@ def models_list(
             for prov, pids in provider_ids.items():
                 if not isinstance(pids, dict):
                     model_display = mid if mid != last_model else ""
-                    variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
+                    variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
                     table.add_row(model_display, variant_display, prov, "[red]Invalid data[/red]", "-", "-", "-")
                     last_model = mid
                     last_variant = vid
@@ -88,7 +132,7 @@ def models_list(
 
                 for pid, scan_data in pids.items():
                     model_display = mid if mid != last_model else ""
-                    variant_display = f"{vid}{score_str}" if (vid != last_variant or mid != last_model) else ""
+                    variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
 
                     status = scan_data.get("assessment", "Unknown")
                     status_colors = {

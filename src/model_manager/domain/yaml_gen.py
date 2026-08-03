@@ -108,6 +108,9 @@ def generate_provider_yaml(
     for model_id, model_data in all_models.items():
         variants = model_data.get("variants", {})
         for variant_id, variant_data in variants.items():
+            # Skip variants excluded from LiteLLM config
+            if variant_data.get("include_in_litellm") is False:
+                continue
             prov_map = variant_data.get("provider_ids", {})
             # provider key may be lowercased in models.json
             provider_ids_map = prov_map.get(provider) or prov_map.get(provider.capitalize())
@@ -163,5 +166,11 @@ def generate_provider_yaml(
             "and no --output argument provided."
         )
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Backup existing file if present
+    if out_path.exists():
+        bak_path = out_path.with_suffix(out_path.suffix + ".bak")
+        out_path.rename(bak_path)
+
     out_path.write_text(yaml_doc)
     return None

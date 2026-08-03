@@ -76,7 +76,8 @@ def add_alias(config: AppConfig, model_id: str, provider: str | None = None, pro
         model["variants"][variant_id] = {
             "aa_slug": None,
             "provider_ids": {},
-            "notes": ""
+            "notes": "",
+            "include_in_litellm": True,
         }
 
     variant = model["variants"][variant_id]

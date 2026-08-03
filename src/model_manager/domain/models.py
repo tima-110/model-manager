@@ -87,6 +87,37 @@ def remove_model(config: AppConfig, model_id: str) -> bool:
         return True
     return False
 
+def update_variant(
+    config: AppConfig,
+    model_id: str,
+    variant_id: str,
+    include_in_litellm: bool | None = None,
+) -> bool:
+    """Update variant-level settings in models.json.
+
+    Currently supports toggling ``include_in_litellm`` for a variant to
+    exclude/include it in LiteLLM config generation. Returns True if the
+    variant was found and updated, False otherwise.
+    """
+    data = storage.load_models_data(config)
+    model = data.get("models", {}).get(model_id)
+    if not model:
+        return False
+
+    variant = model.get("variants", {}).get(variant_id)
+    if not variant:
+        return False
+
+    if include_in_litellm is not None:
+        variant["include_in_litellm"] = include_in_litellm
+
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    storage.save_models_data(config, data)
+    return True
+
+
 def search_aa_candidates(config: AppConfig, query: str) -> List[Dict[str, str]]:
     """Search the raw AA dataset for potential model candidates based on a query."""
     path = get_raw_scores_path(config)

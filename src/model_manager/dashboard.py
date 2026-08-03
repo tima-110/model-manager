@@ -46,6 +46,7 @@ def _collect_data(cfg: AppConfig) -> dict:
     total_variants = 0
     total_mappings = 0
     scored_mappings = 0  # provider IDs where the variant has AA scores
+    excluded_variants = 0  # variants opted out of LiteLLM config
 
     # --- Health data per provider mapping ---
     health_rows: list[dict] = []
@@ -57,6 +58,10 @@ def _collect_data(cfg: AppConfig) -> dict:
         total_variants += len(variants)
 
         for vid, v_info in variants.items():
+            included = v_info.get("include_in_litellm") is not False
+            if not included:
+                excluded_variants += 1
+
             slug = v_info.get("aa_slug")
             variant_scores = v_info.get("scores", {})
 
@@ -90,6 +95,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                         "latency": latency,
                         "scan_timestamp": scan_ts,
                         "has_scores": has_scores,
+                        "litellm_included": included,
                     })
 
     # --- Top scores by metric ---
@@ -176,6 +182,7 @@ def _collect_data(cfg: AppConfig) -> dict:
         "total_variants": total_variants,
         "total_mappings": total_mappings,
         "scored_mappings": scored_mappings,
+        "excluded_variants": excluded_variants,
         "last_updated": last_updated,
         "health_rows": health_rows,
         "score_rankings": score_rankings,
@@ -286,6 +293,7 @@ def _render_html(data: dict) -> str:
     last_upd = html.escape(r["last_updated"] or "Never")
 
     # --- Summary cards ---
+    excl_color = ' style="color:#f7768e"' if r['excluded_variants'] else ""
     cards = f"""
     <div class="cards">
       <div class="card"><div class="card-value">{r['total_models']}</div><div class="card-label">Models</div></div>
@@ -293,6 +301,7 @@ def _render_html(data: dict) -> str:
       <div class="card"><div class="card-value">{r['total_mappings']}</div><div class="card-label">Provider Mappings</div></div>
       <div class="card"><div class="card-value">{r['scored_mappings']}</div><div class="card-label">Scored</div></div>
       <div class="card"><div class="card-value">{html.escape(r['provider_coverage'])}</div><div class="card-label">Providers Fetched</div></div>
+      <div class="card"><div class="card-value"{excl_color}>{r['excluded_variants']}</div><div class="card-label">Excluded from LiteLLM</div></div>
     </div>"""
 
     # --- Score rankings ---
@@ -317,7 +326,7 @@ def _render_html(data: dict) -> str:
     health_rows = r["health_rows"]
     health_table = ""
     if health_rows:
-        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th><th>Scanned</th></tr>'
+        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th><th>LiteLLM</th><th>Scanned</th></tr>'
         for row in health_rows:
             status = html.escape(row["assessment"])
             color = _status_color(status)
@@ -325,6 +334,7 @@ def _render_html(data: dict) -> str:
             lat = f"{row['latency']:.1f}ms" if row["latency"] is not None else "N/A"
             scanned = row.get("scan_timestamp")
             scanned_fmt = scanned[:10] if scanned else "N/A"
+            litellm_icon = '<span style="color:#9ece6a">&#10003;</span>' if row["litellm_included"] else '<span style="color:#f7768e">&#10007;</span>'
             health_table += (
                 f"<tr>"
                 f"<td>{html.escape(row['model'])}</td>"
@@ -334,6 +344,7 @@ def _render_html(data: dict) -> str:
                 f"<td class='status-dot' style='--status-color:{color}'>{status}</td>"
                 f"<td>{avail}</td>"
                 f"<td>{lat}</td>"
+                f"<td>{litellm_icon}</td>"
                 f"<td>{scanned_fmt}</td>"
                 f"</tr>"
             )
