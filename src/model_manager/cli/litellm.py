@@ -78,14 +78,16 @@ litellm_app.add_typer(generate_app, name="generate")
 
 @generate_app.command("config")
 def generate_config(
-    provider: str = typer.Argument(
-        ..., help="Provider name (nvidia, gemini, ollama, openrouter)."
+    provider: str | None = typer.Argument(
+        None, help="Provider name (nvidia, gemini, ollama, openrouter)."
     ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     output: Path | None = typer.Option(None, "--output", "-o",
         help="Override output path for the generated YAML file."),
     dry_run: bool = typer.Option(False, "--dry-run",
         help="Print the generated YAML to stdout instead of writing to file."),
+    all_providers: bool = typer.Option(False, "--all-providers",
+        help="Generate config for all configured providers."),
 ) -> None:
     """Generate a LiteLLM YAML config file for a specific provider.
 
@@ -95,6 +97,42 @@ def generate_config(
     Models with scan status "unauthorized" are excluded; all others are included.
     """
     cfg = load_config(config)
+
+    if all_providers:
+        providers_to_generate = [
+            p for p, pc in cfg.providers.items()
+            if pc.keys and pc.litellm_prefix
+        ]
+        if not providers_to_generate:
+            console.print("[red]No configured providers found with keys and litellm_prefix.[/red]")
+            raise typer.Exit(1)
+
+        errors: list[str] = []
+        for prov in providers_to_generate:
+            try:
+                result = yaml_gen.generate_provider_yaml(
+                    cfg, prov,
+                    dry_run=dry_run,
+                    output_path=output,
+                )
+                if dry_run and result:
+                    console.print(f"[bold]=== {prov} ===[/bold]")
+                    console.print(result)
+                else:
+                    console.print(f"[green]Generated config for [bold]{prov}[/bold][/green]")
+            except RuntimeError as e:
+                errors.append(f"{prov}: {e}")
+
+        if errors:
+            console.print("\n[red]Errors:[/red]")
+            for err in errors:
+                console.print(f"  [red]- {err}[/red]")
+            raise typer.Exit(1)
+        return
+
+    if not provider:
+        console.print("[red]Error: provider argument or --all-providers is required.[/red]")
+        raise typer.Exit(1)
 
     try:
         result = yaml_gen.generate_provider_yaml(
@@ -109,6 +147,4 @@ def generate_config(
     if dry_run and result:
         console.print(result)
     elif not dry_run:
-        out_path = output or (cfg.providers.get(provider.lower()) and cfg.providers[provider.lower()].output_path)
-        path_str = str(out_path) if out_path else "configured path"
-        console.print(f"[green]Generated config for [bold]{provider}[/bold] at: {path_str}[/green]")
+        console.print(f"[green]Generated config for [bold]{provider}[/bold][/green]")
