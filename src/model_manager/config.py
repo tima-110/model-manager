@@ -32,6 +32,12 @@ class ProviderConfig(ProviderScanConfig, ProviderOutputConfig):
     """
 
 
+class TagConfig(BaseModel):
+    """Tier classification thresholds."""
+    tier1_min_ratio: float = 0.85
+    tier2_min_ratio: float = 0.70
+
+
 class AppConfig(BaseModel):
     """Top-level application config."""
 
@@ -41,6 +47,7 @@ class AppConfig(BaseModel):
     scan_frequency: int = 5
     scan_count: int = 24
     providers: dict[str, ProviderConfig] = {}
+    tags: TagConfig = TagConfig()
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"

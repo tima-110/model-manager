@@ -47,6 +47,10 @@ pipx install -e .
 | `aliases discover` | Suggest mappings for unmapped IDs | `provider`, `ids`, `--config` |
 | `aliases audit` | Report mapping coverage | `ids`, `--config` |
 | `models discover` | Guided discovery and mapping of provider IDs to a conceptual model | `model_id`, `--provider`, `--refresh`, `--yolo`, `--config` |
+| `models tag tier` | Auto-assign tier tags (`tier-1/2/3`) to scored variants relative to the library leader | `--dry-run`, `--json`, `--t1-ratio`, `--t2-ratio`, `--config` |
+| `models tag list` | List current tags per variant | `--json`, `--config` |
+| `models tag set` | Manually add a tag to a variant | `model`, `variant`, `tag`, `--config` |
+| `models tag remove` | Remove a tag from a variant | `model`, `variant`, `tag`, `--config` |
 | `auth set` | Store an API key in keychain | `key_name`, `value` |
 | `auth delete` | Remove an API key from keychain | `key_name` |
 | `auth list` | List stored keys | *(none)* |

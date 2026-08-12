@@ -13,6 +13,10 @@ This document describes the configuration and data storage for `model-manager`.
 | `debug` | Boolean | `false` | Enables debug-level logging to stderr. |
 | `litellm_service_dir` | Path | `/etc/litellm` | Directory where the merged cost map is written for LiteLLM. |
 | `litellm_cost_map_url` | String | `https://raw.githubusercontent.com/...` | Source URL for the upstream cost map. |
+| `tags.tier1_min_ratio` | Float | `0.85` | Minimum composite score (as a fraction of the library leader) for Tier 1. |
+| `tags.tier2_min_ratio` | Float | `0.70` | Minimum composite score (as a fraction of the library leader) for Tier 2. |
+
+Tier ratios can be overridden per-invocation with `--t1-ratio` / `--t2-ratio` on `models tag tier`.
 
 ## Data Storage
 The tool maintains six primary JSON files in the `data_dir`.
@@ -39,11 +43,24 @@ The tool uses a hierarchical structure to handle model variants (e.g., quantized
     - `variants`: A dictionary of variants (e.g., `standard`, `quantized-low`).
         - `aa_slug`: The slug used to look up scores in `model_scores.json`.
         - `scores`: (Optional) A snapshot of the AA scores at the time of allocation.
+        - `tags`: (Optional) A list of tags. `models tag tier` manages `tier-1`/`tier-2`/`tier-3` tags here; other tags are preserved.
         - `provider_ids`: A mapping of providers to lists of IDs.
             - `google`: `["google/gemma-4-31b-it"]`
             - `openrouter`: `["gemma-4-31b-it:free"]`
         - `notes`: Context for why this variant is used.
     - `default_variant`: The fallback variant if no specific match is found.
+
+### Auto-Tiering
+`models tag tier` automatically classifies every scored variant into `tier-1`, `tier-2`, or `tier-3`:
+
+1. Compute a **composite score** = average of `intelligence` + `coding` (falls back to whichever is present; variants with neither are skipped).
+2. Find the **leader**: the highest composite score in the library.
+3. Assign tiers relative to the leader:
+   - `tier-1`: composite ≥ `tier1_min_ratio` × leader (default `0.85`)
+   - `tier-2`: composite ≥ `tier2_min_ratio` × leader (default `0.70`)
+   - `tier-3`: everything else.
+
+Because tiers are relative to the current best model, classifications automatically track models as their scores improve over time. Only `tier-*` tags are rewritten; manually added tags are never touched.
 
 ### 3. `aa_raw_response.json`
 A direct dump of the Artificial Analysis API response. This is used for debugging and for recovering data if the processing logic changes.

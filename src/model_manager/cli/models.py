@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from model_manager.config import load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
-from model_manager.domain import models, scores, aliases, discovery, auth
+from model_manager.domain import models, scores, aliases, discovery, auth, tags
 from .common import console, _run_discovery_cli_workflow
 
 models_app = typer.Typer(help="Manage the conceptual model library.")
@@ -17,6 +17,10 @@ models_app = typer.Typer(help="Manage the conceptual model library.")
 # Variant sub-commands
 variant_app = typer.Typer(help="Manage model variants.")
 models_app.add_typer(variant_app, name="variant")
+
+# Tag sub-commands
+tag_app = typer.Typer(help="Tag model variants (auto tiers + manual tags).")
+models_app.add_typer(tag_app, name="tag")
 
 @variant_app.command("update")
 def variant_update(
@@ -26,16 +30,28 @@ def variant_update(
         help="Exclude this variant from LiteLLM config generation."),
     litellm_enable: bool = typer.Option(False, "--litellm-enable",
         help="Re-include this variant in LiteLLM config generation."),
+    litellm_disable_provider: str | None = typer.Option(None, "--litellm-disable-provider",
+        help="Exclude a specific provider for this variant (e.g. openrouter)."),
+    litellm_enable_provider: str | None = typer.Option(None, "--litellm-enable-provider",
+        help="Re-include a specific provider for this variant."),
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Update settings for a model variant.
 
-    Example: model-manager model variant update gpt-4 8b-q4 --litellm-disable
+    Examples:
+
+      model-manager model variant update gpt-4 8b-q4 --litellm-disable
+
+      model-manager model variant update gpt-4 8b-q4 --litellm-disable-provider openrouter
     """
     cfg = load_config(config)
 
     if litellm_disable and litellm_enable:
         console.print("[red]Error: Cannot use --litellm-disable and --litellm-enable together.[/red]")
+        raise typer.Exit(1)
+
+    if litellm_disable_provider and litellm_enable_provider:
+        console.print("[red]Error: Cannot use --litellm-disable-provider and --litellm-enable-provider together.[/red]")
         raise typer.Exit(1)
 
     include_in_litellm: bool | None = None
@@ -44,16 +60,139 @@ def variant_update(
     elif litellm_enable:
         include_in_litellm = True
 
-    if models.update_variant(cfg, model, variant, include_in_litellm=include_in_litellm):
-        action = "updated"
+    include_in_litellm_provider: bool | None = None
+    if litellm_disable_provider:
+        include_in_litellm_provider = False
+    elif litellm_enable_provider:
+        include_in_litellm_provider = True
+
+    if models.update_variant(
+        cfg, model, variant,
+        include_in_litellm=include_in_litellm,
+        provider=litellm_disable_provider or litellm_enable_provider,
+        include_in_litellm_provider=include_in_litellm_provider,
+    ):
         if include_in_litellm is False:
-            action = "excluded from LiteLLM config"
+            console.print(f"[green]Variant [bold]{model}/{variant}[/bold] excluded from LiteLLM config.[/green]")
         elif include_in_litellm is True:
-            action = "included in LiteLLM config"
-        console.print(f"[green]Variant [bold]{model}/{variant}[/bold] {action}.[/green]")
+            console.print(f"[green]Variant [bold]{model}/{variant}[/bold] included in LiteLLM config.[/green]")
+        elif include_in_litellm_provider is False:
+            console.print(f"[green]Provider [bold]{litellm_disable_provider}[/bold] for [bold]{model}/{variant}[/bold] excluded from LiteLLM config.[/green]")
+        elif include_in_litellm_provider is True:
+            console.print(f"[green]Provider [bold]{litellm_enable_provider}[/bold] for [bold]{model}/{variant}[/bold] included in LiteLLM config.[/green]")
+        else:
+            console.print(f"[green]Variant [bold]{model}/{variant}[/bold] updated.[/green]")
     else:
         console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
         raise typer.Exit(1)
+
+@tag_app.command("tier")
+def tag_tier(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview tier assignments without writing to models.json."),
+    t1_ratio: float | None = typer.Option(None, "--t1-ratio", help="Override Tier 1 cutoff as a fraction of the top composite score."),
+    t2_ratio: float | None = typer.Option(None, "--t2-ratio", help="Override Tier 2 cutoff as a fraction of the top composite score."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Automatically assign tier tags (tier-1/2/3) to all scored model variants.
+
+    Tiers are relative to the best composite score in the library (avg of
+    intelligence + coding), so they track scores as models improve.
+    """
+    cfg = load_config(config)
+    t1 = t1_ratio if t1_ratio is not None else cfg.tags.tier1_min_ratio
+    t2 = t2_ratio if t2_ratio is not None else cfg.tags.tier2_min_ratio
+
+    if not 0 < t2 < t1 < 1:
+        console.print("[red]Error: ratios must satisfy 0 < t2-ratio < t1-ratio < 1.[/red]")
+        raise typer.Exit(2)
+
+    data = models.storage.load_models_data(cfg)
+    tiers = tags.compute_tiers(data, t1_ratio=t1, t2_ratio=t2)
+
+    if not tiers:
+        console.print("[yellow]No scored variants found in models.json. Run 'scores sync' first.[/yellow]")
+        raise typer.Exit(1)
+
+    tier_color = {"tier-1": "green", "tier-2": "yellow", "tier-3": "red"}
+    rows = sorted(tiers.items())
+    if json_output:
+        console.print(json.dumps({"tier1_ratio": t1, "tier2_ratio": t2, "variants": dict(rows)}, indent=2))
+    else:
+        table = Table(title=f"Tier Assignments (T1 >= {t1:.0%} of leader, T2 >= {t2:.0%})")
+        table.add_column("Model / Variant", style="cyan")
+        table.add_column("Tier", justify="center")
+        for key, tier in rows:
+            color = tier_color.get(tier, "white")
+            table.add_row(key, f"[{color}]{tier}[/{color}]")
+        console.print(table)
+
+    if not dry_run:
+        updated, _, _ = tags.assign_tier_tags(cfg, t1_ratio=t1, t2_ratio=t2)
+        if updated:
+            console.print(f"[green]Assigned/updated tier tags for {updated} variants.[/green]")
+        else:
+            console.print("[dim]No changes; tier tags already up to date.[/dim]")
+
+@tag_app.command("list")
+def tag_list(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """List current tags assigned to model variants."""
+    cfg = load_config(config)
+    tagged = tags.list_tags(cfg)
+
+    if json_output:
+        console.print(json.dumps(tagged, indent=2))
+        return
+
+    if not tagged:
+        console.print("[yellow]No tags assigned yet. Run 'models tag tier' to auto-tag.[/yellow]")
+        return
+
+    table = Table(title="Variant Tags")
+    table.add_column("Model / Variant", style="cyan")
+    table.add_column("Tags", style="magenta")
+    for key, tag_list in sorted(tagged.items()):
+        table.add_row(key, ", ".join(f"[bold]{t}[/bold]" for t in tag_list))
+    console.print(table)
+
+@tag_app.command("set")
+def tag_set(
+    model: str,
+    variant: str,
+    tag: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Manually add a tag to a model variant."""
+    cfg = load_config(config)
+    if not tags.set_tag(cfg, model, variant, tag):
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+        raise typer.Exit(1)
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "tag": tag}, indent=2))
+    else:
+        console.print(f"[green]Tagged [bold]{model}/{variant}[/bold] with [bold]{tag}[/bold].[/green]")
+
+@tag_app.command("remove")
+def tag_remove(
+    model: str,
+    variant: str,
+    tag: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Remove a tag from a model variant."""
+    cfg = load_config(config)
+    if not tags.remove_tag(cfg, model, variant, tag):
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+        raise typer.Exit(1)
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "tag": tag}, indent=2))
+    else:
+        console.print(f"[green]Removed [bold]{tag}[/bold] from [bold]{model}/{variant}[/bold].[/green]")
 
 @models_app.command("list")
 def models_list(
@@ -78,6 +217,7 @@ def models_list(
     table = Table(title="Conceptual Model Library")
     table.add_column("Conceptual Model", style="cyan")
     table.add_column("Variant (Scores)", style="magenta")
+    table.add_column("Tier", justify="center")
     table.add_column("Provider", style="cyan")
     table.add_column("Provider Model ID", style="green")
     table.add_column("Status", justify="center")
@@ -91,13 +231,15 @@ def models_list(
         variants = m_info.get("variants", {})
         if not variants:
             model_display = mid if mid != last_model else ""
-            table.add_row(model_display, "[dim]no variants[/dim]", "-", "-", "-", "-", "-")
+            table.add_row(model_display, "[dim]no variants[/dim]", "-", "-", "-", "-", "-", "-")
             last_model = mid
             continue
 
         for vid, v_info in variants.items():
             excluded = v_info.get("include_in_litellm") is False
             exclude_mark = " [red](excluded)[/red]" if excluded else ""
+
+            tier = next((t for t in v_info.get("tags", []) if t.startswith("tier-")), "")
 
             score_str = ""
             slug = v_info.get("aa_slug")
@@ -116,23 +258,33 @@ def models_list(
             if not provider_ids:
                 model_display = mid if mid != last_model else ""
                 variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
-                table.add_row(model_display, variant_display, "-", "-", "-", "-", "-")
+                tier_display = tier if variant_display else "-"
+                table.add_row(model_display, variant_display, tier_display, "-", "-", "-", "-", "-")
                 last_model = mid
                 last_variant = vid
                 continue
 
             for prov, pids in provider_ids.items():
+                if prov.startswith("include_"):
+                    continue
                 if not isinstance(pids, dict):
                     model_display = mid if mid != last_model else ""
                     variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
-                    table.add_row(model_display, variant_display, prov, "[red]Invalid data[/red]", "-", "-", "-")
+                    tier_display = tier if variant_display else "-"
+                    table.add_row(model_display, variant_display, tier_display, prov, "[red]Invalid data[/red]", "-", "-", "-")
                     last_model = mid
                     last_variant = vid
                     continue
 
+                prov_excluded = pids.get("include_in_litellm") is False
+                prov_exclude_mark = " [red](prov excluded)[/red]" if prov_excluded else ""
+
                 for pid, scan_data in pids.items():
+                    if pid.startswith("include_"):
+                        continue
                     model_display = mid if mid != last_model else ""
-                    variant_display = f"{vid}{score_str}{exclude_mark}" if (vid != last_variant or mid != last_model) else ""
+                    variant_display = f"{vid}{score_str}{exclude_mark}{prov_exclude_mark}" if (vid != last_variant or mid != last_model) else ""
+                    tier_display = tier if variant_display else "-"
 
                     status = scan_data.get("assessment", "Unknown")
                     status_colors = {
@@ -155,6 +307,7 @@ def models_list(
                     table.add_row(
                         model_display,
                         variant_display,
+                        tier_display,
                         prov,
                         pid,
                         colored_status,
