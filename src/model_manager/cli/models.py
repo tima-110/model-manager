@@ -97,7 +97,8 @@ def tag_tier(
     """Automatically assign tier tags (tier-1/2/3) to all scored model variants.
 
     Tiers are relative to the best composite score in the library (avg of
-    intelligence + coding), so they track scores as models improve.
+    available intelligence/coding/agentic indices), so they track scores as
+    models improve.
     """
     cfg = load_config(config)
     t1 = t1_ratio if t1_ratio is not None else cfg.tags.tier1_min_ratio
@@ -248,7 +249,7 @@ def models_list(
                 metrics = [
                     ("I", s.get("intelligence")),
                     ("C", s.get("coding")),
-                    ("M", s.get("math")),
+                    ("A", s.get("agentic")),
                 ]
                 scores_list = [f"{label}: {val}" for label, val in metrics if val is not None]
                 if scores_list:

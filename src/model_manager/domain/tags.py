@@ -11,10 +11,10 @@ TIER_TAG_PREFIX = "tier-"
 
 
 def composite_score(scores: dict | None) -> float | None:
-    """Average of intelligence + coding; falls back to whichever is numeric."""
+    """Average of intelligence + coding + agentic; falls back to whichever are numeric."""
     if not scores:
         return None
-    numeric = [scores[k] for k in ("intelligence", "coding") if scores.get(k) is not None]
+    numeric = [scores[k] for k in ("intelligence", "coding", "agentic") if scores.get(k) is not None]
     if not numeric:
         return None
     return sum(numeric) / len(numeric)
