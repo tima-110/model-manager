@@ -32,6 +32,14 @@ def generate_dashboard(cfg: AppConfig) -> Path:
     return output
 
 
+def _variant_tier(v_info: dict) -> str:
+    """Return the tier-* tag for a variant, or empty string if untagged."""
+    for t in v_info.get("tags", []):
+        if t.startswith("tier-"):
+            return t
+    return ""
+
+
 def _collect_data(cfg: AppConfig) -> dict:
     """Assemble all dashboard data into a plain dict."""
     version = _get_version()
@@ -47,6 +55,7 @@ def _collect_data(cfg: AppConfig) -> dict:
     total_mappings = 0
     scored_mappings = 0  # provider IDs where the variant has AA scores
     excluded_variants = 0  # variants opted out of LiteLLM config
+    tier_counts = {"tier-1": 0, "tier-2": 0, "tier-3": 0, "untagged": 0}
 
     # --- Health data per provider mapping ---
     health_rows: list[dict] = []
@@ -62,14 +71,24 @@ def _collect_data(cfg: AppConfig) -> dict:
             if not included:
                 excluded_variants += 1
 
+            tier = _variant_tier(v_info)
+            tier_counts[tier if tier in tier_counts else "untagged"] += 1
+
             slug = v_info.get("aa_slug")
             variant_scores = v_info.get("scores", {})
 
             provider_ids = v_info.get("provider_ids", {})
             for prov, pids in provider_ids.items():
+                if prov.startswith("include_"):
+                    continue
                 if not isinstance(pids, dict):
                     continue
+
+                prov_included = pids.get("include_in_litellm") is not False
+
                 for pid, scan_data in pids.items():
+                    if pid.startswith("include_"):
+                        continue
                     total_mappings += 1
                     has_scores = bool(variant_scores and (
                         variant_scores.get("intelligence") is not None or
@@ -88,6 +107,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                         "model": mid,
                         "display_name": display_name,
                         "variant": vid,
+                        "tier": tier,
                         "provider": prov,
                         "provider_id": pid,
                         "assessment": assessment,
@@ -95,7 +115,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                         "latency": latency,
                         "scan_timestamp": scan_ts,
                         "has_scores": has_scores,
-                        "litellm_included": included,
+                        "litellm_included": included and prov_included,
                     })
 
     # --- Top scores by metric ---
@@ -160,7 +180,10 @@ def _collect_data(cfg: AppConfig) -> dict:
 
         variant_names = sorted(variants.keys())
         providers = set()
+        default_tier = ""
         for vid, v_info in variants.items():
+            if vid == default_variant:
+                default_tier = _variant_tier(v_info)
             for p in v_info.get("provider_ids", {}):
                 providers.add(p)
 
@@ -170,6 +193,7 @@ def _collect_data(cfg: AppConfig) -> dict:
             "family": family,
             "variants": ", ".join(variant_names),
             "default_variant": default_variant,
+            "tier": default_tier,
             "providers": ", ".join(sorted(providers)),
         })
 
@@ -183,6 +207,7 @@ def _collect_data(cfg: AppConfig) -> dict:
         "total_mappings": total_mappings,
         "scored_mappings": scored_mappings,
         "excluded_variants": excluded_variants,
+        "tier_counts": tier_counts,
         "last_updated": last_updated,
         "health_rows": health_rows,
         "score_rankings": score_rankings,
@@ -278,6 +303,7 @@ def _build_score_rankings(lib_models: dict, all_scores: dict) -> dict:
                     entries.append({
                         "model": mid,
                         "variant": vid,
+                        "tier": _variant_tier(v_info),
                         "value": val,
                     })
         entries.sort(key=lambda x: x["value"], reverse=True)
@@ -294,6 +320,13 @@ def _render_html(data: dict) -> str:
 
     # --- Summary cards ---
     excl_color = ' style="color:#f7768e"' if r['excluded_variants'] else ""
+    tc = r['tier_counts']
+    tier_card_colors = {"tier-1": "color:#9ece6a", "tier-2": "color:#e0af68", "tier-3": "color:#f7768e", "untagged": "color:#565f89"}
+    tier_counts_html = " &nbsp;|&nbsp; ".join(
+        f'<span style="{tier_card_colors[k]}">{html.escape(k.split("-")[-1] if k.startswith("tier-") else k)}: {tc.get(k, 0)}</span>'
+        for k in ("tier-1", "tier-2", "tier-3", "untagged")
+        if tc.get(k, 0)
+    )
     cards = f"""
     <div class="cards">
       <div class="card"><div class="card-value">{r['total_models']}</div><div class="card-label">Models</div></div>
@@ -302,7 +335,8 @@ def _render_html(data: dict) -> str:
       <div class="card"><div class="card-value">{r['scored_mappings']}</div><div class="card-label">Scored</div></div>
       <div class="card"><div class="card-value">{html.escape(r['provider_coverage'])}</div><div class="card-label">Providers Fetched</div></div>
       <div class="card"><div class="card-value"{excl_color}>{r['excluded_variants']}</div><div class="card-label">Excluded from LiteLLM</div></div>
-    </div>"""
+    </div>
+    <div class="tier-summary">{tier_counts_html}</div>"""
 
     # --- Score rankings ---
     score_sections = ""
@@ -311,12 +345,14 @@ def _render_html(data: dict) -> str:
         entries = r["score_rankings"].get(metric, [])
         score_sections += f'<div class="ranking-column"><h3>{html.escape(label)}</h3>'
         if entries:
-            score_sections += '<table class="ranking-table"><tr><th>#</th><th>Model</th><th>Variant</th><th>Score</th></tr>'
+            score_sections += '<table class="ranking-table"><tr><th>#</th><th>Model</th><th>Variant</th><th>Tier</th><th>Score</th></tr>'
             for i, e in enumerate(entries, 1):
                 mn = html.escape(e["model"])
                 vr = html.escape(e["variant"])
                 sc = e["value"]
-                score_sections += f"<tr><td>{i}</td><td>{mn}</td><td>{vr}</td><td class='score-cell'>{sc}</td></tr>"
+                tier = e.get("tier", "")
+                tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
+                score_sections += f"<tr><td>{i}</td><td>{mn}</td><td>{vr}</td><td>{tier_cell}</td><td class='score-cell'>{sc}</td></tr>"
             score_sections += "</table>"
         else:
             score_sections += '<div class="no-data">No score data</div>'
@@ -326,7 +362,7 @@ def _render_html(data: dict) -> str:
     health_rows = r["health_rows"]
     health_table = ""
     if health_rows:
-        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th><th>LiteLLM</th><th>Scanned</th></tr>'
+        health_table = '<table class="data-table"><tr><th>Model</th><th>Variant</th><th>Tier</th><th>Provider</th><th>ID</th><th>Status</th><th>Avail</th><th>Latency</th><th>LiteLLM</th><th>Scanned</th></tr>'
         for row in health_rows:
             status = html.escape(row["assessment"])
             color = _status_color(status)
@@ -335,10 +371,13 @@ def _render_html(data: dict) -> str:
             scanned = row.get("scan_timestamp")
             scanned_fmt = scanned[:10] if scanned else "N/A"
             litellm_icon = '<span style="color:#9ece6a">&#10003;</span>' if row["litellm_included"] else '<span style="color:#f7768e">&#10007;</span>'
+            tier = row.get("tier", "") or ""
+            tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
             health_table += (
                 f"<tr>"
                 f"<td>{html.escape(row['model'])}</td>"
                 f"<td>{html.escape(row['variant'])}</td>"
+                f"<td>{tier_cell}</td>"
                 f"<td>{html.escape(row['provider'])}</td>"
                 f"<td class='mono'>{html.escape(row['provider_id'])}</td>"
                 f"<td class='status-dot' style='--status-color:{color}'>{status}</td>"
@@ -356,12 +395,15 @@ def _render_html(data: dict) -> str:
     model_rows = r["model_rows"]
     model_table = ""
     if model_rows:
-        model_table = '<table class="data-table"><tr><th>Model ID</th><th>Display Name</th><th>Variants</th><th>Providers</th></tr>'
+        model_table = '<table class="data-table"><tr><th>Model ID</th><th>Display Name</th><th>Tier</th><th>Variants</th><th>Providers</th></tr>'
         for row in model_rows:
+            tier = row.get("tier", "") or ""
+            tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
             model_table += (
                 f"<tr>"
                 f"<td class='mono'>{html.escape(row['model_id'])}</td>"
                 f"<td>{html.escape(row['display_name'])}</td>"
+                f"<td>{tier_cell}</td>"
                 f"<td>{html.escape(row['variants'])}</td>"
                 f"<td>{html.escape(row['providers'])}</td>"
                 f"</tr>"
@@ -479,6 +521,13 @@ def _render_html(data: dict) -> str:
   .no-data {{ color: #565f89; font-style: italic; padding: 0.5rem 0; font-size: 0.85rem; }}
   code {{ background: #1d1f2e; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.82rem; }}
   .section-row {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; }}
+  .tier-summary {{ margin: 0.5rem 0 1rem; font-size: 0.85rem; color: #565f89; }}
+  .tier-summary span {{ margin-right: 0.75rem; font-weight: 600; }}
+  .tier-badge {{ display: inline-block; padding: 0.05rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 700; }}
+  .tier-badge.tier-1 {{ background: rgba(158,206,106,0.15); color: #9ece6a; }}
+  .tier-badge.tier-2 {{ background: rgba(224,175,104,0.15); color: #e0af68; }}
+  .tier-badge.tier-3 {{ background: rgba(247,118,142,0.15); color: #f7768e; }}
+  .tier-badge.tier-none {{ background: #1d1f2e; color: #565f89; }}
   @media (max-width: 600px) {{ .rankings {{ grid-template-columns: 1fr; }} .cards {{ grid-template-columns: repeat(2, 1fr); }} }}
 </style>
 </head>
@@ -516,6 +565,14 @@ def _render_html(data: dict) -> str:
 </div>
 </body>
 </html>"""
+
+
+def _tier_css_class(tier: str) -> str:
+    return {
+        "tier-1": "tier-1",
+        "tier-2": "tier-2",
+        "tier-3": "tier-3",
+    }.get(tier, "tier-none")
 
 
 def _status_color(status: str) -> str:
