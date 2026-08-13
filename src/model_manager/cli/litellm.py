@@ -6,6 +6,8 @@ import yaml
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+
 from model_manager.config import load_config
 from model_manager.domain import cost_map, yaml_gen
 from .common import console
@@ -148,3 +150,41 @@ def generate_config(
         console.print(result)
     elif not dry_run:
         console.print(f"[green]Generated config for [bold]{provider}[/bold][/green]")
+
+@generate_app.command("fallbacks")
+def generate_fallbacks(
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    output: Path | None = typer.Option(None, "--output", "-o",
+        help="Override output path for the generated fallbacks YAML file."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="Print the generated YAML to stdout instead of writing to file."),
+    limit: int = typer.Option(5, "--limit",
+        help="Maximum number of fallback entries per model."),
+) -> None:
+    """Generate the LiteLLM fallbacks YAML from tier tags and provider scans.
+
+    Reads models.json and provider scan results, and for every lens that
+    ``generate config`` would include emits a ``fallbacks`` map keyed on each
+    provider's full model_name. Fallbacks prioritize the same model on other
+    providers (active first, dead last) followed by same-tier models ordered by
+    composite score.
+    """
+    from model_manager.domain import fallbacks
+
+    cfg = load_config(config)
+    try:
+        result = fallbacks.generate_fallbacks_yaml(
+            cfg,
+            dry_run=dry_run,
+            output_path=output,
+            limit=limit,
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if dry_run and result:
+        Console(emoji=False, highlight=False).print(result)
+    elif not dry_run:
+        console.print(f"[green]Generated fallbacks config to "
+                      f"[bold]{output or cfg.litellm_fallbacks_path}[/bold][/green]")

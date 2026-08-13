@@ -93,7 +93,7 @@ def _collect_data(cfg: AppConfig) -> dict:
                     has_scores = bool(variant_scores and (
                         variant_scores.get("intelligence") is not None or
                         variant_scores.get("coding") is not None or
-                        variant_scores.get("math") is not None
+                        variant_scores.get("agentic") is not None
                     ))
                     if has_scores:
                         scored_mappings += 1
@@ -153,6 +153,35 @@ def _collect_data(cfg: AppConfig) -> dict:
             litellm_config_error = str(e)
     else:
         litellm_config_error = "File not found"
+
+    # --- Fallback chains (litellm-fallbacks.yaml) ---
+    fallbacks_path = cfg.litellm_fallbacks_path
+    fallbacks_exists = False
+    fallbacks_valid = False
+    fallbacks_error = None
+    fallback_chains: list[dict] = []
+    if fallbacks_path.exists():
+        fallbacks_exists = True
+        try:
+            doc = yaml.safe_load(fallbacks_path.read_text())
+            raw_list = doc.get("fallbacks", []) if isinstance(doc, dict) else []
+            for entry in raw_list:
+                if not isinstance(entry, dict):
+                    continue
+                for subject, names in entry.items():
+                    if not isinstance(names, list):
+                        continue
+                    chain = [n for n in names if isinstance(n, str)]
+                    fallback_chains.append({"subject": subject, "fallbacks": chain})
+            fallbacks_valid = True
+        except yaml.YAMLError as e:
+            fallbacks_error = str(e)
+        except PermissionError:
+            fallbacks_error = "Permission denied"
+        except OSError as e:
+            fallbacks_error = str(e)
+    fallback_chain_count = len(fallback_chains)
+    fallback_entry_count = sum(len(c["fallbacks"]) for c in fallback_chains)
 
     cost_overrides_path = get_litellm_cost_overrides_path(cfg)
     cost_output_path = get_litellm_cost_map_output_path(cfg)
@@ -224,11 +253,21 @@ def _collect_data(cfg: AppConfig) -> dict:
             "error": litellm_config_error,
             "exists": litellm_config_path.exists(),
         },
+        "fallbacks": {
+            "path": str(fallbacks_path),
+            "exists": fallbacks_exists,
+            "valid": fallbacks_valid,
+            "error": fallbacks_error,
+            "chains": fallback_chains,
+            "chain_count": fallback_chain_count,
+            "entry_count": fallback_entry_count,
+        },
         "config": {
             "data_dir": str(cfg.data_dir),
             "scan_frequency": cfg.scan_frequency,
             "litellm_service_dir": str(cfg.litellm_service_dir),
             "litellm_config_path": str(cfg.litellm_config_path),
+            "litellm_fallbacks_path": str(cfg.litellm_fallbacks_path),
             "litellm_cost_map_url": cfg.litellm_cost_map_url,
         },
         "paths": {
@@ -239,6 +278,7 @@ def _collect_data(cfg: AppConfig) -> dict:
             "raw_scores_json": str(get_raw_scores_path(cfg)),
             "provider_caches": [str(p[0]) for p in provider_paths.values()],
             "cost_map_output": str(cost_output_path),
+            "fallbacks_path": str(fallbacks_path),
         },
     }
 
@@ -455,6 +495,39 @@ def _render_html(data: dict) -> str:
       <tr><td>Status</td><td><span style="color:{lc_color}">&#9679;</span> {lc_status}</td></tr>
     </table>"""
 
+    # --- Fallback chains section ---
+    fb = r["fallbacks"]
+    if fb["valid"]:
+        fb_status = f"Valid &mdash; {fb['chain_count']} chains, {fb['entry_count']} entries"
+        fb_color = "#9ece6a"
+    elif fb["error"]:
+        fb_status = html.escape(fb["error"])
+        fb_color = "#e0af68" if not fb["exists"] else "#f7768e"
+    else:
+        fb_status = "Unknown"
+        fb_color = "#565f89"
+
+    fb_table = ""
+    if fb["valid"] and fb["chains"]:
+        fb_table = '<table class="data-table"><tr><th>Subject</th><th>Fallback chain</th></tr>'
+        for chain in fb["chains"]:
+            subj = html.escape(chain["subject"])
+            names = " &rarr; ".join(html.escape(n) for n in chain["fallbacks"])
+            fb_table += f'<tr><td class="mono">{subj}</td><td class="mono">{names}</td></tr>'
+        fb_table += "</table>"
+    elif fb["valid"]:
+        fb_table = '<div class="no-data">Fallbacks file exists but no chains are defined.</div>'
+    elif not fb["exists"]:
+        fb_table = ('<div class="no-data">No fallbacks file yet. Run '
+                    '<code>model-manager litellm generate fallbacks</code> to create one.</div>')
+
+    fb_section = f"""
+    <table class="data-table">
+      <tr><td>Fallbacks path</td><td class="mono">{html.escape(fb['path'])}</td></tr>
+      <tr><td>Status</td><td><span style="color:{fb_color}">&#9679;</span> {fb_status}</td></tr>
+    </table>
+    {fb_table}"""
+
     # --- Config table ---
     cfg_table = ""
     for key, val in r["config"].items():
@@ -469,6 +542,7 @@ def _render_html(data: dict) -> str:
         ("Models JSON", r["paths"]["models_json"]),
         ("Scores JSON", r["paths"]["scores_json"]),
         ("Cost map output", r["paths"]["cost_map_output"]),
+        ("Fallbacks YAML", r["paths"]["fallbacks_path"]),
     ]
     for label_, p in path_entries:
         exists_mark = '<span style="color:#9ece6a">&#9679;</span>' if Path(p).exists() else ""
@@ -556,6 +630,9 @@ def _render_html(data: dict) -> str:
 
   <h2>LiteLLM Config</h2>
   {lc_section}
+
+  <h2>Fallback Chains</h2>
+  {fb_section}
 
   <h2>Configuration</h2>
   <table class="data-table">{cfg_table}</table>

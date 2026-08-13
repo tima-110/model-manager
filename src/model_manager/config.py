@@ -50,6 +50,7 @@ class AppConfig(BaseModel):
     tags: TagConfig = TagConfig()
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
+    litellm_fallbacks_path: Path = Path("/etc/litellm/litellm-fallbacks.yaml")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:

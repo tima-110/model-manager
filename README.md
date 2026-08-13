@@ -61,6 +61,7 @@ pipx install -e .
 | `discover-nvidia` | Discover NVIDIA available models | `--probe`, `--config` |
 | `discover-ollama` | Discover Ollama available models | `--probe`, `--config` |
 | `litellm cost-map build` | Merge upstream cost map with local overrides and save to service dir | `--source-url`, `--config` |
+| `litellm generate fallbacks` | Generate LiteLLM fallbacks YAML from tier tags and provider scans | `--output`, `--dry-run`, `--limit`, `--config` |
 
 ## Guided Discovery Workflow
 
