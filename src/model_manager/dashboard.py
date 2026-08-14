@@ -403,7 +403,7 @@ def _render_html(data: dict) -> str:
             tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
             intel = row["intelligence"] if row["intelligence"] is not None else "-"
             coding = row["coding"] if row["coding"] is not None else "-"
-            agentic = row["agentic"] if row["agentic"] is not None else "-"
+            agentic = f"{row['agentic']:.1f}" if isinstance(row["agentic"], (int, float)) else "-"
             scores_table += f"<tr><td>{mn}</td><td>{vr}</td><td>{tier_cell}</td><td class='score-cell'>{intel}</td><td class='score-cell'>{coding}</td><td class='score-cell'>{agentic}</td></tr>"
         scores_table += "</tbody></table>"
     else:
