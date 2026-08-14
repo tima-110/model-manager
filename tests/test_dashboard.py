@@ -54,9 +54,16 @@ def test_dashboard_invalid_fallbacks_yaml(tmp_path: Path):
     assert "&#9679;" in html
 
 
-def test_dashboard_empty_library_does_not_crash(tmp_path: Path):
+def test_dashboard_renders_scores_table(tmp_path: Path):
     cfg = _empty_cfg(tmp_path)
-    _write_fallbacks(cfg.litellm_fallbacks_path)
+    scores_path = cfg.data_dir / "model_scores.json"
+    scores_path.write_text('{"models": {"claude-3-5-sonnet": {"scores": {"intelligence": 90, "coding": 95, "agentic": 85}}}}')
+    models_path = cfg.data_dir / "models.json"
+    models_path.write_text('{"models": {"anthropic/claude-3-5-sonnet": {"variants": {"standard": {"aa_slug": "claude-3-5-sonnet"}}}}}')
     output = generate_dashboard(cfg)
-    assert output.exists()
-    assert "Fallback Chains" in output.read_text()
+    html = output.read_text()
+    assert "Scores" in html
+    assert "Intelligence" in html
+    assert "Coding" in html
+    assert "Agentic" in html
+    assert "sortTable" in html

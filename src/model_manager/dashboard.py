@@ -118,8 +118,8 @@ def _collect_data(cfg: AppConfig) -> dict:
                         "litellm_included": included and prov_included,
                     })
 
-    # --- Top scores by metric ---
-    score_rankings = _build_score_rankings(lib_models, all_scores)
+    # --- Top scores list ---
+    score_rows = _build_score_rows(lib_models, all_scores)
 
     # --- Provider snapshots ---
     providers = ["openrouter", "nvidia", "ollama", "gemini"]
@@ -239,7 +239,7 @@ def _collect_data(cfg: AppConfig) -> dict:
         "tier_counts": tier_counts,
         "last_updated": last_updated,
         "health_rows": health_rows,
-        "score_rankings": score_rankings,
+        "score_rows": score_rows,
         "model_rows": model_rows,
         "provider_snapshots": provider_snapshots,
         "provider_coverage": f"{sum(1 for s in provider_snapshots.values() if s['count'] > 0)}/{len(providers)}",
@@ -326,29 +326,31 @@ def _count_mapped_for_provider(lib_models: dict, provider_label: str) -> int:
     return count
 
 
-def _build_score_rankings(lib_models: dict, all_scores: dict) -> dict:
-    """Build rankings for intelligence and coding."""
-    metrics = ["intelligence", "coding"]
-    rankings: dict = {}
-    for metric in metrics:
-        entries = []
-        for mid, m_info in lib_models.items():
-            for vid, v_info in m_info.get("variants", {}).items():
-                slug = v_info.get("aa_slug")
-                if not slug or slug not in all_scores:
-                    continue
-                s = all_scores[slug].get("scores", {})
-                val = s.get(metric)
-                if val is not None:
-                    entries.append({
-                        "model": mid,
-                        "variant": vid,
-                        "tier": _variant_tier(v_info),
-                        "value": val,
-                    })
-        entries.sort(key=lambda x: x["value"], reverse=True)
-        rankings[metric] = entries
-    return rankings
+def _build_score_rows(lib_models: dict, all_scores: dict) -> list[dict]:
+    """Build unified score entries for all variants with scores."""
+    entries = []
+    for mid, m_info in lib_models.items():
+        for vid, v_info in m_info.get("variants", {}).items():
+            slug = v_info.get("aa_slug")
+            if not slug or slug not in all_scores:
+                continue
+            s = all_scores[slug].get("scores", {})
+            intel = s.get("intelligence")
+            coding = s.get("coding")
+            agentic = s.get("agentic")
+            if intel is None and coding is None and agentic is None:
+                continue
+            entries.append({
+                "model": mid,
+                "variant": vid,
+                "tier": _variant_tier(v_info),
+                "intelligence": intel,
+                "coding": coding,
+                "agentic": agentic,
+            })
+    # Default sort by intelligence descending (falling back to 0)
+    entries.sort(key=lambda x: x["intelligence"] if x["intelligence"] is not None else -1, reverse=True)
+    return entries
 
 
 def _render_html(data: dict) -> str:
@@ -378,25 +380,34 @@ def _render_html(data: dict) -> str:
     </div>
     <div class="tier-summary">{tier_counts_html}</div>"""
 
-    # --- Score rankings ---
-    score_sections = ""
-    METRIC_LABELS = {"intelligence": "Intelligence", "coding": "Coding"}
-    for metric, label in METRIC_LABELS.items():
-        entries = r["score_rankings"].get(metric, [])
-        score_sections += f'<div class="ranking-column"><h3>{html.escape(label)}</h3>'
-        if entries:
-            score_sections += '<table class="ranking-table"><tr><th>#</th><th>Model</th><th>Variant</th><th>Tier</th><th>Score</th></tr>'
-            for i, e in enumerate(entries, 1):
-                mn = html.escape(e["model"])
-                vr = html.escape(e["variant"])
-                sc = e["value"]
-                tier = e.get("tier", "")
-                tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
-                score_sections += f"<tr><td>{i}</td><td>{mn}</td><td>{vr}</td><td>{tier_cell}</td><td class='score-cell'>{sc}</td></tr>"
-            score_sections += "</table>"
-        else:
-            score_sections += '<div class="no-data">No score data</div>'
-        score_sections += "</div>"
+    # --- Scores table ---
+    score_rows = r["score_rows"]
+    scores_table = ""
+    if score_rows:
+        scores_table = '''<table class="data-table sortable" id="scoresTable">
+          <thead>
+            <tr>
+              <th onclick="sortTable(0)" style="cursor:pointer">Model &#x25C5;&#x25BF;</th>
+              <th onclick="sortTable(1)" style="cursor:pointer">Variant &#x25C5;&#x25BF;</th>
+              <th onclick="sortTable(2)" style="cursor:pointer">Tier &#x25C5;&#x25BF;</th>
+              <th onclick="sortTable(3, true)" style="cursor:pointer" style="text-align:right">Intelligence &#x25C5;&#x25BF;</th>
+              <th onclick="sortTable(4, true)" style="cursor:pointer" style="text-align:right">Coding &#x25C5;&#x25BF;</th>
+              <th onclick="sortTable(5, true)" style="cursor:pointer" style="text-align:right">Agentic &#x25C5;&#x25BF;</th>
+            </tr>
+          </thead>
+          <tbody>'''
+        for row in score_rows:
+            mn = html.escape(row["model"])
+            vr = html.escape(row["variant"])
+            tier = row.get("tier", "")
+            tier_cell = f'<span class="tier-badge {_tier_css_class(tier)}">{html.escape(tier)}</span>' if tier else "-"
+            intel = row["intelligence"] if row["intelligence"] is not None else "-"
+            coding = row["coding"] if row["coding"] is not None else "-"
+            agentic = row["agentic"] if row["agentic"] is not None else "-"
+            scores_table += f"<tr><td>{mn}</td><td>{vr}</td><td>{tier_cell}</td><td class='score-cell'>{intel}</td><td class='score-cell'>{coding}</td><td class='score-cell'>{agentic}</td></tr>"
+        scores_table += "</tbody></table>"
+    else:
+        scores_table = '<div class="no-data">No score data available</div>'
 
     # --- Health table ---
     health_rows = r["health_rows"]
@@ -602,8 +613,53 @@ def _render_html(data: dict) -> str:
   .tier-badge.tier-2 {{ background: rgba(224,175,104,0.15); color: #e0af68; }}
   .tier-badge.tier-3 {{ background: rgba(247,118,142,0.15); color: #f7768e; }}
   .tier-badge.tier-none {{ background: #1d1f2e; color: #565f89; }}
-  @media (max-width: 600px) {{ .rankings {{ grid-template-columns: 1fr; }} .cards {{ grid-template-columns: repeat(2, 1fr); }} }}
+  @media (max-width: 600px) {{ .cards {{ grid-template-columns: repeat(2, 1fr); }} }}
 </style>
+<script>
+function sortTable(n, isNumeric) {{
+  if (isNumeric === undefined) isNumeric = false;
+  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+  table = document.getElementById("scoresTable");
+  switching = true;
+  dir = "asc";
+  while (switching) {{
+    switching = false;
+    rows = table.rows;
+    for (i = 1; i < (rows.length - 1); i++) {{
+      shouldSwitch = false;
+      x = rows[i].getElementsByTagName("TD")[n];
+      y = rows[i + 1].getElementsByTagName("TD")[n];
+      var xVal = x.textContent || x.innerText;
+      var yVal = y.textContent || y.innerText;
+      if (isNumeric) {{
+        var xNum = xVal === "-" ? -999 : parseFloat(xVal);
+        var yNum = yVal === "-" ? -999 : parseFloat(yVal);
+        if (dir == "asc") {{
+          if (xNum > yNum) {{ shouldSwitch = true; break; }}
+        }} else if (dir == "desc") {{
+          if (xNum < yNum) {{ shouldSwitch = true; break; }}
+        }}
+      }} else {{
+        if (dir == "asc") {{
+          if (xVal.toLowerCase() > yVal.toLowerCase()) {{ shouldSwitch = true; break; }}
+        }} else if (dir == "desc") {{
+          if (xVal.toLowerCase() < yVal.toLowerCase()) {{ shouldSwitch = true; break; }}
+        }}
+      }}
+    }}
+    if (shouldSwitch) {{
+      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+      switching = true;
+      switchcount ++;
+    }} else {{
+      if (switchcount == 0 && dir == "asc") {{
+        dir = "desc";
+        switching = true;
+      }}
+    }}
+  }}
+}}
+</script>
 </head>
 <body>
 <div class="container">
@@ -613,8 +669,8 @@ def _render_html(data: dict) -> str:
   <h2>Summary</h2>
   {cards}
 
-  <h2>Top Scores</h2>
-  <div class="rankings">{score_sections}</div>
+  <h2>Scores</h2>
+  {scores_table}
 
   <h2>Provider Snapshots</h2>
   <div class="section-row">{prov_sections}</div>
