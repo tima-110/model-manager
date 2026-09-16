@@ -36,7 +36,12 @@ def scores_fetch(
         progress.add_task(description="Processing and saving scores...", total=None)
         processed = scores.process_aa_data(data, cfg)
 
+        progress.add_task(description="Scraping agentic index...", total=None)
+        agentic_updated = scores.merge_agentic_scores(cfg)
+
     console.print(f"[green]Successfully synced {processed['meta']['total_models']} models.[/green]")
+    if agentic_updated:
+        console.print(f"[dim]Updated agentic index for {agentic_updated} models.[/dim]")
 
 
 @scores_app.command("sync")
@@ -84,6 +89,7 @@ def scores_list(
             raw = scores.fetch_aa_data(api_key, cfg)
             if raw:
                 scores.process_aa_data(raw, cfg)
+                scores.merge_agentic_scores(cfg)
             else:
                 console.print("[yellow]Warning: Failed to fetch latest scores. Using cached data.[/yellow]")
 
@@ -139,7 +145,7 @@ def scores_list(
     table.add_column("Variant/Slug", style="magenta")
     table.add_column("Intel", justify="right", style="green")
     table.add_column("Coding", justify="right", style="green")
-    table.add_column("Math", justify="right", style="green")
+    table.add_column("Agentic", justify="right", style="green")
     table.add_column("TTFT (s)", justify="right", style="dim")
     table.add_column("TPS", justify="right", style="dim")
 
@@ -150,7 +156,7 @@ def scores_list(
             r["id2"],
             str(s.get("intelligence", "N/A")),
             str(s.get("coding", "N/A")),
-            str(s.get("math", "N/A")),
+            str(s.get("agentic", "N/A")),
             str(s.get("ttft", "N/A")),
             str(s.get("tps", "N/A"))
         )

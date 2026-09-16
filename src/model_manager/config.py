@@ -129,6 +129,10 @@ def get_gemini_models_path(config: AppConfig) -> Path:
     """Return path to the Gemini available models JSON file."""
     return config.data_dir / "gemini_available_models.json"
 
+def get_huggingface_models_path(config: AppConfig) -> Path:
+    """Return path to the HuggingFace available models JSON file."""
+    return config.data_dir / "huggingface_available_models.json"
+
 def get_litellm_cost_overrides_path(config: AppConfig) -> Path:
     """Return path to the local cost map overrides JSON file."""
     return config.data_dir / "litellm_cost_overrides.json"

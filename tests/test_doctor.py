@@ -135,6 +135,7 @@ def test_doctor_all_green(tmp_path: Path):
     (data_dir / "nvidia_available_models.json").write_text(json.dumps({"models": []}))
     (data_dir / "ollama_available_models.json").write_text(json.dumps({"models": []}))
     (data_dir / "gemini_available_models.json").write_text(json.dumps({"models": []}))
+    (data_dir / "huggingface_available_models.json").write_text(json.dumps({"models": []}))
     (data_dir / "litellm_cost_overrides.json").write_text("{}")
 
     cfg_file = _write_config(tmp_path / "config", data_dir)

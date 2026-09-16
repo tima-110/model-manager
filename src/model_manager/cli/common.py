@@ -22,7 +22,7 @@ class SortOption(str, Enum):
     alpha = "alpha"
     int = "int"
     code = "code"
-    math = "math"
+    agentic = "agentic"
     ttft = "ttft"
     tps = "tps"
 

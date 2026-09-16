@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-from model_manager.config import AppConfig, load_config, get_scores_path, get_aliases_path
+from model_manager.config import AppConfig, load_config, get_scores_path
 
 def test_default_config():
     """Verify default configuration values."""
@@ -26,8 +26,6 @@ def test_custom_config(tmp_path: Path):
 def test_path_helpers(mock_config):
     """Verify that path helpers return the correct paths based on config."""
     scores_path = get_scores_path(mock_config)
-    aliases_path = get_aliases_path(mock_config)
 
     assert scores_path.name == "model_scores.json"
-    assert aliases_path.name == "models.json"
     assert scores_path.parent == mock_config.data_dir

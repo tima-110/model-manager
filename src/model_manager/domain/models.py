@@ -92,12 +92,18 @@ def update_variant(
     model_id: str,
     variant_id: str,
     include_in_litellm: bool | None = None,
+    provider: str | None = None,
+    include_in_litellm_provider: bool | None = None,
 ) -> bool:
     """Update variant-level settings in models.json.
 
-    Currently supports toggling ``include_in_litellm`` for a variant to
-    exclude/include it in LiteLLM config generation. Returns True if the
-    variant was found and updated, False otherwise.
+    ``include_in_litellm`` controls the entire variant.
+    ``provider`` + ``include_in_litellm_provider`` controls inclusion
+    for a specific provider within the variant (sets the
+    ``include_in_litellm`` key inside the provider's entry in
+    ``provider_ids``).
+
+    Returns True if the variant was found and updated, False otherwise.
     """
     data = storage.load_models_data(config)
     model = data.get("models", {}).get(model_id)
@@ -110,6 +116,12 @@ def update_variant(
 
     if include_in_litellm is not None:
         variant["include_in_litellm"] = include_in_litellm
+
+    if provider and include_in_litellm_provider is not None:
+        provider_ids_map = variant.get("provider_ids", {}).get(provider)
+        if provider_ids_map is None:
+            return False
+        provider_ids_map["include_in_litellm"] = include_in_litellm_provider
 
     if "meta" not in data:
         data["meta"] = {}

@@ -65,7 +65,7 @@ def aliases_resolve(
         score_table.add_column("Value", style="green")
         score_table.add_row("Intelligence", str(s.get("intelligence")))
         score_table.add_row("Coding", str(s.get("coding")))
-        score_table.add_row("Math", str(s.get("math")))
+        score_table.add_row("Agentic", str(s.get("agentic")))
         console.print(score_table)
     else:
         console.print("[yellow]No scores found for this AA slug.[/yellow]")

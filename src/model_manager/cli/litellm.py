@@ -81,7 +81,7 @@ litellm_app.add_typer(generate_app, name="generate")
 @generate_app.command("config")
 def generate_config(
     provider: str | None = typer.Argument(
-        None, help="Provider name (nvidia, gemini, ollama, openrouter)."
+        None, help="Provider name (nvidia, gemini, ollama, openrouter, huggingface)."
     ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     output: Path | None = typer.Option(None, "--output", "-o",

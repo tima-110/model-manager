@@ -16,6 +16,7 @@ from model_manager.config import (
     find_config,
     get_free_models_path,
     get_gemini_models_path,
+    get_huggingface_models_path,
     get_litellm_cost_overrides_path,
     get_models_path,
     get_nvidia_models_path,
@@ -103,6 +104,7 @@ def main(
         ("NVIDIA models", get_nvidia_models_path(cfg)),
         ("Ollama models", get_ollama_models_path(cfg)),
         ("Gemini models", get_gemini_models_path(cfg)),
+        ("HuggingFace models", get_huggingface_models_path(cfg)),
         ("Cost overrides", get_litellm_cost_overrides_path(cfg)),
     ]
     for label, path in data_files:

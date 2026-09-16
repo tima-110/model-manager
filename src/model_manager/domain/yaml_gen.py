@@ -14,6 +14,7 @@ SCAN_FILES: dict[str, str] = {
     "gemini": "gemini_scan.json",
     "ollama": "ollama_scan.json",
     "openrouter": "openrouter_scan.json",
+    "huggingface": "huggingface_scan.json",
 }
 
 

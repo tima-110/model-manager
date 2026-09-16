@@ -11,6 +11,7 @@ from model_manager.config import (
     get_nvidia_models_path,
     get_ollama_models_path,
     get_gemini_models_path,
+    get_huggingface_models_path,
 )
 from model_manager.domain import auth, discovery
 
@@ -55,6 +56,15 @@ SUPPORTED_PROVIDERS = [
         fetch_fn=discovery.fetch_gemini_models,
         path_fn=get_gemini_models_path,
         probe_id="gemini",
+        scan_concurrency=1,
+        scan_delay_between_models_ms=600,
+    ),
+    Provider(
+        name="HuggingFace",
+        secret_key="HF_TOKEN",
+        fetch_fn=discovery.fetch_huggingface_models,
+        path_fn=get_huggingface_models_path,
+        probe_id="huggingface",
         scan_concurrency=1,
         scan_delay_between_models_ms=600,
     ),

@@ -27,7 +27,7 @@ def advisor_compare(
     table.add_column("Variant", style="yellow")
     table.add_column("Intel", style="green")
     table.add_column("Coding", style="green")
-    table.add_column("Math", style="green")
+    table.add_column("Agentic", style="green")
 
     for r in results:
         if "error" in r:
@@ -40,14 +40,14 @@ def advisor_compare(
                 r["variant"],
                 str(s.get("intelligence", "N/A")),
                 str(s.get("coding", "N/A")),
-                str(s.get("math", "N/A"))
+                str(s.get("agentic", "N/A"))
             )
 
     console.print(table)
 
 @advisor_app.command("best")
 def advisor_best(
-    metric: str = typer.Option("intelligence", help="Metric to optimize (intelligence, coding, math)"),
+    metric: str = typer.Option("intelligence", help="Metric to optimize (intelligence, coding, agentic)"),
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Find the best mapped model for a specific metric."""

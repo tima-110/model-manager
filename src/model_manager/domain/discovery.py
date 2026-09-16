@@ -1,4 +1,4 @@
-"""OpenRouter, NVIDIA, and Ollama model discovery logic."""
+"""OpenRouter, NVIDIA, Ollama, Gemini, and HuggingFace model discovery logic."""
 from __future__ import annotations
 
 import json
@@ -25,10 +25,8 @@ OLLAMA_API_URL = "https://ollama.com/api/tags"
 OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 GEMINI_CHAT_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-OLLAMA_API_URL = "https://ollama.com/api/tags"
-OLLAMA_CHAT_URL = "https://ollama.com/api/chat"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_CHAT_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+HF_HUB_MODELS_URL = "https://huggingface.co/api/models?filter=text-generation&inference=warm&sort=likes&direction=-1&limit=1000"
+HF_ROUTER_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
 
 STATUS_MAP = {
     "200": "up",
@@ -251,6 +249,39 @@ def fetch_gemini_models(api_key: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from Gemini: {e}")
 
+def fetch_huggingface_models(api_key: str) -> List[Dict[str, Any]]:
+    """Fetch warm (free, serverless) text-generation models from the HF Hub.
+
+    Equivalent to ``InferenceClient(token).list_deployed_models()``
+    filtered to the ``"text-generation"`` key, but implemented with stdlib
+    ``urllib`` to avoid a ``huggingface_hub`` dependency.
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        req = urllib.request.Request(HF_HUB_MODELS_URL, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            all_models = json.loads(response.read().decode())
+
+            models = []
+            for m in all_models:
+                model_id = m.get("id", "")
+                if not model_id:
+                    continue
+                models.append({
+                    "id": model_id,
+                    "name": model_id,
+                    "context_length": None,
+                    "architecture": None,
+                    "description": None,
+                    "tags": m.get("tags", []),
+                })
+            return models
+    except Exception as e:
+        raise RuntimeError(f"Failed to fetch models from HuggingFace: {e}")
+
 def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter", debug: bool = False) -> PingResult:
     """Check if a model is responsive and measure TTFB latency."""
     if not api_key:
@@ -262,6 +293,8 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
         chat_url = NVIDIA_CHAT_URL
     elif provider == "gemini":
         chat_url = f"{GEMINI_CHAT_URL_TEMPLATE.format(model=model_id)}?key={api_key}"
+    elif provider == "huggingface":
+        chat_url = HF_ROUTER_CHAT_URL
     else:
         chat_url = OPENROUTER_CHAT_URL
 
