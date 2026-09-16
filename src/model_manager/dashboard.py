@@ -14,6 +14,7 @@ from model_manager.config import (
     get_nvidia_models_path,
     get_ollama_models_path,
     get_gemini_models_path,
+    get_huggingface_models_path,
     get_models_path,
     get_scores_path,
     get_raw_scores_path,
@@ -122,12 +123,13 @@ def _collect_data(cfg: AppConfig) -> dict:
     score_rows = _build_score_rows(lib_models, all_scores)
 
     # --- Provider snapshots ---
-    providers = ["openrouter", "nvidia", "ollama", "gemini"]
+    providers = ["openrouter", "nvidia", "ollama", "gemini", "huggingface"]
     provider_paths = {
         "openrouter": (get_free_models_path(cfg), "OpenRouter"),
         "nvidia": (get_nvidia_models_path(cfg), "NVIDIA"),
         "ollama": (get_ollama_models_path(cfg), "Ollama"),
         "gemini": (get_gemini_models_path(cfg), "Gemini"),
+        "huggingface": (get_huggingface_models_path(cfg), "HuggingFace"),
     }
     provider_snapshots = {}
     for key, (path, label) in provider_paths.items():

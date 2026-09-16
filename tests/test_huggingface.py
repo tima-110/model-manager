@@ -8,7 +8,7 @@ import urllib.request
 import yaml
 
 from model_manager.config import AppConfig, ProviderConfig, get_huggingface_models_path
-from model_manager.domain import discovery, providers, yaml_gen
+from model_manager.domain import discovery, providers, yaml_gen, models as models_domain
 
 
 class _FakeResponse:
@@ -139,3 +139,19 @@ def test_yaml_gen_huggingface_prefix(tmp_path):
     assert entry["litellm_params"]["model"] == "huggingface/meta-llama/Llama-3.1-8B-Instruct"
     assert entry["litellm_params"]["api_key"] == "os.environ/HF_TOKEN"
     assert "api_base" not in entry["litellm_params"]
+
+
+def test_match_via_string_searches_huggingface_cache(tmp_path):
+    """Regression: models discover must suggest IDs from the HF cache."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    cache = {
+        "count": 1,
+        "models": [{"id": "deepseek-ai/DeepSeek-V3-0324", "name": "deepseek-ai/DeepSeek-V3-0324", "tags": []}],
+    }
+    (data_dir / "huggingface_available_models.json").write_text(json.dumps(cache))
+    cfg = AppConfig(data_dir=data_dir)
+
+    hits = models_domain._match_via_string(cfg, "deepseek-v4")
+
+    assert any(h["provider"] == "huggingface" and h["provider_id"] == "deepseek-ai/DeepSeek-V3-0324" for h in hits)

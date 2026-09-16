@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from model_manager.config import load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path
+from model_manager.config import load_config, get_free_models_path, get_nvidia_models_path, get_ollama_models_path, get_huggingface_models_path
 from model_manager.domain import models, scores, aliases, discovery, auth, tags
 from .common import console, _run_discovery_cli_workflow
 
@@ -406,6 +406,17 @@ def models_discover(
                     console.print("[yellow]Warning: OLLAMA_API_KEY missing, skipping Ollama refresh.[/yellow]")
             except Exception as e:
                 console.print(f"[yellow]Warning: Failed to refresh Ollama: {e}[/yellow]")
+
+            # HuggingFace
+            try:
+                api_key = auth.get_secret("HF_TOKEN")
+                if api_key:
+                    data = discovery.fetch_huggingface_models(api_key)
+                    discovery.save_free_models(cfg, data, get_huggingface_models_path(cfg))
+                else:
+                    console.print("[yellow]Warning: HF_TOKEN missing, skipping HuggingFace refresh.[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to refresh HuggingFace: {e}[/yellow]")
 
             progress.add_task(description="Refreshing AA scores...", total=None)
             try:
