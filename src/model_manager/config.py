@@ -38,6 +38,23 @@ class TagConfig(BaseModel):
     tier2_min_ratio: float = 0.70
 
 
+class TierAliasConfig(BaseModel):
+    """Provider preference order for one tier's group alias."""
+    provider_order: list[str] = []
+
+
+class TierProvidersConfig(BaseModel):
+    """Per-tier provider hierarchy used by ``litellm generate aliases``.
+
+    Each tier names providers (keys of ``[providers.xxx]``) in preference
+    order. An empty list means "use the default order" (nvidia first, then
+    the remaining configured providers).
+    """
+    tier1: TierAliasConfig = TierAliasConfig()
+    tier2: TierAliasConfig = TierAliasConfig()
+    tier3: TierAliasConfig = TierAliasConfig()
+
+
 class AppConfig(BaseModel):
     """Top-level application config."""
 
@@ -48,9 +65,11 @@ class AppConfig(BaseModel):
     scan_count: int = 24
     providers: dict[str, ProviderConfig] = {}
     tags: TagConfig = TagConfig()
+    tier_providers: TierProvidersConfig = TierProvidersConfig()
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_fallbacks_path: Path = Path("/etc/litellm/litellm-fallbacks.yaml")
+    litellm_aliases_path: Path = Path("/etc/litellm/litellm-aliases.yaml")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:
@@ -60,7 +79,7 @@ class AppConfig(BaseModel):
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-    @field_validator("data_dir", "litellm_config_path", mode="before")
+    @field_validator("data_dir", "litellm_config_path", "litellm_aliases_path", mode="before")
     @classmethod
     def expand_home(cls, v: str | Path) -> Path:
         return Path(v).expanduser()

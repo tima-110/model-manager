@@ -188,3 +188,38 @@ def generate_fallbacks(
     elif not dry_run:
         console.print(f"[green]Generated fallbacks config to "
                       f"[bold]{output or cfg.litellm_fallbacks_path}[/bold][/green]")
+
+@generate_app.command("aliases")
+def generate_aliases(
+    config: Path | None = typer.Option(None, "--config", "-c",
+        help="Path to config TOML file."),
+    output: Path | None = typer.Option(None, "--output", "-o",
+        help="Override output path for the generated aliases YAML file."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="Print the generated YAML to stdout instead of writing to file."),
+) -> None:
+    """Generate the LiteLLM model_group_alias YAML from tier tags.
+
+    For each tier (tier1, tier2, tier3) emits one alias pointing at the
+    best-composite in-tier variant, trying providers in the tier's
+    ``[tier_providers.<tier>]`` order first. Tiers without eligible
+    variants are omitted.
+    """
+    from model_manager.domain import model_group_aliases
+
+    cfg = load_config(config)
+    try:
+        result = model_group_aliases.generate_aliases_yaml(
+            cfg,
+            dry_run=dry_run,
+            output_path=output,
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if dry_run and result:
+        Console(emoji=False, highlight=False).print(result)
+    elif not dry_run:
+        console.print(f"[green]Generated aliases config to "
+                      f"[bold]{output or cfg.litellm_aliases_path}[/bold][/green]")

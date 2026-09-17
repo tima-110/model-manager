@@ -16,6 +16,7 @@ This document describes the configuration and data storage for `model-manager`.
 | `litellm_service_dir` | Path | `/var/www/local_json_data` | Directory where the merged cost map is written for LiteLLM. |
 | `litellm_config_path` | Path | `/etc/litellm/litellm.yaml` | LiteLLM config file checked by `litellm config check`. |
 | `litellm_fallbacks_path` | Path | `/etc/litellm/litellm-fallbacks.yaml` | Default output for `litellm generate fallbacks`. |
+| `litellm_aliases_path` | Path | `/etc/litellm/litellm-aliases.yaml` | Default output for `litellm generate aliases`. |
 | `litellm_cost_map_url` | String | `https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json` | Source URL for the upstream cost map. |
 | `tags.tier1_min_ratio` | Float | `0.85` | Minimum composite score (as a fraction of the library leader) for Tier 1. |
 | `tags.tier2_min_ratio` | Float | `0.70` | Minimum composite score (as a fraction of the library leader) for Tier 2. |
@@ -59,6 +60,29 @@ keys = ["HF_TOKEN"]
 output_path = "/etc/litellm/litellm-huggingface.yaml"
 litellm_prefix = "huggingface"
 ```
+
+### Per-Tier Provider Hierarchy (`[tier_providers.tierN]`)
+
+`litellm generate aliases` reads an ordered provider preference per tier.
+Names refer to `[providers.xxx]` keys. Tier membership is always decided
+first (from `tier-1`/`tier-2`/`tier-3` tags, computed from scores when tags
+are missing); the provider order only picks *which* in-tier variant wins,
+so a tier alias never points at another tier's model.
+
+```toml
+[tier_providers.tier1]
+provider_order = ["nvidia", "gemini", "openrouter"]
+
+[tier_providers.tier2]
+provider_order = ["nvidia", "gemini", "openrouter"]
+
+[tier_providers.tier3]
+provider_order = ["gemini", "nvidia", "openrouter"]
+```
+
+| Key | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `provider_order` | List of strings | `[]` (= nvidia first, then remaining configured providers) | Preference order for the tier's alias. Unknown names are ignored with a warning; if no listed provider backs the tier, the best-composite in-tier variant on any provider is used. |
 
 ## Data Storage
 The tool maintains nine primary JSON files in the `data_dir`, plus per-provider
@@ -143,7 +167,7 @@ These files are produced by scan/generate commands rather than discovery:
 - `{provider}_scan.json` (e.g., `openrouter_scan.json`, `nvidia_scan.json`, `ollama_scan.json`, `gemini_scan.json`, `huggingface_scan.json`): per-model ping history plus a summary (`availability`, `avg_latency`, `assessment`) written by `providers ... scan` / `providers scan-all`. Scan summaries for mapped IDs are also copied into `models.json` under `provider_ids`.
 - `debug_scan_{provider}_{timestamp}.json`: request/response logs written when scanning with `--debug`.
 - `model_prices_and_context_window.json`: merged upstream + overrides cost map written to `litellm_service_dir` by `litellm cost-map build`.
-- Generated LiteLLM YAML: written to each provider's `output_path` (or `--output`) by `litellm generate config`, and to `litellm_fallbacks_path` (or `--output`) by `litellm generate fallbacks`.
+- Generated LiteLLM YAML: written to each provider's `output_path` (or `--output`) by `litellm generate config`, to `litellm_fallbacks_path` (or `--output`) by `litellm generate fallbacks`, and to `litellm_aliases_path` (or `--output`) by `litellm generate aliases`.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:
