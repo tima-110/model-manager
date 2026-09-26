@@ -70,6 +70,8 @@ class AppConfig(BaseModel):
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_fallbacks_path: Path = Path("/etc/litellm/litellm-fallbacks.yaml")
     litellm_aliases_path: Path = Path("/etc/litellm/litellm-aliases.yaml")
+    litellm_router_settings_stub_path: Path = Path("/etc/litellm/litellm-router_settings-stub.yaml")
+    litellm_router_settings_path: Path = Path("/etc/litellm/litellm-router_settings.yaml")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:
@@ -79,7 +81,7 @@ class AppConfig(BaseModel):
         # Ensure data directory exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
-    @field_validator("data_dir", "litellm_config_path", "litellm_aliases_path", mode="before")
+    @field_validator("data_dir", "litellm_config_path", "litellm_fallbacks_path", "litellm_aliases_path", "litellm_router_settings_stub_path", "litellm_router_settings_path", mode="before")
     @classmethod
     def expand_home(cls, v: str | Path) -> Path:
         return Path(v).expanduser()

@@ -223,3 +223,49 @@ def generate_aliases(
     elif not dry_run:
         console.print(f"[green]Generated aliases config to "
                       f"[bold]{output or cfg.litellm_aliases_path}[/bold][/green]")
+
+@generate_app.command("router_settings")
+def generate_router_settings(
+    config: Path | None = typer.Option(None, "--config", "-c",
+        help="Path to config TOML file."),
+    output: Path | None = typer.Option(None, "--output", "-o",
+        help="Override output path for the merged router_settings YAML file."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="Print the merged YAML to stdout instead of writing to file."),
+    stub: Path | None = typer.Option(None, "--stub",
+        help="Override path to the stub router_settings YAML file."),
+    from_files: bool = typer.Option(False, "--from-files",
+        help="Read fallbacks/aliases from their generated YAML files "
+             "instead of regenerating from models.json."),
+    limit: int = typer.Option(5, "--limit",
+        help="Maximum number of fallback entries per model (ignored with --from-files)."),
+) -> None:
+    """Merge generated fallbacks + aliases into the stub router_settings file.
+
+    Starts from the stub (routing strategy, retries, hand-managed aliases),
+    inserts fallbacks under the router_settings block, and merges generated
+    tier1/2/3 entries into model_group_alias (generated wins on collision,
+    all other manual aliases are preserved). The stub is never overwritten;
+    output always goes to litellm-router_settings.yaml (or --output).
+    """
+    from model_manager.domain import router_settings as rs_mod
+
+    cfg = load_config(config)
+    try:
+        result = rs_mod.generate_router_settings_yaml(
+            cfg,
+            dry_run=dry_run,
+            output_path=output,
+            limit=limit,
+            from_files=from_files,
+            stub_path=stub,
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if dry_run and result:
+        Console(emoji=False, highlight=False).print(result)
+    elif not dry_run:
+        console.print(f"[green]Generated router_settings config to "
+                      f"[bold]{output or cfg.litellm_router_settings_path}[/bold][/green]")
