@@ -5,14 +5,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from model_manager.config import AppConfig
 from model_manager.domain import storage, tags
 from model_manager.domain.yaml_gen import (
     _derive_model_name,
     _iter_provider_ids,
     _load_scan_results,
+    dump_litellm_yaml,
 )
 
 log = logging.getLogger(__name__)
@@ -189,12 +188,7 @@ def generate_aliases_yaml(
             "LiteLLM-included variants with mapped provider_ids."
         )
 
-    yaml_doc = yaml.safe_dump(
-        {"model_group_alias": alias_map},
-        default_flow_style=False,
-        sort_keys=False,
-        allow_unicode=True,
-    )
+    yaml_doc = dump_litellm_yaml({"model_group_alias": alias_map})
 
     if dry_run:
         return yaml_doc

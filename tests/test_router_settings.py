@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from model_manager.config import AppConfig, ProviderConfig
 from model_manager.domain import router_settings as rs
+from model_manager.domain.fallbacks import is_dag
 from model_manager.cli.litellm import generate_app
 
 runner = CliRunner()
@@ -93,7 +94,10 @@ def test_regenerate_merges_aliases_and_fallbacks(tmp_path: Path):
     assert block["model_group_alias"]["tier1"] == "nvidia_nim/a-1"
     subjects = {next(iter(m)) for m in block["fallbacks"]}
     assert "nvidia_nim/a-1" in subjects
-    assert "nvidia_nim/b-1" in subjects
+    # DAG: b-1 is the worst-ranked model, so it has no downhill target
+    # and is omitted (emitting b-1 -> a-1 would create a cycle).
+    assert "nvidia_nim/b-1" not in subjects
+    assert is_dag(block["fallbacks"])
 
 
 def test_stub_fallbacks_preserved_and_overwritten_per_subject(tmp_path: Path):
@@ -105,10 +109,11 @@ def test_stub_fallbacks_preserved_and_overwritten_per_subject(tmp_path: Path):
     })
     doc = rs.build_merged_router_settings(cfg)
     by_key = {next(iter(m)): list(m.values())[0] for m in doc["router_settings"]["fallbacks"]}
-    assert by_key["manual-model"] == ["x"]
+    # unregistered stub subject is omitted (must match model_list/aliases)
+    assert "manual-model" not in by_key
     # generated entry for a-1 replaces the stale stub entry
     assert by_key["nvidia_nim/a-1"] != ["stale"]
-    assert "nvidia_nim/b-1" in by_key
+    assert is_dag(doc["router_settings"]["fallbacks"])
 
 
 def test_missing_router_block_created(tmp_path: Path):
@@ -151,6 +156,21 @@ def test_from_files_missing_keys_errors(tmp_path: Path):
     _write_stub(tmp_path / "stub.yaml", {})
     with pytest.raises(RuntimeError, match="No 'fallbacks'"):
         rs.build_merged_router_settings(cfg, from_files=True)
+
+
+def test_from_files_strips_stale_names_against_live_registry(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write_models(tmp_path)
+    (tmp_path / "fallbacks.yaml").write_text(yaml.safe_dump({"fallbacks": [
+        {"nvidia_nim/a-1": ["ghost-model", "nvidia_nim/b-1"]},
+        {"ghost-subject": ["nvidia_nim/a-1"]},
+    ]}))
+    (tmp_path / "aliases.yaml").write_text(yaml.safe_dump({"model_group_alias": {}}))
+    _write_stub(tmp_path / "stub.yaml", {"model_group_alias": {}})
+    doc = rs.build_merged_router_settings(cfg, from_files=True)
+    assert doc["router_settings"]["fallbacks"] == [
+        {"nvidia_nim/a-1": ["nvidia_nim/b-1"]}
+    ]
 
 
 def test_refuses_to_overwrite_stub(tmp_path: Path):

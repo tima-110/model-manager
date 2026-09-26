@@ -84,8 +84,9 @@ def merge_fallbacks(
 ) -> list[dict[str, list[str]]]:
     """Merge stub + generated fallbacks. Same subject -> generated wins.
 
-    Stub entries that are malformed (not single-key dicts) are preserved
-    verbatim at the front so hand-managed content is never silently dropped.
+    Malformed entries (not single-key dicts) pass through here untouched;
+    use ``sanitize_fallbacks`` afterwards (as ``build_merged_router_settings``
+    does) to drop malformed entries, unregistered names, and cycle edges.
     """
     merged: list[dict[str, list[str]]] = []
     index: dict[str, int] = {}
@@ -159,6 +160,16 @@ def build_merged_router_settings(
         generated_fallbacks = fallbacks_mod.build_fallbacks(config, limit=limit)
         generated_aliases = aliases_mod.build_alias_map(config)
 
+    # The valid set is derivable from models.json in both modes, so stale
+    # files can never smuggle unregistered names into the merged output.
+    # An empty registry means "cannot validate" -> skip name filtering.
+    from model_manager.domain.fallbacks import collect_valid_model_names
+
+    try:
+        valid_names: set[str] | None = collect_valid_model_names(config) or None
+    except Exception:
+        valid_names = None
+
     stub_fallbacks = merged_block.get("fallbacks", [])
     if stub_fallbacks is None:
         stub_fallbacks = []
@@ -167,7 +178,13 @@ def build_merged_router_settings(
             f"'fallbacks' in {stub_file} must be a list, "
             f"got {type(stub_fallbacks).__name__}"
         )
-    merged_block["fallbacks"] = merge_fallbacks(stub_fallbacks, generated_fallbacks)
+    merged = merge_fallbacks(stub_fallbacks, generated_fallbacks)
+    # Hand-managed stub entries can reintroduce cycles or reference names
+    # outside model_list/aliases, which makes LiteLLM drop the block.
+    # Sanitize the merged result (cycle back-edges removed, order kept).
+    from model_manager.domain.fallbacks import sanitize_fallbacks
+
+    merged_block["fallbacks"] = sanitize_fallbacks(merged, valid_names)
 
     stub_aliases = merged_block.get("model_group_alias", {})
     if stub_aliases is None:
@@ -194,6 +211,8 @@ def generate_router_settings_yaml(
     """Serialize the merged router_settings to YAML. Returns string on dry_run.
 
     Never writes to the stub file; refuses if output resolves to the stub path.
+    The merged fallbacks are validated just before serializing so LiteLLM
+    never receives a map with cycles or unregistered names.
     """
     stub_file = stub_path or config.litellm_router_settings_stub_path
     out_path = output_path or config.litellm_router_settings_path
@@ -206,12 +225,19 @@ def generate_router_settings_yaml(
     doc = build_merged_router_settings(
         config, limit=limit, from_files=from_files, stub_path=stub_file
     )
-    yaml_doc = yaml.safe_dump(
-        doc,
-        default_flow_style=False,
-        sort_keys=False,
-        allow_unicode=True,
+    from model_manager.domain.fallbacks import (
+        assert_valid_fallbacks,
+        collect_valid_model_names,
     )
+    from model_manager.domain.yaml_gen import dump_litellm_yaml
+
+    try:
+        valid: set[str] | None = collect_valid_model_names(config) or None
+    except Exception:
+        valid = None
+    assert_valid_fallbacks(doc["router_settings"]["fallbacks"], valid)
+
+    yaml_doc = dump_litellm_yaml(doc)
 
     if dry_run:
         return yaml_doc

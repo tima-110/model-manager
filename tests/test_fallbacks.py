@@ -173,3 +173,196 @@ def test_cli_generate_fallbacks_dry_run(tmp_path: Path):
     assert result.exit_code == 0
     assert "fallbacks:" in result.output
     assert "nvidia_nim/deepseek-v4-flash" in result.output
+
+
+def test_generated_fallbacks_are_dag(tmp_path: Path):
+    cfg = _library(tmp_path)
+    result = fallbacks.build_fallbacks(cfg)
+    assert fallbacks.is_dag(result)
+    assert fallbacks.find_cycles(result) == []
+    # No symmetric pairs: if A lists B, B must not list A.
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    for subject, targets in by_key.items():
+        for target in targets:
+            assert subject not in by_key.get(target, [])
+
+
+def test_strict_single_key_shape(tmp_path: Path):
+    cfg = _library(tmp_path)
+    result = fallbacks.build_fallbacks(cfg)
+    assert result
+    for item in result:
+        assert isinstance(item, dict) and len(item) == 1
+        targets = next(iter(item.values()))
+        assert isinstance(targets, list) and targets
+        assert all(isinstance(t, str) for t in targets)
+
+
+def test_find_cycles_direct_and_indirect():
+    assert fallbacks.is_dag([{"a": ["b"]}, {"b": ["c"]}])
+    direct = [{"a": ["b"]}, {"b": ["a"]}]
+    assert not fallbacks.is_dag(direct)
+    assert fallbacks.find_cycles(direct)
+    indirect = [{"a": ["b"]}, {"b": ["c"]}, {"c": ["a"]}]
+    assert not fallbacks.is_dag(indirect)
+    assert fallbacks.find_cycles(indirect)
+
+
+def test_validate_fallbacks_unknown_names():
+    doc = [{"a": ["b", "ghost"]}, {"c": ["a"]}]
+    report = fallbacks.validate_fallbacks(doc, {"a", "b", "c"})
+    assert report["unknown_names"] == ["ghost"]
+    assert report["malformed"] == []
+    assert report["cycles"] == []
+    bad = [{"a": ["a"]}, {"k1": ["v"], "k2": ["v"]}, ["nope"]]
+    report = fallbacks.validate_fallbacks(bad, {"a"})
+    assert "a" in report["self_edges"]
+    assert report["malformed"]
+
+
+def test_sanitize_drops_unknown_and_breaks_cycles():
+    doc = [
+        {"a": ["b", "ghost", "a"]},
+        {"b": ["a"]},
+        {"ghost": ["a"]},
+        {"k1": ["v"], "k2": ["v"]},
+    ]
+    clean = fallbacks.sanitize_fallbacks(doc, {"a", "b"})
+    by_key = {next(iter(m)): list(m.values())[0] for m in clean}
+    assert by_key == {"a": ["b"]}
+    assert fallbacks.is_dag(clean)
+
+
+def _free_cfg(tmp_path: Path) -> AppConfig:
+    cfg = AppConfig(
+        data_dir=tmp_path,
+        providers={
+            "openrouter": _provider("openrouter"),
+            "gemini": _provider("gemini"),
+        },
+        litellm_fallbacks_path=(tmp_path / "out.yaml"),
+    )
+    _write(tmp_path, {
+        "gemma-4-31b-it": {
+            "display_name": "Gemma 4 31B", "family": "x", "default_variant": "standard",
+            "variants": {
+                "standard": _variant({
+                    "openrouter": {
+                        "google/gemma-4-31b-it:free": {"assessment": "Active", "availability": 1.0},
+                        "google/gemma-4-31b-it": {"assessment": "Good", "availability": 0.9},
+                    },
+                    "gemini": {"gemma-4-31b-it": {"assessment": "Active", "availability": 1.0}},
+                }, {"intelligence": 50, "coding": 50}),
+            },
+        },
+    })
+    return cfg
+
+
+def test_quoting_colon_and_slash_and_valid_names(tmp_path: Path):
+    cfg = _free_cfg(tmp_path)
+    valid = fallbacks.collect_valid_model_names(cfg)
+    assert "openrouter/gemma-4-31b-it:free" in valid
+    text = fallbacks.generate_fallbacks_yaml(cfg, dry_run=True)
+    assert '"openrouter/gemma-4-31b-it:free"' in text
+    assert '"gemini/gemma-4-31b-it"' in text
+    doc = yaml.safe_load(text)
+    report = fallbacks.validate_fallbacks(doc["fallbacks"], valid)
+    assert report["unknown_names"] == []
+    assert report["cycles"] == []
+    assert fallbacks.is_dag(doc["fallbacks"])
+
+
+def test_include_in_litellm_flag_never_becomes_model_name(tmp_path: Path):
+    """Regression: the sentinel key inside provider maps must not leak."""
+    from model_manager.domain.yaml_gen import _iter_provider_ids
+
+    pmap = {
+        "org/real-model": {"assessment": "Active", "availability": 1.0},
+        "include_in_litellm": True,
+    }
+    assert _iter_provider_ids(pmap) == ["org/real-model"]
+
+    cfg = _cfg(tmp_path)
+    _write(tmp_path, {
+        "m": {
+            "display_name": "M", "family": "x", "default_variant": "standard",
+            "variants": {
+                "standard": {
+                    "aa_slug": None,
+                    "provider_ids": {
+                        "nvidia": dict(pmap),
+                        "ollama": {"m": {"assessment": "Active", "availability": 1.0}},
+                    },
+                    "include_in_litellm": True,
+                    "scores": {"intelligence": 50, "coding": 50},
+                    "tags": ["tier-2"],
+                },
+            },
+        },
+    })
+    result = fallbacks.build_fallbacks(cfg)
+    names = {next(iter(m)) for m in result} | {
+        t for m in result for t in next(iter(m.values()))
+    }
+    assert "nvidia_nim/include_in_litellm" not in names
+    assert "nvidia_nim/real-model" in names
+
+
+def test_reported_deepseek_0731_loop_sanitized_to_cascade():
+    """Regression for the live DeepSeek Flash 0731 loop."""
+    doc = [
+        {"nvidia_nim/deepseek-v4-flash-0731": [
+            "openrouter/deepseek-v4-flash:free",
+            "ollama/deepseek-v4-flash:0731",
+        ]},
+        {"openrouter/deepseek-v4-flash:free": [
+            "huggingface/DeepSeek-V4-Flash-0731",
+            "ollama/deepseek-v4-flash:0731",
+        ]},
+        {"huggingface/DeepSeek-V4-Flash-0731": ["ollama/deepseek-v4-flash:0731"]},
+        {"ollama/deepseek-v4-flash:0731": [
+            "openrouter/deepseek-v4-flash:free",
+            "nvidia_nim/deepseek-v4-flash-0731",
+        ]},
+    ]
+    assert not fallbacks.is_dag(doc)
+    clean = fallbacks.sanitize_fallbacks(doc, None)
+    assert fallbacks.is_dag(clean)
+    by_key = {next(iter(m)): list(m.values())[0] for m in clean}
+    # Linear cascade preserved; back-edges to ancestors pruned.
+    assert by_key["nvidia_nim/deepseek-v4-flash-0731"][0] == "openrouter/deepseek-v4-flash:free"
+    assert "nvidia_nim/deepseek-v4-flash-0731" not in by_key.get(
+        "ollama/deepseek-v4-flash:0731", [])
+    assert "openrouter/deepseek-v4-flash:free" not in by_key.get(
+        "ollama/deepseek-v4-flash:0731", [])
+
+
+def test_reported_glm_53_mutual_loop_sanitized():
+    """Regression for the live GLM 5.3 A->B->A loop."""
+    doc = [
+        {"nvidia_nim/glm-5.3": ["ollama/glm-5.3"]},
+        {"ollama/glm-5.3": ["nvidia_nim/glm-5.3"]},
+    ]
+    assert fallbacks.find_cycles(doc) == [
+        ["nvidia_nim/glm-5.3", "ollama/glm-5.3", "nvidia_nim/glm-5.3"]
+    ]
+    clean = fallbacks.sanitize_fallbacks(doc, None)
+    assert clean == [{"nvidia_nim/glm-5.3": ["ollama/glm-5.3"]}]
+
+
+def test_validate_reports_duplicate_subjects():
+    doc = [{"a": ["b"]}, {"a": ["c"]}]
+    report = fallbacks.validate_fallbacks(doc, {"a", "b", "c"})
+    assert report["duplicate_subjects"] == ["a"]
+
+
+def test_assert_valid_fallbacks_gate():
+    import pytest
+
+    fallbacks.assert_valid_fallbacks([{"a": ["b"]}], {"a", "b"})
+    with pytest.raises(RuntimeError, match="cycles"):
+        fallbacks.assert_valid_fallbacks(
+            [{"a": ["b"]}, {"b": ["a"]}], {"a", "b"})
+    with pytest.raises(RuntimeError, match="unregistered"):
+        fallbacks.assert_valid_fallbacks([{"a": ["ghost"]}], {"a"})

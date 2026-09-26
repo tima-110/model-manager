@@ -362,3 +362,41 @@ class TestGenerateProviderYaml:
             assert "litellm_params" in entry
             assert "model" in entry["litellm_params"]
             assert "api_key" in entry["litellm_params"]
+
+    def test_provider_map_flag_not_emitted_as_model(
+        self, tmp_path: Path, nvidia_output_config: ProviderConfig
+    ):
+        """The include_in_litellm sentinel inside a provider map is not a model."""
+        import json as _json
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "models.json").write_text(_json.dumps({
+            "meta": {},
+            "models": {
+                "m": {
+                    "display_name": "M", "family": "x", "default_variant": "standard",
+                    "variants": {
+                        "standard": {
+                            "aa_slug": None,
+                            "provider_ids": {
+                                "nvidia": {
+                                    "org/real-model": {},
+                                    "include_in_litellm": True,
+                                },
+                            },
+                            "include_in_litellm": True,
+                        },
+                    },
+                },
+            },
+        }))
+        config = AppConfig(
+            data_dir=data_dir,
+            providers={"nvidia": nvidia_output_config},
+        )
+        result = yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
+        parsed = yaml.safe_load(result)
+        model_names = {e["model_name"] for e in parsed["model_list"]}
+        assert "nvidia_nim/real-model" in model_names
+        assert "nvidia_nim/include_in_litellm" not in model_names

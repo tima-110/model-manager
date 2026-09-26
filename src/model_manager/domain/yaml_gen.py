@@ -18,6 +18,35 @@ SCAN_FILES: dict[str, str] = {
 }
 
 
+class _ColonSafeDumper(yaml.SafeDumper):
+    """SafeDumper that double-quotes strings containing ':' or '/'.
+
+    Model names like ``openrouter/gemma-4-31b-it:free`` contain both, and
+    emitting them unquoted as mapping keys (``- openrouter/...:free:``) is
+    fragile and confuses some YAML parsers/highlighters. Quoting them is
+    round-trip safe via ``yaml.safe_load``.
+    """
+
+
+def _quoted_str_representer(dumper: yaml.SafeDumper, data: str):  # type: ignore[type-arg]
+    style = '"' if (":" in data or "/" in data) else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_ColonSafeDumper.add_representer(str, _quoted_str_representer)
+
+
+def dump_litellm_yaml(doc: dict[str, Any]) -> str:
+    """Serialize a LiteLLM YAML document, quoting strings with ':' or '/'."""
+    return yaml.dump(
+        doc,
+        Dumper=_ColonSafeDumper,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+
+
 def _load_json(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -42,13 +71,24 @@ def _load_scan_results(config: AppConfig, provider: str) -> dict[str, str]:
     return assessments
 
 
+# Keys inside a provider_ids map that are metadata flags, not provider IDs.
+# (Written there by models.set_provider_mapping; see domain/models.py.)
+# They must never be treated as model IDs.
+_PROVIDER_MAP_META_KEYS = frozenset({"include_in_litellm"})
+
+
 def _iter_provider_ids(
     provider_ids: dict[str, Any] | list[str],
 ) -> list[str]:
-    """Yield individual provider_id strings regardless of container type."""
+    """Yield individual provider_id strings regardless of container type.
+
+    Metadata flags stored alongside the IDs (e.g. ``include_in_litellm``)
+    are skipped so they can never leak into generated ``model_name``\\ s
+    as phantom models like ``gemini/include_in_litellm``.
+    """
     if isinstance(provider_ids, list):
-        return list(provider_ids)
-    return list(provider_ids.keys())
+        return [pid for pid in provider_ids if pid not in _PROVIDER_MAP_META_KEYS]
+    return [pid for pid in provider_ids.keys() if pid not in _PROVIDER_MAP_META_KEYS]
 
 
 def _derive_model_name(litellm_prefix: str, provider_id: str) -> str:
@@ -150,12 +190,7 @@ def generate_provider_yaml(
             "Check that models.json has mapped provider_ids for this provider."
         )
 
-    yaml_doc = yaml.safe_dump(
-        {"model_list": entries},
-        default_flow_style=False,
-        sort_keys=False,
-        allow_unicode=True,
-    )
+    yaml_doc = dump_litellm_yaml({"model_list": entries})
 
     if dry_run:
         return yaml_doc
