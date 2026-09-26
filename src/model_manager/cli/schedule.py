@@ -31,17 +31,17 @@ def schedule_install(
     """Install the automated schedule service/timer."""
     cfg = load_config(config)
 
-    freq_clean = frequency.lower()
-    if freq_clean not in ("daily", "hourly", "weekly"):
-        console.print(f"[yellow]Warning: Unusual frequency '{frequency}'. Supported values: daily, hourly, weekly.[/yellow]")
-
-    details = schedule.install_schedule(
-        cfg,
-        frequency=freq_clean,
-        time=time,
-        max_scans=max_scans,
-        config_path=config,
-    )
+    try:
+        details = schedule.install_schedule(
+            cfg,
+            frequency=frequency.lower(),
+            time=time,
+            max_scans=max_scans,
+            config_path=config,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     console.print("[green]Successfully installed model-manager schedule![/green]")
     console.print(f"Frequency: [cyan]{details['frequency']}[/cyan]")

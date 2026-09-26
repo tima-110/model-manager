@@ -301,73 +301,47 @@ def generate_all(
 
     Optionally builds the model cost map if --build-cost-map / --cost-map flag is set.
     """
-    from model_manager.domain import fallbacks, model_group_aliases, router_settings as rs_mod
+    from model_manager.domain import generate_all as gen_all_mod
 
     cfg = load_config(config)
-    errors: list[str] = []
+    result = gen_all_mod.run_generate_all(cfg, dry_run=dry_run)
+    errors: list[str] = list(result["errors"])
 
-    providers_to_generate = [
-        p for p, pc in cfg.providers.items()
-        if pc.keys and pc.litellm_prefix
-    ]
-    if not providers_to_generate:
+    if not result["providers"]:
         console.print("[yellow]No configured providers found with keys and litellm_prefix.[/yellow]")
     else:
-        for prov in providers_to_generate:
-            try:
-                result = yaml_gen.generate_provider_yaml(
-                    cfg, prov,
-                    dry_run=dry_run,
-                )
-                if dry_run and result:
-                    console.print(f"[bold]=== {prov} ===[/bold]")
-                    console.print(result)
-                else:
-                    console.print(f"[green]Generated config for [bold]{prov}[/bold][/green]")
-            except RuntimeError as e:
-                errors.append(f"provider '{prov}': {e}")
+        for prov in result["providers"]:
+            if not result["ok"][prov]:
+                continue
+            if dry_run and result["outputs"][prov]:
+                console.print(f"[bold]=== {prov} ===[/bold]")
+                console.print(result["outputs"][prov])
+            else:
+                console.print(f"[green]Generated config for [bold]{prov}[/bold][/green]")
 
-    try:
-        result = fallbacks.generate_fallbacks_yaml(
-            cfg,
-            dry_run=dry_run,
-        )
-        if dry_run and result:
+    if result["ok"].get("fallbacks"):
+        if dry_run and result["outputs"]["fallbacks"]:
             console.print("[bold]=== fallbacks ===[/bold]")
-            Console(emoji=False, highlight=False).print(result)
+            console.print(result["outputs"]["fallbacks"])
         elif not dry_run:
             console.print(f"[green]Generated fallbacks config to "
                           f"[bold]{cfg.litellm_fallbacks_path}[/bold][/green]")
-    except RuntimeError as e:
-        errors.append(f"fallbacks: {e}")
 
-    try:
-        result = model_group_aliases.generate_aliases_yaml(
-            cfg,
-            dry_run=dry_run,
-        )
-        if dry_run and result:
+    if result["ok"].get("aliases"):
+        if dry_run and result["outputs"]["aliases"]:
             console.print("[bold]=== aliases ===[/bold]")
-            Console(emoji=False, highlight=False).print(result)
+            Console(emoji=False, highlight=False).print(result["outputs"]["aliases"])
         elif not dry_run:
             console.print(f"[green]Generated aliases config to "
                           f"[bold]{cfg.litellm_aliases_path}[/bold][/green]")
-    except RuntimeError as e:
-        errors.append(f"aliases: {e}")
 
-    try:
-        result = rs_mod.generate_router_settings_yaml(
-            cfg,
-            dry_run=dry_run,
-        )
-        if dry_run and result:
+    if result["ok"].get("router_settings"):
+        if dry_run and result["outputs"]["router_settings"]:
             console.print("[bold]=== router_settings ===[/bold]")
-            Console(emoji=False, highlight=False).print(result)
+            Console(emoji=False, highlight=False).print(result["outputs"]["router_settings"])
         elif not dry_run:
             console.print(f"[green]Generated router_settings config to "
                           f"[bold]{cfg.litellm_router_settings_path}[/bold][/green]")
-    except RuntimeError as e:
-        errors.append(f"router_settings: {e}")
 
     if build_cost_map:
         if dry_run:

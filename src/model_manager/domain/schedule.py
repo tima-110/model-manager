@@ -1,16 +1,18 @@
 """Domain logic for CLI scheduling, service management, and pipeline execution."""
 from __future__ import annotations
 
-import os
+import shlex
 import sys
 import shutil
 import platform
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from model_manager.config import AppConfig, save_config
-from model_manager.domain import scores, providers, yaml_gen, fallbacks, model_group_aliases
+from model_manager.dashboard import generate_dashboard
+from model_manager.domain import generate_all as gen_all_mod
+from model_manager.domain import providers, restart, scores
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
 LAUNCHD_LABEL = "com.model-manager.schedule"
@@ -25,16 +27,40 @@ def _get_executable_cmd() -> str:
 
 
 def _parse_time_hh_mm(time_str: str) -> tuple[int, int]:
-    """Parse HH:MM time string into hour and minute integers."""
+    """Parse HH:MM time string into hour and minute integers.
+
+    Raises:
+        ValueError: If the string is not a valid HH:MM time.
+    """
     parts = time_str.split(":")
     if len(parts) != 2:
-        return 2, 0
+        raise ValueError(f"Invalid time '{time_str}': expected HH:MM format.")
     try:
         hour = int(parts[0])
         minute = int(parts[1])
-        return hour, minute
     except ValueError:
-        return 2, 0
+        raise ValueError(f"Invalid time '{time_str}': expected HH:MM format.") from None
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"Invalid time '{time_str}': hour must be 00-23, minute 00-59.")
+    return hour, minute
+
+
+VALID_FREQUENCIES = ("daily", "hourly", "weekly")
+
+
+def _run_service_cmd(args: list[str]) -> str | None:
+    """Run a service-manager command; return warning text on failure, else None."""
+    try:
+        proc = subprocess.run(args, capture_output=True)
+    except FileNotFoundError:
+        return f"{args[0]} not found; service step skipped"
+    except Exception as e:
+        return f"service command failed ({' '.join(args)}): {e}"
+    if proc.returncode != 0:
+        stderr = proc.stderr
+        detail = stderr.decode().strip() if isinstance(stderr, bytes) else str(stderr or "").strip()
+        return f"{' '.join(args)} failed: {detail or f'exit {proc.returncode}'}"
+    return None
 
 
 def install_schedule(
@@ -44,7 +70,16 @@ def install_schedule(
     max_scans: int = 2,
     config_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Install OS schedule service/timer and update config file."""
+    """Install OS schedule service/timer and update config file.
+
+    Raises:
+        ValueError: If frequency or time is invalid.
+    """
+    if frequency not in VALID_FREQUENCIES:
+        raise ValueError(
+            f"Invalid frequency '{frequency}'. Supported values: {', '.join(VALID_FREQUENCIES)}."
+        )
+    _parse_time_hh_mm(time)  # validate early, before writing anything
     config.schedule.enabled = True
     config.schedule.frequency = frequency
     config.schedule.time = time
@@ -53,6 +88,7 @@ def install_schedule(
 
     exec_cmd = _get_executable_cmd()
     system_type = platform.system().lower()
+    warnings: list[str] = []
     details: dict[str, Any] = {
         "enabled": True,
         "frequency": frequency,
@@ -114,11 +150,12 @@ def install_schedule(
         plist_path.write_text(plist_content)
         details["installed_files"].append(str(plist_path))
 
-        try:
-            subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
-            subprocess.run(["launchctl", "load", "-w", str(plist_path)], capture_output=True)
-        except Exception as e:
-            details["warning"] = f"launchctl execution failed: {e}"
+        warn = _run_service_cmd(["launchctl", "unload", str(plist_path)])
+        if warn:
+            warnings.append(warn)
+        warn = _run_service_cmd(["launchctl", "load", "-w", str(plist_path)])
+        if warn:
+            warnings.append(warn)
 
     else:
         # Default Linux systemd user service & timer
@@ -159,14 +196,31 @@ WantedBy=timers.target
         timer_path.write_text(timer_content)
         details["installed_files"].append(str(timer_path))
 
-        try:
-            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
-            subprocess.run(
-                ["systemctl", "--user", "enable", "--now", f"{SYSTEMD_SERVICE_NAME}.timer"],
-                capture_output=True,
+        warn = _run_service_cmd(["systemctl", "--user", "daemon-reload"])
+        if warn:
+            warnings.append(warn)
+        warn = _run_service_cmd(
+            ["systemctl", "--user", "enable", "--now", f"{SYSTEMD_SERVICE_NAME}.timer"]
+        )
+        if warn:
+            warnings.append(warn)
+
+    # The timer fires whatever executable is on PATH at run time. Verify it
+    # actually supports `schedule run` (a stale install would fail silently
+    # on every firing).
+    probe = shlex.split(exec_cmd) + ["schedule", "run", "--help"]
+    try:
+        probe_proc = subprocess.run(probe, capture_output=True)
+        if probe_proc.returncode != 0:
+            warnings.append(
+                "Installed executable does not support 'schedule run'; "
+                "reinstall model-manager, then reinstall the schedule."
             )
-        except Exception as e:
-            details["warning"] = f"systemctl execution failed: {e}"
+    except Exception as e:
+        warnings.append(f"Could not verify scheduled executable: {e}")
+
+    if warnings:
+        details["warning"] = "; ".join(warnings)
 
     return details
 
@@ -190,10 +244,7 @@ def remove_schedule(
     if system_type == "darwin":
         plist_path = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
         if plist_path.exists():
-            try:
-                subprocess.run(["launchctl", "unload", "-w", str(plist_path)], capture_output=True)
-            except Exception:
-                pass
+            _run_service_cmd(["launchctl", "unload", "-w", str(plist_path)])
             plist_path.unlink()
             details["removed_files"].append(str(plist_path))
     else:
@@ -201,17 +252,8 @@ def remove_schedule(
         service_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.service"
         timer_path = systemd_dir / f"{SYSTEMD_SERVICE_NAME}.timer"
 
-        try:
-            subprocess.run(
-                ["systemctl", "--user", "stop", f"{SYSTEMD_SERVICE_NAME}.timer"],
-                capture_output=True,
-            )
-            subprocess.run(
-                ["systemctl", "--user", "disable", f"{SYSTEMD_SERVICE_NAME}.timer"],
-                capture_output=True,
-            )
-        except Exception:
-            pass
+        _run_service_cmd(["systemctl", "--user", "stop", f"{SYSTEMD_SERVICE_NAME}.timer"])
+        _run_service_cmd(["systemctl", "--user", "disable", f"{SYSTEMD_SERVICE_NAME}.timer"])
 
         if timer_path.exists():
             timer_path.unlink()
@@ -220,10 +262,7 @@ def remove_schedule(
             service_path.unlink()
             details["removed_files"].append(str(service_path))
 
-        try:
-            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
-        except Exception:
-            pass
+        _run_service_cmd(["systemctl", "--user", "daemon-reload"])
 
     return details
 
@@ -256,10 +295,11 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     1. scores fetch
     2. scores sync
     3. providers fetch-all
-    4. providers scan-all --max-scans <max_scans>
-    5. litellm generate config --all-providers
-    6. litellm generate fallbacks
-    7. litellm generate aliases
+    4. providers scan-all (up to ``config.schedule.max_scans`` cycles)
+    5. litellm generate all (provider configs, fallbacks, aliases,
+       router_settings — same shared step as the CLI command)
+    6. litellm request-restart (signals the service to pick up new configs)
+    7. dashboard (regenerates the status page last)
     """
     results: dict[str, Any] = {"steps": [], "errors": []}
 
@@ -291,57 +331,50 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     fetch_success = 0
     for p in all_providers:
         try:
-            providers.fetch_provider_models(p, probe=False, config=config)
+            providers.run_discovery_workflow(p, config, probe=False)
             fetch_success += 1
         except Exception as e:
             results["errors"].append(f"providers fetch ({p.name}): {e}")
     results["steps"].append(f"providers fetch-all: completed for {fetch_success}/{len(all_providers)} providers")
 
-    # Step 4: providers scan-all --max-scans <max_scans>
+    # Step 4: providers scan-all (up to config.schedule.max_scans cycles)
     max_scans = config.schedule.max_scans
     scan_success = 0
     for p in all_providers:
         try:
-            providers.scan_provider_models(
-                p,
-                config=config,
-                filter_str=None,
-                only_up=False,
-                only_down=False,
-                max_scans=max_scans,
-                debug=False,
-            )
+            summary = providers.scan_provider_models(p, config, max_scans=max_scans)
             scan_success += 1
+            results["steps"].append(
+                f"providers scan ({p.name}): {summary['scanned']} models, {summary['cycles']} cycles"
+            )
         except Exception as e:
             results["errors"].append(f"providers scan ({p.name}): {e}")
     results["steps"].append(f"providers scan-all: completed for {scan_success}/{len(all_providers)} providers")
 
-    # Step 5: litellm generate config --all-providers
-    providers_to_gen = [
-        p_name for p_name, pc in config.providers.items()
-        if pc.keys and pc.litellm_prefix
-    ]
-    gen_config_count = 0
-    for prov in providers_to_gen:
-        try:
-            yaml_gen.generate_provider_yaml(config, prov, dry_run=False)
-            gen_config_count += 1
-        except Exception as e:
-            results["errors"].append(f"litellm generate config ({prov}): {e}")
-    results["steps"].append(f"litellm generate config: completed for {gen_config_count} providers")
-
-    # Step 6: litellm generate fallbacks
+    # Step 5: litellm generate all (shared with the CLI command)
     try:
-        fallbacks.generate_fallbacks_yaml(config, dry_run=False)
-        results["steps"].append("litellm generate fallbacks: success")
+        gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
+        results["steps"].extend(f"litellm {s}" for s in gen_result["steps"])
+        results["errors"].extend(f"litellm {e}" for e in gen_result["errors"])
     except Exception as e:
-        results["errors"].append(f"litellm generate fallbacks: {e}")
+        results["errors"].append(f"litellm generate all: {e}")
 
-    # Step 7: litellm generate aliases
+    # Step 6: litellm request-restart so the service picks up the new configs
     try:
-        model_group_aliases.generate_aliases_yaml(config, dry_run=False)
-        results["steps"].append("litellm generate aliases: success")
+        if results["errors"]:
+            reason = f"Scheduled pipeline completed with {len(results['errors'])} error(s)"
+        else:
+            reason = "Scheduled pipeline completed"
+        record = restart.request_restart(config, reason=reason)
+        results["steps"].append(f"litellm request-restart: logged at {record['timestamp']}")
     except Exception as e:
-        results["errors"].append(f"litellm generate aliases: {e}")
+        results["errors"].append(f"litellm request-restart: {e}")
+
+    # Step 7: dashboard (regenerated last, from the freshest data)
+    try:
+        dashboard_path = generate_dashboard(config)
+        results["steps"].append(f"dashboard: wrote {dashboard_path}")
+    except Exception as e:
+        results["errors"].append(f"dashboard: {e}")
 
     return results
