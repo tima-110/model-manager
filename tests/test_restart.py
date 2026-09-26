@@ -37,6 +37,12 @@ def test_domain_request_restart(tmp_path: Path):
     assert data2["reason"] == "CLI restart request"
 
 
+def test_default_restart_request_path():
+    """Verify the default restart request file lives alongside other LiteLLM outputs."""
+    cfg = AppConfig()
+    assert cfg.litellm_restart_request_path == Path("/etc/litellm/restart_requests.jsonl")
+
+
 def test_cli_request_restart_help():
     """Verify litellm request-restart --help works."""
     result = runner.invoke(app, ["litellm", "request-restart", "--help"])

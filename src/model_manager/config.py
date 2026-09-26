@@ -72,7 +72,7 @@ class AppConfig(BaseModel):
     litellm_aliases_path: Path = Path("/etc/litellm/litellm-aliases.yaml")
     litellm_router_settings_stub_path: Path = Path("/etc/litellm/litellm-router_settings-stub.yaml")
     litellm_router_settings_path: Path = Path("/etc/litellm/litellm-router_settings.yaml")
-    litellm_restart_request_path: Path = Path("/var/www/local_json_data/restart_requests.jsonl")
+    litellm_restart_request_path: Path = Path("/etc/litellm/restart_requests.jsonl")
     litellm_cost_map_url: str = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json"
 
     def model_post_init(self, __context: object) -> None:

@@ -4,9 +4,8 @@ from __future__ import annotations
 import getpass
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-from model_manager.config import AppConfig
+from model_manager.config import AppConfig, get_litellm_restart_request_path
 
 
 def request_restart(config: AppConfig, reason: str | None = None) -> dict[str, str]:
@@ -19,7 +18,7 @@ def request_restart(config: AppConfig, reason: str | None = None) -> dict[str, s
     Returns:
         dict: The recorded request payload.
     """
-    target_path = config.litellm_restart_request_path
+    target_path = get_litellm_restart_request_path(config)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     record: dict[str, str] = {
