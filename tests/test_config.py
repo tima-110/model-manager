@@ -29,3 +29,25 @@ def test_path_helpers(mock_config):
 
     assert scores_path.name == "model_scores.json"
     assert scores_path.parent == mock_config.data_dir
+
+
+def test_schedule_config_save_and_load(tmp_path: Path):
+    """Verify saving and loading schedule configuration."""
+    from model_manager.config import ScheduleConfig, save_config
+
+    cfg_file = tmp_path / "config.toml"
+    cfg = AppConfig(
+        schedule=ScheduleConfig(
+            enabled=True,
+            frequency="daily",
+            time="03:30",
+            max_scans=2,
+        )
+    )
+    save_config(cfg, cfg_file)
+
+    loaded = load_config(cfg_file)
+    assert loaded.schedule.enabled is True
+    assert loaded.schedule.frequency == "daily"
+    assert loaded.schedule.time == "03:30"
+    assert loaded.schedule.max_scans == 2
