@@ -162,6 +162,14 @@ def main(
     else:
         _check(rows, "LiteLLM config exists", "warn", "File not found")
 
+    # 9. LiteLLM restart request file
+    litellm_restart = cfg.litellm_restart_request_path
+    _check(rows, "LiteLLM restart log", "info", str(litellm_restart))
+    if litellm_restart.exists():
+        _check(rows, "LiteLLM restart log exists", "pass", "Exists")
+    else:
+        _check(rows, "LiteLLM restart log exists", "info", "Not present")
+
     # --- Print results ---
     table = Table(title="model-manager Health Report")
     table.add_column("Check", style="cyan", no_wrap=True)

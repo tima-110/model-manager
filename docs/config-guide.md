@@ -17,8 +17,9 @@ This document describes the configuration and data storage for `model-manager`.
 | `litellm_config_path` | Path | `/etc/litellm/litellm.yaml` | LiteLLM config file checked by `litellm config check`. |
 | `litellm_fallbacks_path` | Path | `/etc/litellm/litellm-fallbacks.yaml` | Default output for `litellm generate fallbacks`. |
 | `litellm_aliases_path` | Path | `/etc/litellm/litellm-aliases.yaml` | Default output for `litellm generate aliases`. |
-| `litellm_router_settings_stub_path` | Path | `/etc/litellm/litellm-router_settings-stub.yaml` | Hand-managed stub read by `litellm generate router_settings` (never overwritten). |
+<| `litellm_router_settings_stub_path` | Path | `/etc/litellm/litellm-router_settings-stub.yaml` | Hand-managed stub read by `litellm generate router_settings` (never overwritten). |
 | `litellm_router_settings_path` | Path | `/etc/litellm/litellm-router_settings.yaml` | Default output for `litellm generate router_settings`. |
+| `litellm_restart_request_path` | Path | `/var/www/local_json_data/restart_requests.jsonl` | File monitored by LiteLLM service for restart requests. |
 | `litellm_cost_map_url` | String | `https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json` | Source URL for the upstream cost map. |
 | `tags.tier1_min_ratio` | Float | `0.85` | Minimum composite score (as a fraction of the library leader) for Tier 1. |
 | `tags.tier2_min_ratio` | Float | `0.70` | Minimum composite score (as a fraction of the library leader) for Tier 2. |
