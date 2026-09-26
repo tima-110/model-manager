@@ -32,6 +32,14 @@ class ProviderConfig(ProviderScanConfig, ProviderOutputConfig):
     """
 
 
+class ScheduleConfig(BaseModel):
+    """Configuration for CLI run schedule."""
+    enabled: bool = False
+    frequency: str = "daily"
+    time: str = "02:00"
+    max_scans: int = 2
+
+
 class TagConfig(BaseModel):
     """Tier classification thresholds."""
     tier1_min_ratio: float = 0.85
@@ -63,6 +71,7 @@ class AppConfig(BaseModel):
     debug: bool = False
     scan_frequency: int = 5
     scan_count: int = 24
+    schedule: ScheduleConfig = ScheduleConfig()
     providers: dict[str, ProviderConfig] = {}
     tags: TagConfig = TagConfig()
     tier_providers: TierProvidersConfig = TierProvidersConfig()
@@ -98,25 +107,61 @@ def load_config(path: Path | None = None) -> AppConfig:
         raw = tomllib.load(f)
     return AppConfig(**raw)
 
+def _format_toml_val(val: object) -> str:
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, (str, Path)):
+        return f'"{val}"'
+    elif isinstance(val, list):
+        items = [_format_toml_val(item) for item in val]
+        return f"[{', '.join(items)}]"
+    return f'"{val}"'
+
+
 def save_config(config: AppConfig, path: Path | None = None) -> Path:
     """Save the current configuration to a TOML file."""
     target_path = path or find_config()
     if target_path is None:
-        # This should ideally not happen as find_config has a default
-        raise RuntimeError("Could not determine configuration path")
+        target_path = Path(platformdirs.user_config_dir("model-manager")) / "config.toml"
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Generate simple TOML content from the config model
-    lines = []
-    for key, value in config.model_dump().items():
-        if isinstance(value, Path):
-            lines.append(f'{key} = "{value}"')
-        else:
-            lines.append(f'{key} = {value}')
+    data = config.model_dump()
+    lines: list[str] = []
 
+    # Format top-level non-dict fields
+    for key, val in data.items():
+        if not isinstance(val, dict):
+            lines.append(f"{key} = {_format_toml_val(val)}")
+
+    # Format tables (dicts)
+    for key, val in data.items():
+        if isinstance(val, dict):
+            has_subdicts = any(isinstance(v, dict) for v in val.values())
+            if not has_subdicts:
+                lines.append("")
+                lines.append(f"[{key}]")
+                for sub_k, sub_v in val.items():
+                    if sub_v is not None:
+                        lines.append(f"{sub_k} = {_format_toml_val(sub_v)}")
+            else:
+                for sub_k, sub_v in val.items():
+                    if isinstance(sub_v, dict):
+                        lines.append("")
+                        lines.append(f"[{key}.{sub_k}]")
+                        for k3, v3 in sub_v.items():
+                            if v3 is not None:
+                                lines.append(f"{k3} = {_format_toml_val(v3)}")
+                    else:
+                        lines.append("")
+                        lines.append(f"[{key}]")
+                        lines.append(f"{sub_k} = {_format_toml_val(sub_v)}")
+
+    content = "\n".join(lines).strip() + "\n"
     with open(target_path, "w") as f:
-        f.write("\n".join(lines))
+        f.write(content)
 
     return target_path
 

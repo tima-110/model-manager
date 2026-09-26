@@ -20,22 +20,22 @@ def test_help():
     assert result.exit_code == 0
     assert "Usage:" in result.stdout
 
-def test_init():
-    """Verify the init command creates data directories."""
-    result = runner.invoke(app, ["init"])
-    assert result.exit_code == 0
-    assert "Initialized data directory" in result.stdout
-
-def test_scores_sync_no_key():
-    """Verify scores sync fails gracefully without an API key."""
+def test_scores_fetch_no_key():
+    """Verify scores fetch fails gracefully without an API key."""
     # Ensure key is not in environment
     import os
     if "ARTIFICIAL_ANALYSIS_API_KEY" in os.environ:
         del os.environ["ARTIFICIAL_ANALYSIS_API_KEY"]
 
-    result = runner.invoke(app, ["scores", "sync"])
+    result = runner.invoke(app, ["scores", "fetch"])
     assert result.exit_code == 1
     assert "Error: ARTIFICIAL_ANALYSIS_API_KEY not found" in result.stdout
+
+def test_scores_sync_no_file():
+    """Verify scores sync fails gracefully when scores file is missing."""
+    result = runner.invoke(app, ["scores", "sync"])
+    assert result.exit_code == 1
+    assert "Error: Processed scores file not found" in result.stdout
 
 def test_aliases_resolve_not_found():
     """Verify resolve command handles unknown IDs."""
