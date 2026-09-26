@@ -287,3 +287,102 @@ def generate_router_settings(
     elif not dry_run:
         console.print(f"[green]Generated router_settings config to "
                       f"[bold]{output or cfg.litellm_router_settings_path}[/bold][/green]")
+
+@generate_app.command("all")
+def generate_all(
+    config: Path | None = typer.Option(None, "--config", "-c",
+        help="Path to config TOML file."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="Print the generated YAML to stdout instead of writing to file."),
+    build_cost_map: bool = typer.Option(False, "--build-cost-map", "--cost-map",
+        help="Also build the LiteLLM cost map."),
+) -> None:
+    """Generate all LiteLLM configuration files (all providers, fallbacks, aliases, and router_settings).
+
+    Optionally builds the model cost map if --build-cost-map / --cost-map flag is set.
+    """
+    from model_manager.domain import fallbacks, model_group_aliases, router_settings as rs_mod
+
+    cfg = load_config(config)
+    errors: list[str] = []
+
+    providers_to_generate = [
+        p for p, pc in cfg.providers.items()
+        if pc.keys and pc.litellm_prefix
+    ]
+    if not providers_to_generate:
+        console.print("[yellow]No configured providers found with keys and litellm_prefix.[/yellow]")
+    else:
+        for prov in providers_to_generate:
+            try:
+                result = yaml_gen.generate_provider_yaml(
+                    cfg, prov,
+                    dry_run=dry_run,
+                )
+                if dry_run and result:
+                    console.print(f"[bold]=== {prov} ===[/bold]")
+                    console.print(result)
+                else:
+                    console.print(f"[green]Generated config for [bold]{prov}[/bold][/green]")
+            except RuntimeError as e:
+                errors.append(f"provider '{prov}': {e}")
+
+    try:
+        result = fallbacks.generate_fallbacks_yaml(
+            cfg,
+            dry_run=dry_run,
+        )
+        if dry_run and result:
+            console.print("[bold]=== fallbacks ===[/bold]")
+            Console(emoji=False, highlight=False).print(result)
+        elif not dry_run:
+            console.print(f"[green]Generated fallbacks config to "
+                          f"[bold]{cfg.litellm_fallbacks_path}[/bold][/green]")
+    except RuntimeError as e:
+        errors.append(f"fallbacks: {e}")
+
+    try:
+        result = model_group_aliases.generate_aliases_yaml(
+            cfg,
+            dry_run=dry_run,
+        )
+        if dry_run and result:
+            console.print("[bold]=== aliases ===[/bold]")
+            Console(emoji=False, highlight=False).print(result)
+        elif not dry_run:
+            console.print(f"[green]Generated aliases config to "
+                          f"[bold]{cfg.litellm_aliases_path}[/bold][/green]")
+    except RuntimeError as e:
+        errors.append(f"aliases: {e}")
+
+    try:
+        result = rs_mod.generate_router_settings_yaml(
+            cfg,
+            dry_run=dry_run,
+        )
+        if dry_run and result:
+            console.print("[bold]=== router_settings ===[/bold]")
+            Console(emoji=False, highlight=False).print(result)
+        elif not dry_run:
+            console.print(f"[green]Generated router_settings config to "
+                          f"[bold]{cfg.litellm_router_settings_path}[/bold][/green]")
+    except RuntimeError as e:
+        errors.append(f"router_settings: {e}")
+
+    if build_cost_map:
+        if dry_run:
+            console.print("[yellow]Skipping cost map build in dry-run mode.[/yellow]")
+        else:
+            try:
+                with console.status("[bold green]Building LiteLLM cost map...") as status:
+                    output_path = cost_map.build_local_cost_map(cfg)
+                console.print("[green]Successfully built cost map![/green]")
+                console.print(f"Output path: [cyan]{output_path}[/cyan]")
+            except Exception as e:
+                errors.append(f"cost-map: {e}")
+
+    if errors:
+        console.print("\n[red]Errors during generation:[/red]")
+        for err in errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(1)
