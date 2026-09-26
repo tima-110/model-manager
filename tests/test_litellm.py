@@ -78,11 +78,16 @@ def test_litellm_generate_all_dry_run(tmp_path: Path):
     }
     models_file.write_text(json.dumps(models_data))
 
+    stub_file = tmp_path / "stub.yaml"
+    stub_file.write_text("router_settings: {}\n")
+
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text(
         f'data_dir = "{data_dir}"\n'
         f'litellm_fallbacks_path = "{tmp_path / "fallbacks.yaml"}"\n'
         f'litellm_aliases_path = "{tmp_path / "aliases.yaml"}"\n'
+        f'litellm_router_settings_stub_path = "{stub_file}"\n'
+        f'litellm_router_settings_path = "{tmp_path / "router_settings.yaml"}"\n'
         '[providers.nvidia]\n'
         'keys = ["KEY_1"]\n'
         'litellm_prefix = "nvidia_nim"\n'
@@ -93,6 +98,7 @@ def test_litellm_generate_all_dry_run(tmp_path: Path):
     assert "=== nvidia ===" in result.stdout
     assert "=== fallbacks ===" in result.stdout or "fallbacks:" in result.stdout
     assert "=== aliases ===" in result.stdout or "model_group_alias:" in result.stdout
+    assert "=== router_settings ===" in result.stdout or "router_settings:" in result.stdout
 
 
 def test_litellm_generate_all_writes_files(tmp_path: Path):
@@ -129,12 +135,17 @@ def test_litellm_generate_all_writes_files(tmp_path: Path):
     nvidia_out = tmp_path / "litellm-nvidia.yaml"
     fallbacks_out = tmp_path / "litellm-fallbacks.yaml"
     aliases_out = tmp_path / "litellm-aliases.yaml"
+    rs_out = tmp_path / "litellm-router_settings.yaml"
+    stub_file = tmp_path / "stub.yaml"
+    stub_file.write_text("router_settings: {}\n")
 
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text(
         f'data_dir = "{data_dir}"\n'
         f'litellm_fallbacks_path = "{fallbacks_out}"\n'
         f'litellm_aliases_path = "{aliases_out}"\n'
+        f'litellm_router_settings_stub_path = "{stub_file}"\n'
+        f'litellm_router_settings_path = "{rs_out}"\n'
         '[providers.nvidia]\n'
         'keys = ["KEY_1"]\n'
         'litellm_prefix = "nvidia_nim"\n'
@@ -146,6 +157,7 @@ def test_litellm_generate_all_writes_files(tmp_path: Path):
     assert nvidia_out.exists()
     assert fallbacks_out.exists()
     assert aliases_out.exists()
+    assert rs_out.exists()
 
 
 def test_litellm_generate_all_build_cost_map(tmp_path: Path, monkeypatch):
@@ -190,10 +202,14 @@ def test_litellm_generate_all_build_cost_map(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(cost_map, "build_local_cost_map", mock_build_cost_map)
 
     cfg_file = tmp_path / "config.toml"
+    stub_file = tmp_path / "stub.yaml"
+    stub_file.write_text("router_settings: {}\n")
     cfg_file.write_text(
         f'data_dir = "{data_dir}"\n'
         f'litellm_fallbacks_path = "{tmp_path / "fallbacks.yaml"}"\n'
         f'litellm_aliases_path = "{tmp_path / "aliases.yaml"}"\n'
+        f'litellm_router_settings_stub_path = "{stub_file}"\n'
+        f'litellm_router_settings_path = "{tmp_path / "router_settings.yaml"}"\n'
         '[providers.nvidia]\n'
         'keys = ["KEY_1"]\n'
         'litellm_prefix = "nvidia_nim"\n'

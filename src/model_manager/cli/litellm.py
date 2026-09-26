@@ -287,6 +287,7 @@ def generate_router_settings(
     elif not dry_run:
         console.print(f"[green]Generated router_settings config to "
                       f"[bold]{output or cfg.litellm_router_settings_path}[/bold][/green]")
+
 @generate_app.command("all")
 def generate_all(
     config: Path | None = typer.Option(None, "--config", "-c",
@@ -296,11 +297,11 @@ def generate_all(
     build_cost_map: bool = typer.Option(False, "--build-cost-map", "--cost-map",
         help="Also build the LiteLLM cost map."),
 ) -> None:
-    """Generate all LiteLLM configuration files (all providers, fallbacks, and aliases).
+    """Generate all LiteLLM configuration files (all providers, fallbacks, aliases, and router_settings).
 
     Optionally builds the model cost map if --build-cost-map / --cost-map flag is set.
     """
-    from model_manager.domain import fallbacks, model_group_aliases
+    from model_manager.domain import fallbacks, model_group_aliases, router_settings as rs_mod
 
     cfg = load_config(config)
     errors: list[str] = []
@@ -353,6 +354,20 @@ def generate_all(
                           f"[bold]{cfg.litellm_aliases_path}[/bold][/green]")
     except RuntimeError as e:
         errors.append(f"aliases: {e}")
+
+    try:
+        result = rs_mod.generate_router_settings_yaml(
+            cfg,
+            dry_run=dry_run,
+        )
+        if dry_run and result:
+            console.print("[bold]=== router_settings ===[/bold]")
+            Console(emoji=False, highlight=False).print(result)
+        elif not dry_run:
+            console.print(f"[green]Generated router_settings config to "
+                          f"[bold]{cfg.litellm_router_settings_path}[/bold][/green]")
+    except RuntimeError as e:
+        errors.append(f"router_settings: {e}")
 
     if build_cost_map:
         if dry_run:
