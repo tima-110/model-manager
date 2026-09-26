@@ -18,6 +18,7 @@ from model_manager.config import (
     get_gemini_models_path,
     get_huggingface_models_path,
     get_litellm_cost_overrides_path,
+    get_litellm_restart_request_path,
     get_models_path,
     get_nvidia_models_path,
     get_ollama_models_path,
@@ -161,6 +162,14 @@ def main(
             has_failure = True
     else:
         _check(rows, "LiteLLM config exists", "warn", "File not found")
+
+    # 9. LiteLLM restart request file
+    litellm_restart = get_litellm_restart_request_path(cfg)
+    _check(rows, "LiteLLM restart log", "info", str(litellm_restart))
+    if litellm_restart.exists():
+        _check(rows, "LiteLLM restart log exists", "pass", "Exists")
+    else:
+        _check(rows, "LiteLLM restart log exists", "info", "Not present")
 
     # --- Print results ---
     table = Table(title="model-manager Health Report")

@@ -144,7 +144,8 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 | `litellm generate config [PROVIDER]` | Generate LiteLLM YAML for one provider, or all with `--all-providers` | `[PROVIDER]` (`nvidia`, `gemini`, `ollama`, `openrouter`, `huggingface`); `--config`, `--output/-o`, `--dry-run`, `--all-providers` |
 | `litellm generate fallbacks` | Generate fallbacks YAML from tier tags and provider scans | `--config`, `--output/-o`, `--dry-run`, `--limit` (default `5`) |
 | `litellm generate aliases` | Generate `model_group_alias` YAML (tier1/2/3) from tier tags and per-tier provider order | `--config`, `--output/-o`, `--dry-run` |
-| `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
+<| `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
+| `litellm request-restart` | Request a restart of the LiteLLM service by logging a request entry | `--config`, `--reason/-r` |
 
 ### `dashboard` — Generate a status dashboard
 

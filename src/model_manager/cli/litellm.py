@@ -8,7 +8,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from model_manager.config import load_config
+from model_manager.config import get_litellm_restart_request_path, load_config
 from model_manager.domain import cost_map, yaml_gen
 from .common import console
 
@@ -21,6 +21,24 @@ litellm_app.add_typer(config_app, name="config")
 # Group for cost-map operations
 cost_map_app = typer.Typer(help="Build and manage the model cost and context map.")
 litellm_app.add_typer(cost_map_app, name="cost-map")
+
+@litellm_app.command("request-restart")
+def request_restart(
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to custom config.toml"),
+    reason: Optional[str] = typer.Option(None, "--reason", "-r", help="Reason for requesting service restart."),
+) -> None:
+    """Request a restart of the LiteLLM service by logging a request entry."""
+    from model_manager.domain import restart
+
+    cfg = load_config(config)
+    try:
+        record = restart.request_restart(cfg, reason=reason)
+        console.print("[green]Successfully logged restart request for LiteLLM service.[/green]")
+        console.print(f"File: [cyan]{get_litellm_restart_request_path(cfg)}[/cyan]")
+        console.print(f"Timestamp: [bold]{record['timestamp']}[/bold]")
+    except Exception as e:
+        console.print(f"[red]Error requesting restart: {e}[/red]")
+        raise typer.Exit(1)
 
 @config_app.command("check")
 def config_check(
