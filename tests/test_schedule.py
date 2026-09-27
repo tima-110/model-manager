@@ -24,7 +24,11 @@ def test_install_schedule_linux(tmp_path: Path):
 
     with patch("platform.system", return_value="Linux"), \
          patch("pathlib.Path.home", return_value=tmp_path), \
-         patch("subprocess.run") as mock_sub:
+         patch("subprocess.run") as mock_sub, \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=3,
+         ) as mock_export:
 
         details = schedule.install_schedule(
             cfg,
@@ -38,13 +42,20 @@ def test_install_schedule_linux(tmp_path: Path):
         assert details["frequency"] == "daily"
         assert details["time"] == "03:15"
         assert details["max_scans"] == 2
+        mock_export.assert_called_once()
 
         service_file = tmp_path / ".config" / "systemd" / "user" / "model-manager-schedule.service"
         timer_file = tmp_path / ".config" / "systemd" / "user" / "model-manager-schedule.timer"
 
         assert service_file.exists()
         assert timer_file.exists()
+        service_text = service_file.read_text()
         assert "OnCalendar=*-*-* 03:15:00" in timer_file.read_text()
+        assert f"WorkingDirectory={tmp_path}" in service_text
+        assert "EnvironmentFile=-" in service_text
+        assert "schedule run --env-file" in service_text
+        env_path = str(tmp_path / ".config" / "systemd" / "user" / "model-manager-schedule.env")
+        assert env_path in details["installed_files"]
         assert mock_sub.called
 
         # Verify config saved
@@ -60,7 +71,11 @@ def test_install_schedule_macos(tmp_path: Path):
 
     with patch("platform.system", return_value="Darwin"), \
          patch("pathlib.Path.home", return_value=tmp_path), \
-         patch("subprocess.run") as mock_sub:
+         patch("subprocess.run") as mock_sub, \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=1,
+         ):
 
         details = schedule.install_schedule(
             cfg,
@@ -76,6 +91,8 @@ def test_install_schedule_macos(tmp_path: Path):
         plist_content = plist_file.read_text()
         assert "com.model-manager.schedule" in plist_content
         assert "<integer>4</integer>" in plist_content
+        assert f"<string>{tmp_path}</string>" in plist_content
+        assert "--env-file" in plist_content
 
 
 def test_remove_schedule_linux(tmp_path: Path):
@@ -86,8 +103,10 @@ def test_remove_schedule_linux(tmp_path: Path):
     service_dir.mkdir(parents=True, exist_ok=True)
     service_file = service_dir / "model-manager-schedule.service"
     timer_file = service_dir / "model-manager-schedule.timer"
+    env_file = service_dir / "model-manager-schedule.env"
     service_file.write_text("[Unit]")
     timer_file.write_text("[Unit]")
+    env_file.write_text("K=V\n")
 
     with patch("platform.system", return_value="Linux"), \
          patch("pathlib.Path.home", return_value=tmp_path), \
@@ -98,6 +117,7 @@ def test_remove_schedule_linux(tmp_path: Path):
         assert details["enabled"] is False
         assert not service_file.exists()
         assert not timer_file.exists()
+        assert not env_file.exists()
 
         reloaded = load_config(cfg_file)
         assert reloaded.schedule.enabled is False
@@ -118,6 +138,28 @@ def test_get_schedule_status(tmp_path: Path):
         assert status["time"] == "01:00"
         assert status["max_scans"] == 2
         assert status["service_installed"] is False
+
+
+def test_get_executable_cmd_prefers_binary():
+    with patch("shutil.which", return_value="/usr/local/bin/model-manager"):
+        assert schedule._get_executable_cmd() == "/usr/local/bin/model-manager"
+
+
+def test_get_executable_cmd_fallback_boots_cli():
+    """The no-binary fallback must name a module path that actually boots the CLI."""
+    import shlex
+    import subprocess
+    import sys
+
+    with patch("shutil.which", return_value=None):
+        cmd = schedule._get_executable_cmd()
+    assert cmd == f"{sys.executable} -m model_manager"
+
+    proc = subprocess.run(
+        shlex.split(cmd) + ["--help"], capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0
+    assert "Usage" in proc.stdout
 
 
 def _fake_provider(name: str = "NVIDIA") -> MagicMock:
@@ -171,6 +213,15 @@ def test_execute_schedule_pipeline(tmp_path: Path):
         mock_dash.assert_called_once()
         assert any(s.startswith("dashboard: wrote") for s in res["steps"])
         assert res["errors"] == []
+
+        # run record appended, restart file untouched by status tracking
+        import json as _json
+
+        run_log = tmp_path / "schedule_runs.jsonl"
+        assert run_log.exists()
+        record = _json.loads(run_log.read_text().strip().split("\n")[-1])
+        assert record["error_count"] == 0
+        assert "scores fetch: success" in record["steps"]
 
 
 def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
@@ -299,7 +350,11 @@ def test_cli_schedule_commands(tmp_path: Path):
 
     # Test CLI schedule install
     with patch("pathlib.Path.home", return_value=tmp_path), \
-         patch("subprocess.run"):
+         patch("subprocess.run"), \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=2,
+         ):
         result = runner.invoke(app, ["schedule", "install", "-f", "daily", "-t", "03:00", "-m", "2", "-c", str(cfg_file)])
         assert result.exit_code == 0
         assert "Successfully installed model-manager schedule!" in result.stdout
@@ -310,11 +365,36 @@ def test_cli_schedule_commands(tmp_path: Path):
     assert "Schedule Configuration & Status" in result.stdout
     assert "daily" in result.stdout
 
-    # Test CLI schedule run
+    # Test CLI schedule run (clean)
     with patch("model_manager.domain.schedule.execute_schedule_pipeline", return_value={"steps": ["step1"], "errors": []}):
         result = runner.invoke(app, ["schedule", "run", "-c", str(cfg_file)])
         assert result.exit_code == 0
         assert "Scheduled pipeline completed successfully." in result.stdout
+
+    # Test CLI schedule run (errors -> exit 1)
+    with patch(
+        "model_manager.domain.schedule.execute_schedule_pipeline",
+        return_value={"steps": ["step1"], "errors": ["boom"]},
+    ):
+        result = runner.invoke(app, ["schedule", "run", "-c", str(cfg_file)])
+        assert result.exit_code == 1
+        assert "boom" in result.stdout
+
+    # Test CLI schedule run --env-file loads secrets first
+    env_file = tmp_path / "svc.env"
+    env_file.write_text("SCHED_TEST_ONLY_KEY=from-file\n")
+    with patch(
+        "model_manager.domain.schedule.execute_schedule_pipeline",
+        return_value={"steps": [], "errors": []},
+    ):
+        result = runner.invoke(
+            app, ["schedule", "run", "-c", str(cfg_file), "--env-file", str(env_file)]
+        )
+        assert result.exit_code == 0
+    import os as _os
+
+    assert _os.environ.get("SCHED_TEST_ONLY_KEY") == "from-file"
+    del _os.environ["SCHED_TEST_ONLY_KEY"]
 
     # Test CLI schedule remove
     with patch("pathlib.Path.home", return_value=tmp_path), \

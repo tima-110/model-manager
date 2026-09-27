@@ -87,8 +87,19 @@ def schedule_status(
 @schedule_app.command("run")
 def schedule_run(
     config: Path | None = typer.Option(None, "--config", "-c"),
+    env_file: Path | None = typer.Option(None, "--env-file",
+        help="Load secrets from this env file before running (service uses it; interactive runs use the keychain)."),
 ) -> None:
     """Execute the full model-manager schedule pipeline immediately."""
+    if env_file is not None:
+        from model_manager.domain import service_env as service_env_mod
+
+        if env_file.exists():
+            loaded = service_env_mod.load_env_file(env_file)
+            console.print(f"[dim]Loaded {loaded} secrets from {env_file}[/dim]")
+        else:
+            console.print(f"[yellow]Warning: env file not found at {env_file}; using keychain.[/yellow]")
+
     cfg = load_config(config)
     console.print("[bold green]Starting scheduled pipeline execution...[/bold green]")
 
@@ -101,5 +112,6 @@ def schedule_run(
         console.print("\n[yellow]Warnings/Errors during schedule execution:[/yellow]")
         for err in results["errors"]:
             console.print(f"  [red]![/red] {err}")
+        raise typer.Exit(1)
     else:
         console.print("[bold green]Scheduled pipeline completed successfully.[/bold green]")

@@ -1,11 +1,13 @@
 """Domain logic for CLI scheduling, service management, and pipeline execution."""
 from __future__ import annotations
 
+import json
 import shlex
 import sys
 import shutil
 import platform
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,7 @@ from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
 from model_manager.domain import generate_all as gen_all_mod
 from model_manager.domain import providers, restart, scores
+from model_manager.domain import service_env as service_env_mod
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
 LAUNCHD_LABEL = "com.model-manager.schedule"
@@ -23,7 +26,9 @@ def _get_executable_cmd() -> str:
     mm_bin = shutil.which("model-manager")
     if mm_bin:
         return mm_bin
-    return f"{sys.executable} -m model_manager.main"
+    # NOTE: `model_manager.main` only defines main(); `-m model_manager`
+    # routes through __main__.py which actually calls it.
+    return f"{sys.executable} -m model_manager"
 
 
 def _parse_time_hh_mm(time_str: str) -> tuple[int, int]:
@@ -99,6 +104,20 @@ def install_schedule(
         "status": "installed",
     }
 
+    # Export keychain secrets for the service. The timer may fire without a
+    # login session (locked keyring), so scheduled runs read secrets from
+    # this file instead. Interactive use keeps the keychain path.
+    env_path = service_env_mod.default_service_env_path()
+    try:
+        exported = service_env_mod.export_keyring_to_env(env_path)
+        details["installed_files"].append(str(env_path))
+        details["env_keys"] = exported
+    except Exception as e:
+        warnings.append(
+            f"Could not export keyring to {env_path}: {e}; "
+            "scheduled runs will fall back to the keychain"
+        )
+
     if system_type == "darwin":
         # macOS launchd plist
         hour, minute = _parse_time_hh_mm(time)
@@ -121,7 +140,11 @@ def install_schedule(
                 plist_content += f"        <string>{arg}</string>\n"
         plist_content += """        <string>schedule</string>
         <string>run</string>
+        <string>--env-file</string>
+        <string>""" + str(env_path) + """</string>
     </array>
+    <key>WorkingDirectory</key>
+    <string>""" + str(config.data_dir) + """</string>
     <key>StartCalendarInterval</key>
     <dict>
 """
@@ -171,7 +194,9 @@ Description=Model Manager Scheduled Task
 
 [Service]
 Type=oneshot
-ExecStart={exec_cmd} schedule run
+WorkingDirectory={config.data_dir}
+EnvironmentFile=-{env_path}
+ExecStart={exec_cmd} schedule run --env-file {env_path}
 """
         service_path.write_text(service_content)
         details["installed_files"].append(str(service_path))
@@ -264,6 +289,13 @@ def remove_schedule(
 
         _run_service_cmd(["systemctl", "--user", "daemon-reload"])
 
+    # The env file holds secrets: remove it on uninstall. (Not recorded as
+    # an error if already absent.)
+    env_path = service_env_mod.default_service_env_path()
+    if env_path.exists():
+        env_path.unlink()
+        details["removed_files"].append(str(env_path))
+
     return details
 
 
@@ -300,6 +332,10 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
        router_settings — same shared step as the CLI command)
     6. litellm request-restart (signals the service to pick up new configs)
     7. dashboard (regenerates the status page last)
+
+    Every run appends a record to ``data_dir/schedule_runs.jsonl`` with its
+    steps and errors. The restart-request file is left untouched: it is
+    consumed by the LiteLLM-side watcher, where every line means restart.
     """
     results: dict[str, Any] = {"steps": [], "errors": []}
 
@@ -377,4 +413,29 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     except Exception as e:
         results["errors"].append(f"dashboard: {e}")
 
+    # Record the run. Kept separate from the restart-request file, which an
+    # external watcher consumes line-by-line as restart orders.
+    _record_schedule_run(config, results)
+
     return results
+
+
+def _record_schedule_run(config: AppConfig, results: dict[str, Any]) -> Path | None:
+    """Append a per-run record to data_dir/schedule_runs.jsonl.
+
+    Returns the log path, or None if recording failed (never raises; a
+    status write must not fail the pipeline it reports on).
+    """
+    record = {
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "steps": results.get("steps", []),
+        "errors": results.get("errors", []),
+        "error_count": len(results.get("errors", [])),
+    }
+    try:
+        log_path = config.data_dir / "schedule_runs.jsonl"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+        return log_path
+    except Exception:
+        return None
