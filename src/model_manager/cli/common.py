@@ -2,11 +2,8 @@
 from __future__ import annotations
 
 import json
-import time
 import typer
-from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict
 from enum import Enum
 from rich.console import Console
 from rich.table import Table
@@ -14,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.live import Live
 
 from model_manager.config import load_config
-from model_manager.domain import discovery, auth, models, providers
+from model_manager.domain import auth, providers
 
 console = Console()
 
@@ -67,6 +64,20 @@ def _run_discovery_cli_workflow(provider, probe: bool, config: Path | None, json
     except Exception as e:
         console.print(f"[red]Error during {provider.name} discovery: {e}[/red]")
 
+def _assessment_color(label: str) -> str:
+    """Map a scan assessment label to a display color."""
+    return {
+        "Good": "green",
+        "Slow": "yellow",
+        "Unauthorized": "magenta",
+        "Not Found": "red",
+        "Ratelimited": "yellow",
+        "Dead": "red",
+        "Unsupported": "cyan",
+        "Unknown": "white",
+    }.get(label, "yellow")
+
+
 def _run_scan_cli_workflow(
     provider,
     config: Path | None,
@@ -91,27 +102,10 @@ def _run_scan_cli_workflow(
         console.print(f"[red]Error: Provider cache not found at {cache_path}. Please run 'fetch' first.[/red]")
         raise typer.Exit(1)
 
-    with open(cache_path, "r") as f:
-        cache_data = json.load(f)
-        all_models = cache_data.get("models", [])
-
-        if filter_str:
-            model_ids = [
-                m["id"] for m in all_models
-                if filter_str.lower() in m["id"].lower() or filter_str.lower() in m.get("name", "").lower()
-            ]
-        else:
-            model_ids = [m["id"] for m in all_models]
-
-    if not model_ids:
-        console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
-        return
-
-    # State tracking
-    history: Dict[str, List[discovery.PingResult]] = {mid: [] for mid in model_ids}
-    debug_logs = []
-    cycle_count = 0
-    max_cycles = max_scans if max_scans is not None else cfg.scan_count
+    live = None
+    if not json_output:
+        live = Live(console=console, refresh_per_second=4)
+        live.start()
 
     def get_status_color(status: str) -> str:
         if status == "up": return "green"
@@ -120,134 +114,57 @@ def _run_scan_cli_workflow(
         if status == "unsupported": return "cyan"
         return "red"
 
-    def calculate_assessment(results: List[discovery.PingResult]) -> tuple[str, str]:
-        """Returns (assessment_label, color).
+    def on_cycle(cycle_count, results, history):
+        if json_output:
+            return
+        table = Table(title=f"Health Scan: {provider.name} (Cycle {cycle_count})")
+        table.add_column("Model ID", style="cyan")
+        table.add_column("Status", justify="center")
+        table.add_column("Latency (ms)", justify="right")
+        table.add_column("Avg Latency", justify="right")
 
-        Excludes 'unsupported' results from availability calculation
-        since those models can't be probed via this scan method.
-        """
-        if not results: return ("Unknown", "white")
+        for mid, res in results.items():
+            if not res: continue
+            if only_up and res.status != "up": continue
+            if only_down and res.status == "up": continue
 
-        relevant = [r for r in results if r.status != "unsupported"]
-        if not relevant:
-            return ("Unsupported", "cyan")
+            m_hist = history.get(mid, [])
+            successes = [r.latency_ms for r in m_hist if r.status == "up"]
+            avg_lat = sum(successes)/len(successes) if successes else 0
+            status_text = res.status if res else "Unknown"
+            color = get_status_color(status_text)
+            lat_text = f"{res.latency_ms:.1f}" if res else "N/A"
 
-        successes = [r for r in relevant if r.status == "up"]
-        avail = len(successes) / len(relevant)
-
-        if avail > 0.9:
-            avg_lat = sum(r.latency_ms for r in successes) / len(successes)
-            if avg_lat < 1000: return ("Good", "green")
-            return ("Slow", "yellow")
-
-        counts = {}
-        for r in relevant: counts[r.status] = counts.get(r.status, 0) + 1
-        dominant = max(counts, key=counts.get)
-
-        if dominant in ("unauthorized", "forbidden"): return ("Unauthorized", "magenta")
-        if dominant == "not_found": return ("Not Found", "red")
-        if dominant == "ratelimit": return ("Ratelimited", "yellow")
-        if dominant in ("down", "timeout"): return ("Dead", "red")
-        return ("Weak", "yellow")
-
-    # Provider-specific scan tuning
-    prov_cfg = cfg.providers.get(provider.name.lower(), {})
-    scan_concurrency = prov_cfg.scan_concurrency if prov_cfg.scan_concurrency is not None else provider.scan_concurrency
-    scan_delay = prov_cfg.scan_delay_between_models_ms if prov_cfg.scan_delay_between_models_ms is not None else provider.scan_delay_between_models_ms
-    cycle_delay = prov_cfg.cycle_delay_sec if prov_cfg.cycle_delay_sec is not None else provider.cycle_delay_sec if provider.cycle_delay_sec is not None else cfg.scan_frequency
+            table.add_row(mid, f"[{color}]{status_text}[/{color}]", lat_text, f"{avg_lat:.1f}" if successes else "N/A")
+        live.update(table)
 
     try:
-        live = None
-        if not json_output:
-            live = Live(console=console, refresh_per_second=4)
-            live.start()
-
-        while True:
-            cycle_count += 1
-            results = discovery.scan_models(provider.probe_id, api_key or "", model_ids, concurrency=scan_concurrency, delay_between_models_ms=scan_delay, debug=debug)
-
-            if debug:
-                for mid, res in results.items():
-                    if res and res.debug_info:
-                        debug_logs.append({
-                            "cycle": cycle_count,
-                            "model_id": mid,
-                            "debug": res.debug_info
-                        })
-
-            if not json_output:
-                table = Table(title=f"Health Scan: {provider.name} (Cycle {cycle_count})")
-                table.add_column("Model ID", style="cyan")
-                table.add_column("Status", justify="center")
-                table.add_column("Latency (ms)", justify="right")
-                table.add_column("Avg Latency", justify="right")
-
-                for mid in model_ids:
-                    res = results.get(mid)
-                    if not res: continue
-                    if only_up and res.status != "up": continue
-                    if only_down and res.status == "up": continue
-                    if res: history[mid].append(res)
-
-                    m_hist = history[mid]
-                    successes = [r.latency_ms for r in m_hist if r.status == "up"]
-                    avg_lat = sum(successes)/len(successes) if successes else 0
-                    status_text = res.status if res else "Unknown"
-                    color = get_status_color(status_text)
-                    lat_text = f"{res.latency_ms:.1f}" if res else "N/A"
-
-                    table.add_row(mid, f"[{color}]{status_text}[/{color}]", lat_text, f"{avg_lat:.1f}" if successes else "N/A")
-                live.update(table)
-            else:
-                for mid in model_ids:
-                    res = results.get(mid)
-                    if res:
-                        if only_up and res.status != "up": continue
-                        if only_down and res.status == "up": continue
-                        history[mid].append(res)
-
-            if max_cycles > 0 and cycle_count >= max_cycles:
-                break
-            time.sleep(cycle_delay)
-        if live: live.stop()
+        summary = providers.scan_provider_models(
+            provider, cfg,
+            max_scans=max_scans,
+            filter_str=filter_str,
+            only_up=only_up,
+            only_down=only_down,
+            debug=debug,
+            on_cycle=on_cycle,
+        )
     except KeyboardInterrupt:
         if not json_output: console.print("\n[yellow]Scan halted by user.[/yellow]")
         if live: live.stop()
+        return
+    if live: live.stop()
 
-    if debug and debug_logs:
-        debug_data = {
-            "metadata": {
-                "provider": provider.name,
-                "cycles": cycle_count,
-                "timestamp": datetime.utcnow().isoformat()
-            },
-            "logs": debug_logs
-        }
-        debug_json = json.dumps(debug_data, indent=2)
+    if summary["scanned"] == 0:
+        console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
+        return
 
-        # Output to stdout
-        console.print("\n[bold cyan]Debug Scan Logs[/bold cyan]")
-        console.print(debug_json)
+    final_results_data = summary["results"]
 
-        # Output to file
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        debug_file = cfg.data_dir / f"debug_scan_{provider.name.lower()}_{ts}.json"
-        debug_file.write_text(debug_json)
-        console.print(f"[dim]Debug logs saved to {debug_file}[/dim]")
-
-    final_results_data = {"metadata": {"provider": provider.name, "cycles": cycle_count, "timestamp": datetime.utcnow().isoformat()}, "models": {}}
-
-    for mid in model_ids:
-        m_hist = history[mid]
-        relevant = [r for r in m_hist if r.status != "unsupported"]
-        successes = [r for r in relevant if r.status == "up"]
-        avail = len(successes) / len(relevant) if relevant else 0
-        avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
-        label, color = calculate_assessment(m_hist)
-        final_results_data["models"][mid] = {
-            "history": [vars(r) for r in m_hist],
-            "summary": {"availability": avail, "avg_latency": avg_lat, "assessment": label}
-        }
+    if debug:
+        debug_file = summary["debug_file"]
+        if debug_file:
+            console.print("\n[bold cyan]Debug Scan Logs[/bold cyan]")
+            console.print(f"[dim]Debug logs saved to {debug_file}[/dim]")
 
     if json_output:
         console.print(json.dumps(final_results_data, indent=2))
@@ -259,32 +176,16 @@ def _run_scan_cli_workflow(
         summary_table.add_column("Avg Latency", justify="right")
         summary_table.add_column("Assessment", justify="center")
 
-        for mid in model_ids:
-            m_hist = history[mid]
-            relevant = [r for r in m_hist if r.status != "unsupported"]
-            successes = [r for r in relevant if r.status == "up"]
-            avail = len(successes) / len(relevant) if relevant else 0
-            avg_lat = sum(r.latency_ms for r in successes) / len(successes) if successes else 0
-            label, color = calculate_assessment(m_hist)
-            summary_table.add_row(mid, f"{avail:.1%}", f"{avg_lat:.1f}ms" if successes else "N/A", f"[{color}]{label}[/{color}]")
+        for mid, scan_data in final_results_data["models"].items():
+            s = scan_data["summary"]
+            successes = s["availability"] > 0
+            color = _assessment_color(s["assessment"])
+            summary_table.add_row(mid, f"{s['availability']:.1%}", f"{s['avg_latency']:.1f}ms" if successes else "N/A", f"[{color}]{s['assessment']}[/{color}]")
         console.print(summary_table)
 
-    models_data = models.storage.load_models_data(cfg)
-    updated = False
-    for mid, scan_data in final_results_data["models"].items():
-        summary = scan_data["summary"]
-        for model_id, model_info in models_data.get("models", {}).items():
-            for variant_id, variant_info in model_info.get("variants", {}).items():
-                for prov, pids in variant_info.get("provider_ids", {}).items():
-                    if prov.lower() == provider.name.lower():
-                        if isinstance(pids, dict) and mid in pids:
-                            pids[mid].update({"availability": summary["availability"], "avg_latency": summary["avg_latency"], "assessment": summary["assessment"], "scan_timestamp": final_results_data["metadata"]["timestamp"]})
-                            updated = True
-    if updated:
-        models.storage.save_models_data(cfg, models_data)
+    if summary["models_updated"]:
         if not json_output: console.print(f"[dim]Updated mapped models in models.json with current health data[/dim]")
 
-    discovery.save_scan_results(cfg, provider.name, final_results_data)
     if not json_output: console.print(f"\n[dim]Results saved to {cfg.data_dir}/{provider.name.lower()}_scan.json[/dim]")
 
 def _version_callback(value: bool) -> None:

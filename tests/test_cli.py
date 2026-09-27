@@ -31,6 +31,12 @@ def test_scores_fetch_no_key():
     assert result.exit_code == 1
     assert "Error: ARTIFICIAL_ANALYSIS_API_KEY not found" in result.stdout
 
+def test_scores_sync_no_file():
+    """Verify scores sync fails gracefully when scores file is missing."""
+    result = runner.invoke(app, ["scores", "sync"])
+    assert result.exit_code == 1
+    assert "Error: Processed scores file not found" in result.stdout
+
 def test_aliases_resolve_not_found():
     """Verify resolve command handles unknown IDs."""
     result = runner.invoke(app, ["aliases", "resolve", "unknown-model"])
