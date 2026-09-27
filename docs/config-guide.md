@@ -25,6 +25,7 @@ This document describes the configuration and data storage for `model-manager`.
 | `tags.tier2_min_ratio` | Float | `0.70` | Minimum composite score (as a fraction of the library leader) for Tier 2. |
 | `schedule.enabled` | Boolean | `false` | Set by `schedule install` / `schedule remove`; whether the background schedule is active. |
 | `schedule.frequency` | String | `"daily"` | One of `daily`, `hourly`, `weekly`. |
+| `schedule.day` | String | `"monday"` | Day of week for `weekly` frequency (name or abbreviation). |
 | `schedule.time` | String | `"02:00"` | Firing time in `HH:MM` (daily/weekly; hourly uses the minute). |
 | `schedule.max_scans` | Integer | `2` | Scan cycles per provider per scheduled run. |
 

@@ -162,6 +162,91 @@ def test_get_executable_cmd_fallback_boots_cli():
     assert "Usage" in proc.stdout
 
 
+def test_parse_weekday():
+    assert schedule.parse_weekday("monday") == 0
+    assert schedule.parse_weekday("Saturday") == 5
+    assert schedule.parse_weekday("sat") == 5
+    assert schedule.parse_weekday("SUN") == 6
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="Invalid day"):
+        schedule.parse_weekday("funday")
+
+
+def test_install_weekly_saturday_linux(tmp_path: Path):
+    cfg = AppConfig(data_dir=tmp_path)
+    cfg_file = tmp_path / "config.toml"
+
+    with patch("platform.system", return_value="Linux"), \
+         patch("pathlib.Path.home", return_value=tmp_path), \
+         patch("subprocess.run"), \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=1,
+         ):
+        details = schedule.install_schedule(
+            cfg, frequency="weekly", day="saturday", time="02:00",
+            config_path=cfg_file,
+        )
+
+    assert details["day"] == "saturday"
+    timer_text = (tmp_path / ".config" / "systemd" / "user" / "model-manager-schedule.timer").read_text()
+    assert "OnCalendar=Sat *-*-* 02:00:00" in timer_text
+
+    reloaded = load_config(cfg_file)
+    assert reloaded.schedule.frequency == "weekly"
+    assert reloaded.schedule.day == "saturday"
+
+
+def test_install_weekly_saturday_macos_weekday(tmp_path: Path):
+    cfg = AppConfig(data_dir=tmp_path)
+    cfg_file = tmp_path / "config.toml"
+
+    with patch("platform.system", return_value="Darwin"), \
+         patch("pathlib.Path.home", return_value=tmp_path), \
+         patch("subprocess.run"), \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=1,
+         ):
+        schedule.install_schedule(
+            cfg, frequency="weekly", day="sat", time="02:00",
+            config_path=cfg_file,
+        )
+
+    plist_text = (tmp_path / "Library" / "LaunchAgents" / "com.model-manager.schedule.plist").read_text()
+    assert "<key>Weekday</key>\n        <integer>6</integer>" in plist_text
+
+
+def test_install_rejects_bad_day(tmp_path: Path):
+    import pytest as _pytest
+
+    cfg = AppConfig(data_dir=tmp_path)
+    with _pytest.raises(ValueError, match="Invalid day"):
+        schedule.install_schedule(cfg, frequency="weekly", day="someday",
+                                  config_path=tmp_path / "config.toml")
+
+
+def test_cli_install_weekly_reports_day(tmp_path: Path):
+    cfg_file = tmp_path / "config.toml"
+    with patch("pathlib.Path.home", return_value=tmp_path), \
+         patch("subprocess.run"), \
+         patch(
+             "model_manager.domain.service_env.export_keyring_to_env",
+             return_value=1,
+         ):
+        result = runner.invoke(app, [
+            "schedule", "install", "-f", "weekly", "-d", "saturday",
+            "-t", "02:00", "-c", str(cfg_file),
+        ])
+    assert result.exit_code == 0
+    assert "saturday" in result.stdout
+
+    result = runner.invoke(app, ["schedule", "status", "-c", str(cfg_file)])
+    assert result.exit_code == 0
+    assert "saturday" in result.stdout
+
+
 def _fake_provider(name: str = "NVIDIA") -> MagicMock:
     provider = MagicMock()
     provider.name = name

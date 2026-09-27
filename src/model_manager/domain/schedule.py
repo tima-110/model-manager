@@ -52,6 +52,28 @@ def _parse_time_hh_mm(time_str: str) -> tuple[int, int]:
 
 VALID_FREQUENCIES = ("daily", "hourly", "weekly")
 
+# Canonical weekday order (Python convention: Monday=0 .. Sunday=6).
+WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+WEEKDAY_ABBREVS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+SYSTEMD_ABBREVS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def parse_weekday(day: str) -> int:
+    """Parse a weekday name or abbreviation into 0=Monday .. 6=Sunday.
+
+    Raises:
+        ValueError: If the day is not recognized.
+    """
+    clean = day.strip().lower()
+    if clean in WEEKDAYS:
+        return WEEKDAYS.index(clean)
+    if clean in WEEKDAY_ABBREVS:
+        return WEEKDAY_ABBREVS.index(clean)
+    raise ValueError(
+        f"Invalid day '{day}'. Use a weekday name (e.g. saturday) or "
+        f"abbreviation ({', '.join(WEEKDAY_ABBREVS)})."
+    )
+
 
 def _run_service_cmd(args: list[str]) -> str | None:
     """Run a service-manager command; return warning text on failure, else None."""
@@ -71,6 +93,7 @@ def _run_service_cmd(args: list[str]) -> str | None:
 def install_schedule(
     config: AppConfig,
     frequency: str = "daily",
+    day: str = "monday",
     time: str = "02:00",
     max_scans: int = 2,
     config_path: Path | None = None,
@@ -78,15 +101,17 @@ def install_schedule(
     """Install OS schedule service/timer and update config file.
 
     Raises:
-        ValueError: If frequency or time is invalid.
+        ValueError: If frequency, day, or time is invalid.
     """
     if frequency not in VALID_FREQUENCIES:
         raise ValueError(
             f"Invalid frequency '{frequency}'. Supported values: {', '.join(VALID_FREQUENCIES)}."
         )
+    weekday = parse_weekday(day)
     _parse_time_hh_mm(time)  # validate early, before writing anything
     config.schedule.enabled = True
     config.schedule.frequency = frequency
+    config.schedule.day = WEEKDAYS[weekday]
     config.schedule.time = time
     config.schedule.max_scans = max_scans
     save_config(config, config_path)
@@ -97,6 +122,7 @@ def install_schedule(
     details: dict[str, Any] = {
         "enabled": True,
         "frequency": frequency,
+        "day": WEEKDAYS[weekday],
         "time": time,
         "max_scans": max_scans,
         "os": system_type,
@@ -153,8 +179,10 @@ def install_schedule(
         <integer>{minute}</integer>
 """
         elif frequency == "weekly":
+            # launchd Weekday uses tm_wday convention (Sunday=0 .. Saturday=6).
+            launchd_weekday = (weekday + 1) % 7
             plist_content += f"""        <key>Weekday</key>
-        <integer>1</integer>
+        <integer>{launchd_weekday}</integer>
         <key>Hour</key>
         <integer>{hour}</integer>
         <key>Minute</key>
@@ -204,7 +232,7 @@ ExecStart={exec_cmd} schedule run --env-file {env_path}
         if frequency == "hourly":
             on_calendar = f"*-*-* *:{minute:02d}:00"
         elif frequency == "weekly":
-            on_calendar = f"Mon *-*-* {hour:02d}:{minute:02d}:00"
+            on_calendar = f"{SYSTEMD_ABBREVS[weekday]} *-*-* {hour:02d}:{minute:02d}:00"
         else:  # daily
             on_calendar = f"*-*-* {hour:02d}:{minute:02d}:00"
 
@@ -305,6 +333,7 @@ def get_schedule_status(config: AppConfig) -> dict[str, Any]:
     status_info: dict[str, Any] = {
         "enabled": config.schedule.enabled,
         "frequency": config.schedule.frequency,
+        "day": config.schedule.day,
         "time": config.schedule.time,
         "max_scans": config.schedule.max_scans,
         "os": system_type,

@@ -18,6 +18,10 @@ def schedule_install(
         "daily", "--frequency", "-f",
         help="Schedule frequency (daily, hourly, weekly).",
     ),
+    day: str = typer.Option(
+        "monday", "--day", "-d",
+        help="Day of week for weekly schedules (name or abbreviation, e.g. saturday).",
+    ),
     time: str = typer.Option(
         "02:00", "--time", "-t",
         help="Execution time in HH:MM format for daily/weekly schedules.",
@@ -31,10 +35,14 @@ def schedule_install(
     """Install the automated schedule service/timer."""
     cfg = load_config(config)
 
+    if frequency.lower() != "weekly" and day.lower() not in ("monday", "mon"):
+        console.print("[yellow]Warning: --day only applies to weekly schedules; ignoring it.[/yellow]")
+
     try:
         details = schedule.install_schedule(
             cfg,
             frequency=frequency.lower(),
+            day=day,
             time=time,
             max_scans=max_scans,
             config_path=config,
@@ -45,6 +53,8 @@ def schedule_install(
 
     console.print("[green]Successfully installed model-manager schedule![/green]")
     console.print(f"Frequency: [cyan]{details['frequency']}[/cyan]")
+    if details["frequency"] == "weekly":
+        console.print(f"Day: [cyan]{details['day']}[/cyan]")
     console.print(f"Time: [cyan]{details['time']}[/cyan]")
     console.print(f"Max Scans: [cyan]{details['max_scans']}[/cyan]")
     if details.get("warning"):
@@ -76,6 +86,8 @@ def schedule_status(
 
     table.add_row("Enabled", "Yes" if status_info["enabled"] else "No")
     table.add_row("Frequency", str(status_info["frequency"]))
+    if status_info["frequency"] == "weekly":
+        table.add_row("Day", str(status_info["day"]))
     table.add_row("Time", str(status_info["time"]))
     table.add_row("Max Scans", str(status_info["max_scans"]))
     table.add_row("Target OS", str(status_info["os"]))

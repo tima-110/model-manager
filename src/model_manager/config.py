@@ -36,6 +36,7 @@ class ScheduleConfig(BaseModel):
     """Configuration for CLI run schedule."""
     enabled: bool = False
     frequency: str = "daily"
+    day: str = "monday"
     time: str = "02:00"
     max_scans: int = 2
 
