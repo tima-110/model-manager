@@ -164,6 +164,7 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 | `litellm generate aliases` | Generate `model_group_alias` YAML (tier1/2/3) from tier tags and per-tier provider order | `--config`, `--output/-o`, `--dry-run` |
 | `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
 | `litellm request-restart` | Request a restart of the LiteLLM service by logging a request entry | `--config`, `--reason/-r` |
+| `litellm scan` | Probe every model served by the LiteLLM proxy (including aliases) with fixed-size streamed completions; records TTFT/throughput to `litellm_scan.json` | `--config`, `--base-url`, `--timeout` (default `180`), `--max-tokens` (default `64`), `--filter/-f`, `--models`, `--skip-aliases`, `--dry-run`, `--json` |
 
 ### `dashboard` — Generate a status dashboard
 

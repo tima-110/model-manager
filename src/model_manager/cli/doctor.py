@@ -171,6 +171,32 @@ def main(
     else:
         _check(rows, "LiteLLM restart log exists", "info", "Not present")
 
+    # 10. LiteLLM proxy reachability (+ last scan summary)
+    from model_manager.domain import auth as _auth
+    from model_manager.domain import litellm_scan as _scan
+
+    proxy_key = _auth.get_secret(_scan.LITELLM_API_KEY_NAME)
+    if not proxy_key:
+        _check(rows, "LiteLLM proxy", "warn", f"{_scan.LITELLM_API_KEY_NAME} not stored")
+    else:
+        try:
+            served = _scan.fetch_proxy_models(_scan.DEFAULT_BASE_URL, proxy_key, timeout=10)
+            _check(rows, "LiteLLM proxy", "pass", f"Reachable, {len(served)} models served")
+        except RuntimeError as e:
+            _check(rows, "LiteLLM proxy", "warn", str(e))
+    scan_file = cfg.data_dir / "litellm_scan.json"
+    if scan_file.exists():
+        try:
+            scan_doc = json.loads(scan_file.read_text())
+            meta = scan_doc.get("metadata", {})
+            _check(rows, "LiteLLM proxy scan", "pass",
+                   f"{meta.get('up', '?')}/{meta.get('scanned', '?')} up "
+                   f"at {str(meta.get('timestamp', ''))[:16]}")
+        except (json.JSONDecodeError, OSError):
+            _check(rows, "LiteLLM proxy scan", "warn", "Scan file unreadable")
+    else:
+        _check(rows, "LiteLLM proxy scan", "info", "No proxy scan yet")
+
     # --- Print results ---
     table = Table(title="model-manager Health Report")
     table.add_column("Check", style="cyan", no_wrap=True)

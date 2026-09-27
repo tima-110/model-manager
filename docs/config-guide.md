@@ -189,6 +189,7 @@ These files are produced by scan/generate commands rather than discovery:
 - `restart_requests.jsonl` (at `litellm_restart_request_path`): append-only log of `{"timestamp", "reason", "requested_by"}` restart requests written by `litellm request-restart` (and each successful schedule run). Consumed by the LiteLLM-side watcher — never append foreign record types here.
 - `schedule_runs.jsonl` (in `data_dir`): append-only per-run record of `{timestamp, steps, errors, error_count}` written by every `schedule run`. The timer-facing status history.
 - `dashboard.html` (in `data_dir`): status dashboard written by `dashboard` and regenerated last by each schedule run.
+- `litellm_scan.json` (in `data_dir`): per-model proxy probe records (`status`, `ttft_ms`, `tps`, `tpm_est`, token counts) plus a run summary, written by `litellm scan`. Targets come from the generated YAMLs plus every alias in the merged router_settings file; shown as a table on the dashboard.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:

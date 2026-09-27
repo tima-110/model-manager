@@ -101,6 +101,7 @@ def init_cmd(
     # 3. Secrets: supported providers plus Artificial Analysis
     needed: list[tuple[str, str, str]] = [
         ("ARTIFICIAL_ANALYSIS_API_KEY", "scores fetch", "Artificial Analysis key"),
+        ("LITELLM_MASTER_KEY", "litellm scan", "LiteLLM master key"),
     ]
     for p in providers.list_providers():
         use = f"{p.name} fetch/scan"

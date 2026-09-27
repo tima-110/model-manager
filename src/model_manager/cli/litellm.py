@@ -360,3 +360,128 @@ def generate_all(
         for err in errors:
             console.print(f"  [red]- {err}[/red]")
         raise typer.Exit(1)
+
+@litellm_app.command("scan")
+def litellm_scan(
+    config: Path | None = typer.Option(None, "--config", "-c",
+        help="Path to config TOML file."),
+    base_url: str = typer.Option("http://localhost:4000", "--base-url",
+        help="LiteLLM proxy base URL."),
+    timeout: int = typer.Option(180, "--timeout",
+        help="Per-model request timeout in seconds."),
+    max_tokens: int = typer.Option(64, "--max-tokens",
+        help="Completion token cap per probe (fixed-size probe)."),
+    filter_str: str | None = typer.Option(None, "--filter", "-f",
+        help="Only scan targets containing this substring."),
+    models: str | None = typer.Option(None, "--models",
+        help="Comma-separated target list (overrides enumeration)."),
+    skip_aliases: bool = typer.Option(False, "--skip-aliases",
+        help="Skip alias targets; scan served model names only."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+        help="List targets and proxy drift without probing."),
+    json_output: bool = typer.Option(False, "--json",
+        help="Emit scan records as JSON instead of a table."),
+) -> None:
+    """Probe every model served by the LiteLLM proxy, including aliases.
+
+    Streams a fixed-size completion per target and records status, TTFT,
+    and throughput to data_dir/litellm_scan.json.
+    """
+    from rich.table import Table
+
+    from model_manager.domain import auth, litellm_scan as scan_mod
+
+    cfg = load_config(config)
+    api_key = auth.get_secret(scan_mod.LITELLM_API_KEY_NAME)
+    if not api_key:
+        console.print(
+            f"[red]Error: {scan_mod.LITELLM_API_KEY_NAME} not found. "
+            f"Store it with: model-manager auth set "
+            f"{scan_mod.LITELLM_API_KEY_NAME}=<key>[/red]"
+        )
+        raise typer.Exit(1)
+
+    try:
+        targets = scan_mod.enumerate_targets(cfg)
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if models:
+        wanted = [m.strip() for m in models.split(",") if m.strip()]
+        targets = {
+            "models": [m for m in targets["models"] if m in wanted],
+            "aliases": [] if skip_aliases else [a for a in targets["aliases"] if a in wanted],
+        }
+    else:
+        if filter_str:
+            f = filter_str.lower()
+            targets = {
+                "models": [m for m in targets["models"] if f in m.lower()],
+                "aliases": [a for a in targets["aliases"] if f in a.lower()],
+            }
+        if skip_aliases:
+            targets["aliases"] = []
+
+    all_targets = targets["models"] + targets["aliases"]
+    if not all_targets:
+        console.print("[yellow]No targets selected.[/yellow]")
+        raise typer.Exit(1)
+
+    try:
+        served = scan_mod.fetch_proxy_models(base_url, api_key)
+        drift = scan_mod.reconcile_targets(targets, served)
+    except RuntimeError as e:
+        console.print(f"[yellow]Warning: {e} Proceeding with file targets.[/yellow]")
+        drift = {"served_count": 0, "target_count": len(all_targets), "unserved": all_targets, "extra_served": []}
+
+    if drift["unserved"]:
+        console.print(
+            f"[yellow]{len(drift['unserved'])} target(s) not currently served "
+            f"by the proxy (restart pending?): "
+            f"{', '.join(drift['unserved'][:10])}"
+            f"{'...' if len(drift['unserved']) > 10 else ''}[/yellow]"
+        )
+
+    if dry_run:
+        console.print(f"[bold]Models ({len(targets['models'])}):[/bold] "
+                      + (", ".join(targets["models"]) or "(none)"))
+        console.print(f"[bold]Aliases ({len(targets['aliases'])}):[/bold] "
+                      + (", ".join(targets["aliases"]) or "(none)"))
+        return
+
+    records = scan_mod.scan_targets(
+        base_url, api_key, all_targets,
+        max_tokens=max_tokens, timeout=timeout,
+        on_result=lambda r: console.print(
+            f"  {'[green]✓[/green]' if r['status'] == 'up' else '[red]![/red]'} "
+            f"{r['model']}: {r['status']}"
+            + (f" TTFT {r['ttft_ms']}ms TPS {r['tps']}" if r["status"] == "up" and r["tps"] else "")
+        ),
+    )
+    out_path = scan_mod.save_litellm_scan(cfg, records)
+
+    if json_output:
+        import json as _json
+
+        console.print(_json.dumps(records, indent=2))
+    else:
+        table = Table(title="LiteLLM Proxy Scan")
+        table.add_column("Model", style="cyan")
+        table.add_column("Status", justify="center")
+        table.add_column("TTFT (ms)", justify="right")
+        table.add_column("TPS", justify="right")
+        table.add_column("TPM est", justify="right")
+        table.add_column("Code", justify="center")
+        for r in records:
+            table.add_row(
+                r["model"], r["status"],
+                str(r["ttft_ms"] or "—"), str(r["tps"] or "—"),
+                str(r["tpm_est"] or "—"), str(r["code"] or "—"),
+            )
+        console.print(table)
+
+    up = sum(1 for r in records if r["status"] == "up")
+    console.print(f"[dim]Scanned {len(records)} targets ({up} up). Saved to {out_path}[/dim]")
+    if up < len(records):
+        raise typer.Exit(1)

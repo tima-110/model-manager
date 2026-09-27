@@ -63,3 +63,12 @@ def test_init_lists_exact_commands_for_missing_keys(tmp_path: Path):
     # next steps shown
     assert "providers fetch-all" in result.stdout
     assert "schedule install" in result.stdout
+
+
+def test_init_includes_litellm_master_key(tmp_path: Path):
+    target = tmp_path / "config.toml"
+    with patch("model_manager.domain.auth.get_secret", return_value=None):
+        result = runner.invoke(app, ["init", "--config", str(target)])
+    assert result.exit_code == 0
+    assert "LITELLM_MASTER_KEY" in result.stdout
+    assert "model-manager auth set LITELLM_MASTER_KEY=<Add your LiteLLM master key>" in result.stdout

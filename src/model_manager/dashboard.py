@@ -185,6 +185,21 @@ def _collect_data(cfg: AppConfig) -> dict:
     fallback_chain_count = len(fallback_chains)
     fallback_entry_count = sum(len(c["fallbacks"]) for c in fallback_chains)
 
+    # --- LiteLLM proxy scan (litellm_scan.json) ---
+    litellm_scan_path = cfg.data_dir / "litellm_scan.json"
+    litellm_scan_rows: list[dict] = []
+    litellm_scan_meta: dict = {}
+    if litellm_scan_path.exists():
+        try:
+            scan_doc = json.loads(litellm_scan_path.read_text())
+            if isinstance(scan_doc, dict):
+                litellm_scan_meta = scan_doc.get("metadata", {})
+                for rec in scan_doc.get("models", []):
+                    if isinstance(rec, dict):
+                        litellm_scan_rows.append(rec)
+        except Exception:
+            pass
+
     cost_overrides_path = get_litellm_cost_overrides_path(cfg)
     cost_output_path = get_litellm_cost_map_output_path(cfg)
     cost_overrides_count = 0
@@ -263,6 +278,12 @@ def _collect_data(cfg: AppConfig) -> dict:
             "chains": fallback_chains,
             "chain_count": fallback_chain_count,
             "entry_count": fallback_entry_count,
+        },
+        "litellm_scan": {
+            "path": str(litellm_scan_path),
+            "exists": litellm_scan_path.exists(),
+            "meta": litellm_scan_meta,
+            "rows": litellm_scan_rows,
         },
         "config": {
             "data_dir": str(cfg.data_dir),
@@ -541,6 +562,53 @@ def _render_html(data: dict) -> str:
     </table>
     {fb_table}"""
 
+    # --- LiteLLM proxy scan table ---
+    ls = r["litellm_scan"]
+    ls_rows = ls["rows"]
+    ls_meta = ls.get("meta", {})
+    scan_colors = {
+        "up": "#9ece6a",
+        "timeout": "#e0af68",
+        "ratelimit": "#e0af68",
+        "unauthorized": "#bb9af7",
+    }
+    ls_table = ""
+    if ls_rows:
+        scanned_at = html.escape(str(ls_meta.get("timestamp", "")))
+        ls_table = (
+            '<table class="data-table"><tr><th>Model / Alias</th><th>Status</th>'
+            "<th>TTFT</th><th>TPS</th><th>TPM est</th><th>Code</th><th>Scanned</th></tr>"
+        )
+        for row in ls_rows:
+            status = str(row.get("status", "unknown"))
+            color = scan_colors.get(status, "#f7768e")
+            ttft = f"{row['ttft_ms']:.0f}ms" if row.get("ttft_ms") is not None else "N/A"
+            tps = f"{row['tps']:.1f}" if row.get("tps") is not None else "N/A"
+            tpm = f"{row['tpm_est']:.0f}" if row.get("tpm_est") is not None else "N/A"
+            ts = str(row.get("timestamp", ""))[:16].replace("T", " ")
+            ls_table += (
+                f"<tr>"
+                f"<td class='mono'>{html.escape(str(row.get('model', '')))}</td>"
+                f"<td class='status-dot' style='--status-color:{color}'>{html.escape(status)}</td>"
+                f"<td>{ttft}</td>"
+                f"<td>{tps}</td>"
+                f"<td>{tpm}</td>"
+                f"<td>{html.escape(str(row.get('code') or '—'))}</td>"
+                f"<td>{html.escape(ts)}</td>"
+                f"</tr>"
+            )
+        ls_table += "</table>"
+        up_count = ls_meta.get("up", sum(1 for x in ls_rows if x.get("status") == "up"))
+        ls_section = f"""
+    <table class="data-table">
+      <tr><td>Scan file</td><td class="mono">{html.escape(ls['path'])}</td></tr>
+      <tr><td>Last scan</td><td>{scanned_at} &mdash; {up_count}/{len(ls_rows)} up</td></tr>
+    </table>
+    {ls_table}"""
+    else:
+        ls_section = ('<div class="no-data">No proxy scan yet. Run '
+                      '<code>model-manager litellm scan</code> to probe served models.</div>')
+
     # --- Config table ---
     cfg_table = ""
     for key, val in r["config"].items():
@@ -691,6 +759,9 @@ function sortTable(n, isNumeric) {{
 
   <h2>Fallback Chains</h2>
   {fb_section}
+
+  <h2>LiteLLM Proxy Scan</h2>
+  {ls_section}
 
   <h2>Configuration</h2>
   <table class="data-table">{cfg_table}</table>
