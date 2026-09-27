@@ -134,6 +134,65 @@ def test_probe_missing_key_raises():
         raise AssertionError("expected RuntimeError")
 
 
+def test_probe_reasoning_only_is_up_with_counts():
+    chunks = [
+        'data: {"choices": [{"delta": {"reasoning_content": "thinking"}}]}',
+        'data: {"choices": [{"delta": {"reasoning_content": "more"}, "finish_reason": "stop"}]}',
+        'data: {"usage": {"prompt_tokens": 8, "completion_tokens": 0}}',
+        "data: [DONE]",
+    ]
+    with patch("urllib.request.urlopen", return_value=_sse_response(chunks)):
+        rec = scan_mod.probe_litellm_model("http://x", "key", "thinker", kind="alias")
+    assert rec["status"] == "up"
+    assert rec["kind"] == "alias"
+    assert rec["reasoning_chunks"] == 2
+    assert rec["reasoning_chars"] == len("thinkingmore")
+    assert rec["finish_reason"] == "stop"
+    assert rec["tps"] is None  # no content tokens to rate
+
+
+def test_probe_empty_200_distinct_status():
+    chunks = [
+        'data: {"choices": [{"delta": {"role": "assistant"}}]}',
+        "data: [DONE]",
+    ]
+    with patch("urllib.request.urlopen", return_value=_sse_response(chunks)):
+        rec = scan_mod.probe_litellm_model("http://x", "key", "quiet")
+    assert rec["status"] == "empty"
+    assert rec["code"] == "200"
+    assert rec["reasoning_chunks"] == 0
+    assert rec["attempts"] == 2  # retried once with headroom, still empty
+
+
+def test_probe_empty_retries_to_success():
+    empty_chunks = [
+        'data: {"choices": [{"delta": {"role": "assistant"}}]}',
+        "data: [DONE]",
+    ]
+    with patch("urllib.request.urlopen", side_effect=[
+        _sse_response(empty_chunks),
+        _sse_response(SSE_OK),
+    ]) as mock_urlopen:
+        rec = scan_mod.probe_litellm_model("http://x", "key", "flaky", max_tokens=64)
+    assert mock_urlopen.call_count == 2
+    assert rec["status"] == "up"
+    assert rec["attempts"] == 2
+    assert rec["requested_tokens"] == 256  # retry uses 4x headroom
+
+
+def test_scan_targets_passes_kinds():
+    seen: dict[str, str] = {}
+    real_probe = scan_mod.probe_litellm_model
+
+    def spy(base_url, api_key, model, **kwargs):
+        seen[model] = kwargs.get("kind", "model")
+        return {"model": model, "status": "up"}
+
+    with patch.object(scan_mod, "probe_litellm_model", side_effect=spy):
+        scan_mod.scan_targets("http://x", "k", ["a", "t1"], kinds={"t1": "alias"})
+    assert seen == {"a": "model", "t1": "alias"}
+
+
 def test_save_litellm_scan(tmp_path: Path):
     cfg = AppConfig(data_dir=tmp_path)
     records = [

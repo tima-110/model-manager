@@ -161,10 +161,12 @@ def test_unknown_providers_ignored(tmp_path: Path):
 
 
 def test_exclusions(tmp_path: Path):
+    from model_manager.domain import blocks
+
     cfg = _cfg(tmp_path)
     _write(tmp_path, {
         "unauth": _model("Unauth", _variant(
-            {"nvidia": {"org/unauth-1": {"assessment": "Unauthorized"}}},
+            {"nvidia": {"org/unauth-1": {"assessment": "Active"}}},
             {"intelligence": 99, "coding": 99}, tag="tier-1")),
         "excluded": _model("Excluded", _variant(
             {"nvidia": {"org/excluded-1": {"assessment": "Active"}}},
@@ -177,19 +179,28 @@ def test_exclusions(tmp_path: Path):
             {"nvidia": {"org/good-1": {"assessment": "Active"}}},
             {"intelligence": 90, "coding": 90}, tag="tier-1")),
     })
+    # top-composite candidate is ledger-blocked (scan files alone don't gate)
+    blocks.record_observation(
+        cfg, [blocks.provider_key("nvidia", "org/unauth-1")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
     assert model_group_aliases.build_alias_map(cfg)["tier1"] == "nvidia_nim/good-1"
 
 
-def test_scan_unauthorized_excluded(tmp_path: Path):
+def test_ledger_blocked_alias_omitted(tmp_path: Path):
+    from model_manager.domain import blocks
+
     cfg = _cfg(tmp_path)
     _write(tmp_path, {
         "m": _model("M", _variant(
             {"nvidia": {"org/m-1": {"assessment": "Active"}}},
             {"intelligence": 90, "coding": 90}, tag="tier-1")),
     })
-    (tmp_path / "nvidia_scan.json").write_text(json.dumps({
-        "models": {"org/m-1": {"summary": {"assessment": "unauthorized"}}},
-    }))
+    # ledger-blocked sole candidate: scan files alone no longer gate
+    blocks.record_observation(
+        cfg, [blocks.provider_key("nvidia", "org/m-1")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
     with pytest.raises(RuntimeError):
         model_group_aliases.generate_aliases_yaml(cfg, dry_run=True)
 

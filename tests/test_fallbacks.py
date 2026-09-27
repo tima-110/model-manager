@@ -117,22 +117,34 @@ def test_limit_caps_fallback_list(tmp_path: Path):
     assert all(len(list(m.values())[0]) <= 1 for m in result)
 
 
-def test_unauthorized_excluded(tmp_path: Path):
+def test_ledger_blocked_excluded(tmp_path: Path):
+    from model_manager.domain import blocks
+
     cfg = _cfg(tmp_path)
     _write(tmp_path, {
         "deepseek-v4": {
             "display_name": "DeepSeek V4", "family": "x", "default_variant": "standard",
             "variants": {
                 "flash": _variant({
-                    "nvidia": {"deepseek-ai/deepseek-v4-flash": {"assessment": "Unauthorized", "availability": 0.0}},
+                    "nvidia": {"deepseek-ai/deepseek-v4-flash": {"assessment": "Active", "availability": 1.0}},
                     "ollama": {"deepseek-v4-flash": {"assessment": "Active", "availability": 1.0}},
                 }, {"intelligence": 50, "coding": 50}),
+                "pro": _variant({
+                    "nvidia": {"deepseek-ai/deepseek-v4-pro": {"assessment": "Active", "availability": 1.0}},
+                }, {"intelligence": 60, "coding": 60}),
             },
         },
     })
+    # ledger-block the nvidia flash mapping: it must vanish from subjects and targets
+    blocks.record_observation(
+        cfg, [blocks.provider_key("nvidia", "deepseek-ai/deepseek-v4-flash")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
     result = fallbacks.build_fallbacks(cfg)
-    assert result == []
-    assert not any("nvidia_nim/deepseek-v4-flash" in m for m in result)
+    text = json.dumps(result)
+    assert "nvidia_nim/deepseek-v4-flash" not in text
+    assert "nvidia_nim/deepseek-v4-pro" in text
+    assert "ollama/deepseek-v4-flash" in text
 
 
 def test_dry_run_emits_yaml(tmp_path: Path):

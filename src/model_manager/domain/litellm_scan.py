@@ -23,7 +23,9 @@ from model_manager.domain import auth
 
 DEFAULT_BASE_URL = "http://localhost:4000"
 DEFAULT_TIMEOUT_SEC = 180
-DEFAULT_MAX_TOKENS = 64
+# Shared by reasoning + content tokens: sized so thinking models usually
+# finish (stop) instead of truncating (length). Retry quadruples on empty.
+DEFAULT_MAX_TOKENS = 256
 LITELLM_API_KEY_NAME = "LITELLM_MASTER_KEY"
 FIXED_PROMPT = "List the numbers 1 through 20, one per line, nothing else."
 
@@ -116,16 +118,55 @@ def probe_litellm_model(
     *,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     timeout: int = DEFAULT_TIMEOUT_SEC,
+    kind: str = "model",
 ) -> dict[str, Any]:
     """Probe one model through the proxy with a fixed-size streamed completion.
 
     Returns a record with status, code, TTFT/throughput metrics, token
-    counts, and error text. Never raises for HTTP/transport outcomes
+    counts, reasoning usage, finish reason, and error text. Status ``up``
+    means content or reasoning chunks arrived; ``empty`` means HTTP 200
+    with neither (ambiguous: idle model vs thinking-model output the
+    parser can't see). Never raises for HTTP/transport outcomes
     (missing key raises RuntimeError instead).
+
+    An ``empty`` first attempt is retried once with a larger token budget:
+    thinking models share ``max_tokens`` between reasoning and content, so
+    a small cap can starve the content entirely. ``attempts`` records how
+    many tries were used.
     """
     if not api_key:
         raise RuntimeError(f"API key {LITELLM_API_KEY_NAME} missing from keychain.")
 
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    record = _probe_once(
+        base_url, api_key, model, timestamp,
+        max_tokens=max_tokens, timeout=timeout, kind=kind,
+    )
+    if record["status"] == "empty":
+        # Thinking models share the token budget between reasoning and
+        # content: a small cap can starve the content entirely. One retry
+        # with headroom separates busy thinkers from true empties.
+        retry_budget = max_tokens * 4
+        record = _probe_once(
+            base_url, api_key, model, timestamp,
+            max_tokens=retry_budget, timeout=timeout, kind=kind,
+        )
+        record["attempts"] = 2
+    else:
+        record["attempts"] = 1
+    return record
+
+def _probe_once(
+    base_url: str,
+    api_key: str,
+    model: str,
+    timestamp: str,
+    *,
+    max_tokens: int,
+    timeout: int,
+    kind: str,
+) -> dict[str, Any]:
+    """Single streamed probe attempt. See probe_litellm_model."""
     body = {
         "model": model,
         "messages": [{"role": "user", "content": FIXED_PROMPT}],
@@ -139,10 +180,9 @@ def probe_litellm_model(
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         method="POST",
     )
-
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     record: dict[str, Any] = {
         "model": model,
+        "kind": kind,
         "timestamp": timestamp,
         "requested_tokens": max_tokens,
         "status": "down",
@@ -153,6 +193,9 @@ def probe_litellm_model(
         "completion_tokens": None,
         "tps": None,
         "tpm_est": None,
+        "reasoning_chunks": 0,
+        "reasoning_chars": 0,
+        "finish_reason": None,
         "error": None,
     }
 
@@ -174,16 +217,26 @@ def probe_litellm_model(
                 except json.JSONDecodeError:
                     continue
                 choices = chunk.get("choices") or []
-                if choices and (choices[0].get("delta") or {}).get("content"):
-                    if first_chunk_at is None:
-                        first_chunk_at = time.perf_counter()
+                if choices:
+                    delta = choices[0].get("delta") or {}
+                    if delta.get("content"):
+                        if first_chunk_at is None:
+                            first_chunk_at = time.perf_counter()
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                    if reasoning:
+                        if first_chunk_at is None:
+                            first_chunk_at = time.perf_counter()
+                        record["reasoning_chunks"] += 1
+                        record["reasoning_chars"] += len(reasoning) if isinstance(reasoning, str) else 0
+                    if choices[0].get("finish_reason"):
+                        record["finish_reason"] = choices[0]["finish_reason"]
                 if chunk.get("usage"):
                     usage = chunk["usage"]
         total_ms = (time.perf_counter() - t0) * 1000
         record["total_ms"] = round(total_ms, 1)
         if first_chunk_at is None:
-            record["status"] = "down"
-            record["error"] = "no content chunks received"
+            record["status"] = "empty"
+            record["error"] = "HTTP 200 but no content or reasoning chunks received"
             return record
         record["ttft_ms"] = round((first_chunk_at - t0) * 1000, 1)
         record["prompt_tokens"] = usage.get("prompt_tokens")
@@ -202,8 +255,12 @@ def probe_litellm_model(
             record["error"] = str(e.reason)
         if e.code in (401, 403):
             record["status"] = "unauthorized"
+        elif e.code == 402:
+            record["status"] = "payment_required"
         elif e.code == 404:
             record["status"] = "not_found"
+        elif e.code == 410:
+            record["status"] = "gone"
         elif e.code == 429:
             record["status"] = "ratelimit"
         else:
@@ -219,7 +276,6 @@ def probe_litellm_model(
         record["error"] = str(e)
     return record
 
-
 def scan_targets(
     base_url: str,
     api_key: str,
@@ -227,13 +283,16 @@ def scan_targets(
     *,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     timeout: int = DEFAULT_TIMEOUT_SEC,
+    kinds: dict[str, str] | None = None,
     on_result: Any = None,
 ) -> list[dict[str, Any]]:
     """Probe each target sequentially; optional per-result hook."""
+    kind_map = kinds or {}
     records: list[dict[str, Any]] = []
     for target in targets:
         record = probe_litellm_model(
-            base_url, api_key, target, max_tokens=max_tokens, timeout=timeout
+            base_url, api_key, target, max_tokens=max_tokens, timeout=timeout,
+            kind=kind_map.get(target, "model"),
         )
         records.append(record)
         if on_result is not None:
@@ -244,6 +303,7 @@ def scan_targets(
 def save_litellm_scan(config: AppConfig, records: list[dict[str, Any]]) -> Path:
     """Write scan records plus summary to data_dir/litellm_scan.json."""
     up = sum(1 for r in records if r["status"] == "up")
+    empty = sum(1 for r in records if r["status"] == "empty")
     ttfts = [r["ttft_ms"] for r in records if r["ttft_ms"] is not None]
     tps_vals = [r["tps"] for r in records if r["tps"] is not None]
     doc = {
@@ -251,6 +311,7 @@ def save_litellm_scan(config: AppConfig, records: list[dict[str, Any]]) -> Path:
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "scanned": len(records),
             "up": up,
+            "empty": empty,
             "avg_ttft_ms": round(sum(ttfts) / len(ttfts), 1) if ttfts else None,
             "avg_tps": round(sum(tps_vals) / len(tps_vals), 2) if tps_vals else None,
         },

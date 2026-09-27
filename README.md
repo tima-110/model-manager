@@ -164,7 +164,7 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 | `litellm generate aliases` | Generate `model_group_alias` YAML (tier1/2/3) from tier tags and per-tier provider order | `--config`, `--output/-o`, `--dry-run` |
 | `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
 | `litellm request-restart` | Request a restart of the LiteLLM service by logging a request entry | `--config`, `--reason/-r` |
-| `litellm scan` | Probe every model served by the LiteLLM proxy (including aliases) with fixed-size streamed completions; records TTFT/throughput to `litellm_scan.json` | `--config`, `--base-url`, `--timeout` (default `180`), `--max-tokens` (default `64`), `--filter/-f`, `--models`, `--skip-aliases`, `--dry-run`, `--json` |
+| `litellm scan` | Probe every model served by the LiteLLM proxy (including aliases) with fixed-size streamed completions; records TTFT/throughput to `litellm_scan.json` | `--config`, `--base-url`, `--timeout` (default `180`), `--max-tokens` (default `256`), `--filter/-f`, `--models`, `--skip-aliases`, `--dry-run`, `--json` |
 
 ### `dashboard` — Generate a status dashboard
 
@@ -188,7 +188,7 @@ Prints a health report covering Python/package versions, config parse, data dire
 | :--- | :--- | :--- |
 | `schedule install` | Install the OS service/timer (systemd user timer on Linux, launchd on macOS) and enable the schedule in config | `--frequency/-f` (`daily`, `hourly`, `weekly`; default `daily`), `--day/-d` (weekly only; default `monday`), `--time/-t` (`HH:MM`; default `02:00`), `--max-scans/-m` (default `2`), `--config` |
 | `schedule status` | Show schedule configuration and whether the service file is installed | `--config` |
-| `schedule run` | Execute the full pipeline immediately (scores fetch/sync → provider fetch/scan → `generate all` → restart request → dashboard) | `--config`, `--env-file` |
+| `schedule run` | Execute the full pipeline immediately (scores fetch/sync → provider fetch/scan → proxy scan → `generate all` → restart request → dashboard) | `--config`, `--env-file` |
 | `schedule remove` | Stop, delete the service/timer and its secrets file, disable the schedule in config | `--config` |
 
 Each run appends a `{timestamp, steps, errors}` record to `data_dir/schedule_runs.jsonl` and exits non-zero when any step errors, so timer failures show up in `systemctl status`. The restart-request log (`restart_requests.jsonl`) is left untouched — an external watcher consumes it as restart orders.

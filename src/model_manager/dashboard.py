@@ -21,7 +21,7 @@ from model_manager.config import (
     get_litellm_cost_overrides_path,
     get_litellm_cost_map_output_path,
 )
-from model_manager.domain import storage, scores
+from model_manager.domain import blocks, storage, scores
 
 
 def generate_dashboard(cfg: AppConfig) -> Path:
@@ -39,6 +39,39 @@ def _variant_tier(v_info: dict) -> str:
         if t.startswith("tier-"):
             return t
     return ""
+
+
+def _collect_transient_signals(cfg: AppConfig, litellm_rows: list[dict]) -> list[dict]:
+    """Collect failing-but-not-blocked observations for display only.
+
+    Sources: provider ``*_scan.json`` summaries with transient assessments,
+    and proxy probe rows that failed without tripping the block list.
+    Nothing here affects generation.
+    """
+    rows: list[dict] = []
+    try:
+        blocked_keys = {e["key"] for e in blocks.blocked_summary(cfg)}
+    except Exception:
+        blocked_keys = set()
+    for prov in ("openrouter", "nvidia", "ollama", "gemini", "huggingface"):
+        path = cfg.data_dir / f"{prov}_scan.json"
+        if not path.exists():
+            continue
+        try:
+            doc = json.loads(path.read_text())
+        except Exception:
+            continue
+        for pid, info in (doc.get("models") or {}).items():
+            label = ((info.get("summary") or {}).get("assessment") or "").strip()
+            if label.lower() in ("dead", "ratelimited", "weak"):
+                rows.append({"target": f"{prov}/{pid}", "status": label, "source": "scan"})
+    for rec in litellm_rows:
+        status = str(rec.get("status", ""))
+        name = str(rec.get("model", ""))
+        keys = {f"litellm:{name}", f"alias:{name}"}
+        if status not in ("up", "empty") and not (keys & blocked_keys):
+            rows.append({"target": name, "status": f"{status} ({rec.get('code')})", "source": "proxy"})
+    return rows[:50]
 
 
 def _collect_data(cfg: AppConfig) -> dict:
@@ -285,6 +318,8 @@ def _collect_data(cfg: AppConfig) -> dict:
             "meta": litellm_scan_meta,
             "rows": litellm_scan_rows,
         },
+        "blocked": blocks.blocked_summary(cfg),
+        "transient": _collect_transient_signals(cfg, litellm_scan_rows),
         "config": {
             "data_dir": str(cfg.data_dir),
             "scan_frequency": cfg.scan_frequency,
@@ -568,6 +603,7 @@ def _render_html(data: dict) -> str:
     ls_meta = ls.get("meta", {})
     scan_colors = {
         "up": "#9ece6a",
+        "empty": "#e0af68",
         "timeout": "#e0af68",
         "ratelimit": "#e0af68",
         "unauthorized": "#bb9af7",
@@ -576,8 +612,8 @@ def _render_html(data: dict) -> str:
     if ls_rows:
         scanned_at = html.escape(str(ls_meta.get("timestamp", "")))
         ls_table = (
-            '<table class="data-table"><tr><th>Model / Alias</th><th>Status</th>'
-            "<th>TTFT</th><th>TPS</th><th>TPM est</th><th>Code</th><th>Scanned</th></tr>"
+            '<table class="data-table"><tr><th>Model / Alias</th><th>Kind</th><th>Status</th>'
+            "<th>TTFT</th><th>TPS</th><th>TPM est</th><th>Reasoning</th><th>Finish</th><th>Code</th><th>Scanned</th></tr>"
         )
         for row in ls_rows:
             status = str(row.get("status", "unknown"))
@@ -585,14 +621,20 @@ def _render_html(data: dict) -> str:
             ttft = f"{row['ttft_ms']:.0f}ms" if row.get("ttft_ms") is not None else "N/A"
             tps = f"{row['tps']:.1f}" if row.get("tps") is not None else "N/A"
             tpm = f"{row['tpm_est']:.0f}" if row.get("tpm_est") is not None else "N/A"
+            n_reason = row.get("reasoning_chunks") or 0
+            reasoning = f"{n_reason} chunks" if n_reason else "—"
+            finish = html.escape(str(row.get("finish_reason") or "—"))
             ts = str(row.get("timestamp", ""))[:16].replace("T", " ")
             ls_table += (
                 f"<tr>"
                 f"<td class='mono'>{html.escape(str(row.get('model', '')))}</td>"
+                f"<td>{html.escape(str(row.get('kind', 'model')))}</td>"
                 f"<td class='status-dot' style='--status-color:{color}'>{html.escape(status)}</td>"
                 f"<td>{ttft}</td>"
                 f"<td>{tps}</td>"
                 f"<td>{tpm}</td>"
+                f"<td>{reasoning}</td>"
+                f"<td class='mono'>{finish}</td>"
                 f"<td>{html.escape(str(row.get('code') or '—'))}</td>"
                 f"<td>{html.escape(ts)}</td>"
                 f"</tr>"
@@ -608,6 +650,45 @@ def _render_html(data: dict) -> str:
     else:
         ls_section = ('<div class="no-data">No proxy scan yet. Run '
                       '<code>model-manager litellm scan</code> to probe served models.</div>')
+
+    # --- Blocked models + transient signals ---
+    blocked_rows = r.get("blocked", [])
+    if blocked_rows:
+        blk_table = ('<table class="data-table"><tr><th>Target</th><th>Reason</th>'
+                     "<th>Since</th><th>Source</th></tr>")
+        for entry in blocked_rows:
+            blk_table += (
+                f"<tr>"
+                f"<td class='mono'>{html.escape(str(entry.get('key', '')))}</td>"
+                f"<td>{html.escape(str(entry.get('reason', '')))}"
+                f" ({html.escape(str(entry.get('code') or '—'))})</td>"
+                f"<td>{html.escape(str(entry.get('blocked_since', ''))[:10])}</td>"
+                f"<td>{html.escape(str(entry.get('source', '')))}</td>"
+                f"</tr>"
+            )
+        blk_table += "</table>"
+    else:
+        blk_table = '<div class="no-data">No blocked models. Generation covers all mapped targets.</div>'
+    transient_rows = r.get("transient", [])
+    if transient_rows:
+        tr_table = ('<table class="data-table"><tr><th>Target</th><th>Status</th>'
+                    "<th>Source</th></tr>")
+        for entry in transient_rows:
+            tr_table += (
+                f"<tr>"
+                f"<td class='mono'>{html.escape(str(entry.get('target', '')))}</td>"
+                f"<td>{html.escape(str(entry.get('status', '')))}</td>"
+                f"<td>{html.escape(str(entry.get('source', '')))}</td>"
+                f"</tr>"
+            )
+        tr_table += "</table>"
+    else:
+        tr_table = '<div class="no-data">No transient signals.</div>'
+    blk_section = f"""
+    <h3>Blocked from generation</h3>
+    {blk_table}
+    <h3>Transient signals (tracked, not blocking)</h3>
+    {tr_table}"""
 
     # --- Config table ---
     cfg_table = ""
@@ -762,6 +843,9 @@ function sortTable(n, isNumeric) {{
 
   <h2>LiteLLM Proxy Scan</h2>
   {ls_section}
+
+  <h2>Availability Blocks</h2>
+  {blk_section}
 
   <h2>Configuration</h2>
   <table class="data-table">{cfg_table}</table>

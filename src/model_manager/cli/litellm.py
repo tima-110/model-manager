@@ -369,8 +369,8 @@ def litellm_scan(
         help="LiteLLM proxy base URL."),
     timeout: int = typer.Option(180, "--timeout",
         help="Per-model request timeout in seconds."),
-    max_tokens: int = typer.Option(64, "--max-tokens",
-        help="Completion token cap per probe (fixed-size probe)."),
+    max_tokens: int = typer.Option(256, "--max-tokens",
+        help="Completion token cap per probe (shared by reasoning + content)."),
     filter_str: str | None = typer.Option(None, "--filter", "-f",
         help="Only scan targets containing this substring."),
     models: str | None = typer.Option(None, "--models",
@@ -453,13 +453,22 @@ def litellm_scan(
     records = scan_mod.scan_targets(
         base_url, api_key, all_targets,
         max_tokens=max_tokens, timeout=timeout,
+        kinds={**{m: "model" for m in targets["models"]},
+               **{a: "alias" for a in targets["aliases"]}},
         on_result=lambda r: console.print(
-            f"  {'[green]✓[/green]' if r['status'] == 'up' else '[red]![/red]'} "
+            f"  {'[green]✓[/green]' if r['status'] == 'up' else '[yellow]?[/yellow]' if r['status'] == 'empty' else '[red]![/red]'} "
             f"{r['model']}: {r['status']}"
             + (f" TTFT {r['ttft_ms']}ms TPS {r['tps']}" if r["status"] == "up" and r["tps"] else "")
+            + (f" finish={r['finish_reason']}" if r.get("finish_reason") else "")
         ),
     )
     out_path = scan_mod.save_litellm_scan(cfg, records)
+    try:
+        from model_manager.domain import blocks as _blocks
+
+        _blocks.record_probe_observations(cfg, records)
+    except Exception:
+        pass
 
     if json_output:
         import json as _json
@@ -468,6 +477,7 @@ def litellm_scan(
     else:
         table = Table(title="LiteLLM Proxy Scan")
         table.add_column("Model", style="cyan")
+        table.add_column("Kind", justify="center")
         table.add_column("Status", justify="center")
         table.add_column("TTFT (ms)", justify="right")
         table.add_column("TPS", justify="right")
@@ -475,13 +485,14 @@ def litellm_scan(
         table.add_column("Code", justify="center")
         for r in records:
             table.add_row(
-                r["model"], r["status"],
+                r["model"], r.get("kind", "model"), r["status"],
                 str(r["ttft_ms"] or "—"), str(r["tps"] or "—"),
                 str(r["tpm_est"] or "—"), str(r["code"] or "—"),
             )
         console.print(table)
 
     up = sum(1 for r in records if r["status"] == "up")
-    console.print(f"[dim]Scanned {len(records)} targets ({up} up). Saved to {out_path}[/dim]")
+    empty = sum(1 for r in records if r["status"] == "empty")
+    console.print(f"[dim]Scanned {len(records)} targets ({up} up, {empty} empty). Saved to {out_path}[/dim]")
     if up < len(records):
         raise typer.Exit(1)

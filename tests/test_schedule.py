@@ -272,6 +272,19 @@ def test_execute_schedule_pipeline(tmp_path: Path):
              "model_manager.domain.generate_all.run_generate_all",
              return_value={"steps": ["generate fallbacks: success"], "errors": []},
          ) as mock_gen, \
+         patch("model_manager.domain.auth.get_secret", return_value="k"), \
+         patch(
+             "model_manager.domain.litellm_scan.enumerate_targets",
+             return_value={"models": ["m1"], "aliases": []},
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.scan_targets",
+             return_value=[{"model": "m1", "status": "up"}],
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.save_litellm_scan",
+             return_value=tmp_path / "litellm_scan.json",
+         ), \
          patch(
              "model_manager.domain.restart.request_restart",
              return_value={"timestamp": "2026-01-01T00:00:00Z"},
@@ -293,6 +306,7 @@ def test_execute_schedule_pipeline(tmp_path: Path):
         assert "providers scan-all: completed for 2/2 providers" in res["steps"]
         mock_gen.assert_called_once()
         assert "litellm generate fallbacks: success" in res["steps"]
+        assert any("litellm proxy scan" in s for s in res["steps"])
         mock_restart.assert_called_once()
         assert any("litellm request-restart" in s for s in res["steps"])
         mock_dash.assert_called_once()
@@ -330,6 +344,18 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
          patch(
              "model_manager.domain.generate_all.run_generate_all",
              return_value={"steps": [], "errors": []},
+         ), \
+         patch("model_manager.domain.auth.get_secret", return_value="k"), \
+         patch(
+             "model_manager.domain.litellm_scan.enumerate_targets",
+             return_value={"models": [], "aliases": []},
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.scan_targets", return_value=[]
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.save_litellm_scan",
+             return_value=tmp_path / "litellm_scan.json",
          ), \
          patch(
              "model_manager.domain.restart.request_restart",

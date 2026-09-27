@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from model_manager.config import AppConfig
-from model_manager.domain import storage, tags
+from model_manager.domain import blocks, storage, tags
 from model_manager.domain.yaml_gen import (
     _derive_model_name,
     _iter_provider_ids,
-    _load_scan_results,
     dump_litellm_yaml,
 )
 
@@ -76,7 +75,7 @@ def _collect_candidates(config: AppConfig) -> dict[str, list[dict[str, Any]]]:
         for name, pc in config.providers.items()
         if pc.keys and pc.litellm_prefix
     }
-    scans = {name: _load_scan_results(config, name) for name in providers}
+    blocked = blocks.blocked_set(config)
     tier_map = tags.compute_tiers(
         data,
         t1_ratio=config.tags.tier1_min_ratio,
@@ -108,9 +107,10 @@ def _collect_candidates(config: AppConfig) -> dict[str, list[dict[str, Any]]]:
             for pid in _iter_provider_ids(pmap):
                 entry = entries.get(pid) if isinstance(entries, dict) else None
                 assessment = entry.get("assessment") if isinstance(entry, dict) else None
-                if (assessment or "").strip().lower() == "unauthorized":
+                model_name = _derive_model_name(pc.litellm_prefix, pid)
+                if blocks.provider_key(pname, pid) in blocked:
                     continue
-                if scans[pname].get(pid) == "unauthorized":
+                if f"litellm:{model_name}" in blocked:
                     continue
                 availability = entry.get("availability") if isinstance(entry, dict) else None
                 if not isinstance(availability, (int, float)):
@@ -119,7 +119,7 @@ def _collect_candidates(config: AppConfig) -> dict[str, list[dict[str, Any]]]:
                     status_rank(assessment),
                     float(availability),
                     pname,
-                    _derive_model_name(pc.litellm_prefix, pid),
+                    model_name,
                 ))
 
         if not ranked:
@@ -149,6 +149,7 @@ def build_alias_map(config: AppConfig) -> dict[str, str]:
     grouped = _collect_candidates(config)
 
     alias_map: dict[str, str] = {}
+    blocked = blocks.blocked_set(config)
     for tier_tag, alias_key in TIER_ALIAS_KEYS.items():
         candidates = grouped.get(tier_tag, [])
         if not candidates:
@@ -158,13 +159,27 @@ def build_alias_map(config: AppConfig) -> dict[str, str]:
         picked: str | None = None
         for pname in order:
             backed = [c for c in candidates if pname in c["names"]]
-            if backed:
-                backed.sort(key=lambda c: (-c["composite"], c["key"]))
-                picked = backed[0]["names"][pname]
+            backed.sort(key=lambda c: (-c["composite"], c["key"]))
+            for cand in backed:
+                target = cand["names"][pname]
+                if f"alias:{alias_key}" in blocked or f"litellm:{target}" in blocked:
+                    continue
+                picked = target
+                break
+            if picked is not None:
                 break
         if picked is None:
             candidates.sort(key=lambda c: (-c["composite"], c["key"]))
-            picked = candidates[0]["best"]
+            for cand in candidates:
+                if f"alias:{alias_key}" not in blocked and f"litellm:{cand['best']}" not in blocked:
+                    picked = cand["best"]
+                    break
+            if picked is None:
+                log.warning(
+                    "All %s candidates blocked; omitting alias.",
+                    alias_key,
+                )
+                continue
             log.warning(
                 "No %s variant on providers %s; using %s.",
                 alias_key, ", ".join(order) or "(none)", picked,

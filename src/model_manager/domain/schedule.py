@@ -14,7 +14,7 @@ from typing import Any
 from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
 from model_manager.domain import generate_all as gen_all_mod
-from model_manager.domain import providers, restart, scores
+from model_manager.domain import blocks, providers, restart, scores
 from model_manager.domain import service_env as service_env_mod
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
@@ -355,12 +355,14 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
 
     1. scores fetch
     2. scores sync
-    3. providers fetch-all
+    3. providers fetch-all (absent mappings are ledger-blocked)
     4. providers scan-all (up to ``config.schedule.max_scans`` cycles)
-    5. litellm generate all (provider configs, fallbacks, aliases,
-       router_settings — same shared step as the CLI command)
-    6. litellm request-restart (signals the service to pick up new configs)
-    7. dashboard (regenerates the status page last)
+    5. litellm proxy scan (probe results feed the ledger)
+    6. litellm generate all (provider configs, fallbacks, aliases,
+       router_settings — same shared step as the CLI command; ledger
+       blocks are honored, user exclusions always win)
+    7. litellm request-restart (signals the service to pick up new configs)
+    8. dashboard (regenerates the status page last)
 
     Every run appends a record to ``data_dir/schedule_runs.jsonl`` with its
     steps and errors. The restart-request file is left untouched: it is
@@ -396,8 +398,14 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     fetch_success = 0
     for p in all_providers:
         try:
-            providers.run_discovery_workflow(p, config, probe=False)
+            fetched = providers.run_discovery_workflow(p, config, probe=False)
             fetch_success += 1
+            try:
+                blocks.record_fetch_observations(
+                    config, p.name, {m["id"] for m in fetched if m.get("id")}
+                )
+            except Exception:
+                pass
         except Exception as e:
             results["errors"].append(f"providers fetch ({p.name}): {e}")
     results["steps"].append(f"providers fetch-all: completed for {fetch_success}/{len(all_providers)} providers")
@@ -409,6 +417,12 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
         try:
             summary = providers.scan_provider_models(p, config, max_scans=max_scans)
             scan_success += 1
+            try:
+                blocks.record_assessment_observations(
+                    config, p.name, summary.get("assessments", {})
+                )
+            except Exception:
+                pass
             results["steps"].append(
                 f"providers scan ({p.name}): {summary['scanned']} models, {summary['cycles']} cycles"
             )
@@ -416,7 +430,35 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
             results["errors"].append(f"providers scan ({p.name}): {e}")
     results["steps"].append(f"providers scan-all: completed for {scan_success}/{len(all_providers)} providers")
 
-    # Step 5: litellm generate all (shared with the CLI command)
+    # Step 5: litellm proxy scan (feeds availability into generation below)
+    try:
+        from model_manager.domain import auth as _auth
+        from model_manager.domain import litellm_scan as _scan
+
+        proxy_key = _auth.get_secret(_scan.LITELLM_API_KEY_NAME)
+        if not proxy_key:
+            results["errors"].append("litellm proxy scan: LITELLM_MASTER_KEY missing")
+        else:
+            proxy_targets = _scan.enumerate_targets(config)
+            proxy_records = _scan.scan_targets(
+                _scan.DEFAULT_BASE_URL, proxy_key,
+                proxy_targets["models"] + proxy_targets["aliases"],
+                kinds={**{m: "model" for m in proxy_targets["models"]},
+                       **{a: "alias" for a in proxy_targets["aliases"]}},
+            )
+            try:
+                blocks.record_probe_observations(config, proxy_records)
+            except Exception:
+                pass
+            path = _scan.save_litellm_scan(config, proxy_records)
+            n_up = sum(1 for r in proxy_records if r["status"] == "up")
+            results["steps"].append(
+                f"litellm proxy scan: {n_up}/{len(proxy_records)} up (saved to {path})"
+            )
+    except Exception as e:
+        results["errors"].append(f"litellm proxy scan: {e}")
+
+    # Step 6: litellm generate all (shared with the CLI command)
     try:
         gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
         results["steps"].extend(f"litellm {s}" for s in gen_result["steps"])
@@ -424,7 +466,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     except Exception as e:
         results["errors"].append(f"litellm generate all: {e}")
 
-    # Step 6: litellm request-restart so the service picks up the new configs
+    # Step 7: litellm request-restart so the service picks up the new configs
     try:
         if results["errors"]:
             reason = f"Scheduled pipeline completed with {len(results['errors'])} error(s)"
@@ -435,7 +477,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     except Exception as e:
         results["errors"].append(f"litellm request-restart: {e}")
 
-    # Step 7: dashboard (regenerated last, from the freshest data)
+    # Step 8: dashboard (regenerated last, from the freshest data)
     try:
         dashboard_path = generate_dashboard(config)
         results["steps"].append(f"dashboard: wrote {dashboard_path}")

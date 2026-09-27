@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from model_manager.config import AppConfig
-from model_manager.domain import storage, tags
+from model_manager.domain import blocks, storage, tags
 from model_manager.domain.yaml_gen import (
     _derive_model_name,
     _iter_provider_ids,
-    _load_scan_results,
     dump_litellm_yaml,
 )
 
@@ -58,12 +57,8 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
         for name, pc in config.providers.items()
         if pc.keys and pc.litellm_prefix
     }
-    scans = {
-        name: _load_scan_results(config, name)
-        for name in providers
-    }
-
     groups: dict[str, dict] = {}
+    blocked = blocks.blocked_set(config)
     for key, v in tags.variant_scores(data).items():
         info = v["info"]
         if info.get("include_in_litellm") is False:
@@ -86,9 +81,10 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
             for pid in _iter_provider_ids(pmap):
                 entry = pmap[pid]
                 assessment = entry.get("assessment") if isinstance(entry, dict) else None
-                if (assessment or "").strip().lower() == "unauthorized":
+                model_name = _derive_model_name(pc.litellm_prefix, pid)
+                if blocks.provider_key(pname, pid) in blocked:
                     continue
-                if scans[pname].get(pid) == "unauthorized":
+                if f"litellm:{model_name}" in blocked:
                     continue
 
                 availability = entry.get("availability") if isinstance(entry, dict) else None
@@ -99,7 +95,7 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
                     status_rank(assessment),
                     float(availability),
                     pname,
-                    _derive_model_name(pc.litellm_prefix, pid),
+                    model_name,
                 ))
 
         if not model_names:

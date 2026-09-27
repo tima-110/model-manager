@@ -41,6 +41,31 @@ class ScheduleConfig(BaseModel):
     max_scans: int = 2
 
 
+class BlockingConfig(BaseModel):
+    """Which observed signals block a target from generated configs.
+
+    Signals are matched case-insensitively against scan assessments,
+    probe statuses, and HTTP codes (e.g. "unauthorized", "404"). A
+    target is blocked when any of its observed signals is listed here;
+    the first clean observation releases it. Fetch-absence always
+    blocks regardless of this list. Edit with care: removing a signal
+    re-admits everything observed with it on the next success.
+    """
+    block_signals: list[str] = [
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "gone",
+        "unsupported",
+        "payment_required",
+        "401",
+        "403",
+        "404",
+        "402",
+        "410",
+    ]
+
+
 class TagConfig(BaseModel):
     """Tier classification thresholds."""
     tier1_min_ratio: float = 0.85
@@ -73,6 +98,7 @@ class AppConfig(BaseModel):
     scan_frequency: int = 5
     scan_count: int = 24
     schedule: ScheduleConfig = ScheduleConfig()
+    blocking: BlockingConfig = BlockingConfig()
     providers: dict[str, ProviderConfig] = {}
     tags: TagConfig = TagConfig()
     tier_providers: TierProvidersConfig = TierProvidersConfig()

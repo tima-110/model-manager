@@ -28,6 +28,19 @@ This document describes the configuration and data storage for `model-manager`.
 | `schedule.day` | String | `"monday"` | Day of week for `weekly` frequency (name or abbreviation). |
 | `schedule.time` | String | `"02:00"` | Firing time in `HH:MM` (daily/weekly; hourly uses the minute). |
 | `schedule.max_scans` | Integer | `2` | Scan cycles per provider per scheduled run. |
+| `blocking.block_signals` | List of strings | (see below) | Observed statuses/codes that block a target from generated configs. |
+
+Default `block_signals`: `unauthorized`, `forbidden`, `not_found`, `gone`, `unsupported`, `payment_required`, `401`, `403`, `404`, `402`, `410` (matched case-insensitively against scan assessments, probe statuses, and HTTP codes). Remove a token to stop blocking on it. Fetch-absence always blocks regardless of this list. The first clean observation releases a target.
+
+### Availability Blocks (`model_blocks.json`)
+
+Fetch and scan observations feed a persistent ledger in `data_dir/model_blocks.json` that decides what the generators emit:
+
+- **User exclusions** (`include_in_litellm: false`) always win and never enter the ledger.
+- **Fetch-absence** (mapped ID no longer listed by the provider) blocks; reappearance releases. `models.json` mappings are never pruned.
+- **Provider scan assessments** in the block list (e.g. unauthorized, not_found, unsupported) block; healthy labels release; transient labels (`dead`, `ratelimited`, `unknown`) are tracked but never block.
+- **LiteLLM probe results**: `up` releases; block-listed statuses/codes block; timeouts, 500s, `empty`, and rate limits are tracked but never block.
+- Inspect via `doctor` (blocked-models section, with billing issues flagged separately) and the dashboard's Availability Blocks section; the raw JSON holds `{blocked_since, reason, code, source}` per key.
 
 Tier ratios can be overridden per-invocation with `--t1-ratio` / `--t2-ratio` on `models tag tier`.
 
@@ -188,8 +201,9 @@ These files are produced by scan/generate commands rather than discovery:
 - Generated LiteLLM YAML: written to each provider's `output_path` (or `--output`) by `litellm generate config`, to `litellm_fallbacks_path` (or `--output`) by `litellm generate fallbacks`, to `litellm_aliases_path` (or `--output`) by `litellm generate aliases`, and to `litellm_router_settings_path` (or `--output`) by `litellm generate router_settings` (which reads the stub at `litellm_router_settings_stub_path` and never overwrites it). Alternatively, `litellm generate all` generates all provider configs, fallbacks, aliases, and router_settings at once, and can optionally build the cost map with `--build-cost-map`.
 - `restart_requests.jsonl` (at `litellm_restart_request_path`): append-only log of `{"timestamp", "reason", "requested_by"}` restart requests written by `litellm request-restart` (and each successful schedule run). Consumed by the LiteLLM-side watcher — never append foreign record types here.
 - `schedule_runs.jsonl` (in `data_dir`): append-only per-run record of `{timestamp, steps, errors, error_count}` written by every `schedule run`. The timer-facing status history.
+- `model_blocks.json` (in `data_dir`): availability ledger (see Availability Blocks above).
 - `dashboard.html` (in `data_dir`): status dashboard written by `dashboard` and regenerated last by each schedule run.
-- `litellm_scan.json` (in `data_dir`): per-model proxy probe records (`status`, `ttft_ms`, `tps`, `tpm_est`, token counts) plus a run summary, written by `litellm scan`. Targets come from the generated YAMLs plus every alias in the merged router_settings file; shown as a table on the dashboard.
+- `litellm_scan.json` (in `data_dir`): per-model proxy probe records (`kind`, `status`, `ttft_ms`, `tps`, `tpm_est`, token counts, `reasoning_chunks`/`reasoning_chars`, `finish_reason`, `attempts`) plus a run summary, written by `litellm scan`. Status `empty` means HTTP 200 with neither content nor reasoning chunks; an `empty` first attempt is retried once at 4x token headroom (thinking models share the cap between reasoning and content). Targets come from the generated YAMLs plus every alias in the merged router_settings file; shown as a table on the dashboard.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:

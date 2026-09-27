@@ -197,6 +197,26 @@ def main(
     else:
         _check(rows, "LiteLLM proxy scan", "info", "No proxy scan yet")
 
+    # 11. Availability blocks (temporary generation exclusions)
+    from model_manager.domain import blocks as _blocks
+
+    try:
+        blocked_entries = _blocks.blocked_summary(cfg)
+    except Exception:
+        blocked_entries = []
+    if not blocked_entries:
+        _check(rows, "Blocked models", "pass", "None blocked")
+    else:
+        _check(rows, "Blocked models", "warn", f"{len(blocked_entries)} blocked")
+        billing = [e for e in blocked_entries if (e.get("code") == "402" or "payment" in str(e.get("reason", "")).lower())]
+        if billing:
+            _check(rows, "Blocked models", "warn",
+                   f"Billing issue ({len(billing)}): check account payment — likely affects siblings")
+        for entry in blocked_entries[:10]:
+            _check(rows, f"Blocked: {entry['key']}", "warn",
+                   f"{entry.get('reason', '?')} since {str(entry.get('blocked_since', ''))[:10]} "
+                   f"[{entry.get('source', '?')}]")
+
     # --- Print results ---
     table = Table(title="model-manager Health Report")
     table.add_column("Check", style="cyan", no_wrap=True)

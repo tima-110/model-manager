@@ -11,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.live import Live
 
 from model_manager.config import load_config
-from model_manager.domain import auth, providers
+from model_manager.domain import auth, blocks, providers
 
 console = Console()
 
@@ -38,6 +38,11 @@ def _run_discovery_cli_workflow(provider, probe: bool, config: Path | None, json
         if not models_list:
             console.print(f"[yellow]No models discovered for {provider.name}.[/yellow]")
             return
+
+        try:
+            blocks.record_fetch_observations(cfg, provider.name, {m["id"] for m in models_list if m.get("id")})
+        except Exception:
+            pass
 
         if json_output:
             cache_path = provider.path_fn(cfg)
@@ -157,6 +162,11 @@ def _run_scan_cli_workflow(
     if summary["scanned"] == 0:
         console.print(f"[yellow]No models found to scan for {provider.name}.[/yellow]")
         return
+
+    try:
+        blocks.record_assessment_observations(cfg, provider.name, summary["assessments"])
+    except Exception:
+        pass
 
     final_results_data = summary["results"]
 

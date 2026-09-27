@@ -177,19 +177,25 @@ class TestGenerateProviderYaml:
         assert "nvidia_nim/deepseek-v4-pro" in model_names
         assert "nvidia_nim/deepseek-v4-flash" in model_names
 
-    def test_excludes_unauthorized(self, nvidia_scan_mixed: Path, nvidia_output_config: ProviderConfig):
-        """Models with 'unauthorized' status should be excluded."""
+    def test_excludes_ledger_blocked(self, nvidia_scan_mixed: Path, nvidia_output_config: ProviderConfig):
+        """Ledger-blocked targets are excluded; scan files alone no longer gate."""
+        from model_manager.domain import blocks
+
         config = AppConfig(
             data_dir=nvidia_scan_mixed,
             providers={"nvidia": nvidia_output_config},
         )
+        blocks.record_observation(
+            config, [blocks.provider_key("nvidia", "deepseek-ai/deepseek-v4-pro")],
+            blocked=True, reason="scan assessment: unauthorized", source="scan",
+        )
         result = yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
         parsed = yaml.safe_load(result)
 
-        # deepseek-v4-pro had 1 provider_id that was unauthorized — should be gone
+        # blocked provider_id is gone...
         model_names = {e["model_name"] for e in parsed["model_list"]}
         assert "nvidia_nim/deepseek-v4-pro" not in model_names
-        # deepseek-v4-flash was 'down' — should still be included
+        # ...but unblocked entries are included regardless of scan files
         assert "nvidia_nim/deepseek-v4-flash" in model_names
 
     def test_includes_dead_models(self, nvidia_scan_mixed: Path, nvidia_output_config: ProviderConfig):

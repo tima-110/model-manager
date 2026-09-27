@@ -141,8 +141,11 @@ def generate_provider_yaml(
     models_data = _load_json(models_path)
     all_models = models_data.get("models", {})
 
-    # Load scan results (best-effort — missing file = include all)
-    scan_assessments = _load_scan_results(config, provider)
+    # Availability ledger: blocked targets are omitted (user exclusions
+    # are handled separately below and always win).
+    from model_manager.domain import blocks
+
+    blocked = blocks.blocked_set(config)
 
     entries: list[dict[str, Any]] = []
 
@@ -159,14 +162,15 @@ def generate_provider_yaml(
                 continue
 
             for pid in _iter_provider_ids(provider_ids_map):
-                # Check scan status — skip unauthorized
-                assessment = scan_assessments.get(pid)
-                if assessment == "unauthorized":
-                    continue
-
                 # Derive model names
                 model_name = _derive_model_name(provider_cfg.litellm_prefix, pid)
                 model = _derive_model(provider_cfg.litellm_prefix, pid)
+
+                # Skip ledger-blocked targets (fetch-absence, failed scans)
+                if blocks.provider_key(provider, pid) in blocked:
+                    continue
+                if f"litellm:{model_name}" in blocked:
+                    continue
 
                 # Replicate for each API key
                 for key in provider_cfg.keys:
