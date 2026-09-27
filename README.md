@@ -97,7 +97,7 @@ Writes the default `config.toml` if none exists (never overwrites), verifies the
 
 | Command | Description | Arguments / Flags |
 | :--- | :--- | :--- |
-| `scores fetch` | Fetch latest scores from Artificial Analysis (also scrapes agentic index) | `--config` |
+| `scores fetch` | Fetch latest scores from Artificial Analysis (includes agentic index) | `--config` |
 | `scores sync` | Update model variants in `models.json` from the local score cache | `--config` |
 | `scores list` | List scores in a table | `--filter/-f`, `--refresh`, `--selected-models`, `--config`, `--json` |
 

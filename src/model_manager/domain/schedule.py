@@ -375,7 +375,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
             raw_scores = scores.fetch_aa_data(api_key, config)
             if raw_scores:
                 scores.process_aa_data(raw_scores, config)
-                scores.merge_agentic_scores(config)
+                scores.merge_agentic_scores(config, api_key)
                 results["steps"].append("scores fetch: success")
             else:
                 results["errors"].append("scores fetch: failed to fetch AA data")

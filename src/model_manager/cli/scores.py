@@ -36,8 +36,8 @@ def scores_fetch(
         progress.add_task(description="Processing and saving scores...", total=None)
         processed = scores.process_aa_data(data, cfg)
 
-        progress.add_task(description="Scraping agentic index...", total=None)
-        agentic_updated = scores.merge_agentic_scores(cfg)
+        progress.add_task(description="Fetching agentic index...", total=None)
+        agentic_updated = scores.merge_agentic_scores(cfg, api_key)
 
     console.print(f"[green]Successfully synced {processed['meta']['total_models']} models.[/green]")
     if agentic_updated:
@@ -89,7 +89,7 @@ def scores_list(
             raw = scores.fetch_aa_data(api_key, cfg)
             if raw:
                 scores.process_aa_data(raw, cfg)
-                scores.merge_agentic_scores(cfg)
+                scores.merge_agentic_scores(cfg, api_key)
             else:
                 console.print("[yellow]Warning: Failed to fetch latest scores. Using cached data.[/yellow]")
 

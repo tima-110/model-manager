@@ -53,3 +53,53 @@ def test_fetch_aa_data_failure(mock_config):
     with patch("urllib.request.urlopen", side_effect=Exception("Network error")):
         result = scores.fetch_aa_data("fake-key", mock_config)
         assert result is None
+
+def _mock_page(payload: dict) -> MagicMock:
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(payload).encode()
+    mock_response.__enter__.return_value = mock_response
+    return mock_response
+
+def test_fetch_agentic_index_from_api_pagination(mock_config):
+    """Verify paginated agentic fetch collects slugs and stops at last page."""
+    page1 = {
+        "data": [
+            {"slug": "a", "evaluations": {"artificial_analysis_agentic_index": 25.5}},
+            {"slug": "b", "evaluations": {"artificial_analysis_agentic_index": None}},
+        ],
+        "pagination": {"page": 1, "has_more": True},
+    }
+    page2 = {
+        "data": [{"slug": "c", "evaluations": {"artificial_analysis_agentic_index": 30}}],
+        "pagination": {"page": 2, "has_more": False},
+    }
+    with patch("urllib.request.urlopen", side_effect=[_mock_page(page1), _mock_page(page2)]):
+        result = scores.fetch_agentic_index_from_api("fake-key")
+    assert result == {"a": 25.5, "c": 30}
+
+def test_fetch_agentic_index_from_api_failure_returns_partial():
+    """Verify a failed page returns what was collected (possibly empty)."""
+    with patch("urllib.request.urlopen", side_effect=Exception("Network error")):
+        assert scores.fetch_agentic_index_from_api("fake-key") == {}
+
+def test_merge_agentic_scores_from_api(tmp_path):
+    """Verify merge writes API values and preserves existing ones on gaps."""
+    from pathlib import Path
+
+    cfg = AppConfig(data_dir=tmp_path)
+    scores_file = tmp_path / "model_scores.json"
+    scores_file.write_text(json.dumps({
+        "models": {
+            "a": {"scores": {"intelligence": 80, "agentic": 10.0}},
+            "b": {"scores": {"intelligence": 70, "agentic": 20.0}},
+        }
+    }))
+    with patch(
+        "model_manager.domain.scores.fetch_agentic_index_from_api",
+        return_value={"a": 25.55},
+    ):
+        updated = scores.merge_agentic_scores(cfg, "fake-key")
+    assert updated == 1
+    data = json.loads(scores_file.read_text())
+    assert data["models"]["a"]["scores"]["agentic"] == 25.6  # rounded to 1 decimal
+    assert data["models"]["b"]["scores"]["agentic"] == 20.0  # gap preserved

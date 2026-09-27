@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import urllib.request
 from datetime import datetime
@@ -12,7 +11,7 @@ from pathlib import Path
 from model_manager.config import AppConfig, get_raw_scores_path, get_scores_path
 from model_manager.domain import auth, storage
 
-AGENTIC_INDEX_URL = "https://artificialanalysis.ai/models/capabilities/agentic"
+AA_LANGUAGE_MODELS_FREE_URL = "https://artificialanalysis.ai/api/v2/language/models/free"
 
 
 def get_api_key() -> str | None:
@@ -36,37 +35,36 @@ def fetch_aa_data(api_key: str, config: AppConfig) -> dict | None:
         print(f"Error fetching AA data: {e}", file=sys.stderr)
         return None
 
-def fetch_agentic_indexes() -> dict[str, float]:
-    """Scrape the AA Agentic Index page for {slug: agentic_index}.
+def fetch_agentic_index_from_api(api_key: str, max_pages: int = 20) -> dict[str, float]:
+    """Fetch {slug: agentic_index} from the AA language-models endpoint.
 
-    The free API does not expose an ``artificial_analysis_agentic_index``
-    field yet, so we parse the Next.js flight/RSC payload embedded in the
-    page. Returns a slug-keyed dict of agentic scores; on any failure
-    returns ``{}`` so callers can fall back gracefully.
+    The ``artificial_analysis_agentic_index`` composite is part of the free
+    response's evaluations object. Results are paginated (200/page), so all
+    pages are walked. Slugs without a value are omitted. On any failure
+    returns whatever was collected so far (possibly ``{}``) so callers can
+    fall back gracefully.
     """
-    try:
-        req = urllib.request.Request(AGENTIC_INDEX_URL, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=30) as response:
-            html = response.read().decode()
-    except Exception as e:
-        print(f"Error fetching AA agentic index: {e}", file=sys.stderr)
-        return {}
-
-    rows = re.findall(r'self\.__next_f\.push\(\[1,"(.*)"\]\)', html)
-    blob = "".join(rows)
-
-    starts = list(re.finditer(r'\\"id\\":\\"[0-9a-f]{8}-[0-9a-f-]{27,36}\\",\\"slug\\":\\"', blob))
     indexes: dict[str, float] = {}
-    for i, start in enumerate(starts):
-        end = starts[i + 1].start() if i + 1 < len(starts) else len(blob)
-        segment = blob[start.start():end]
-        slug = re.search(r'"slug\\":\\"([^\\]+)\\"', segment)
-        headline = re.findall(r'"headlineValue\\":([0-9.]+|null)', segment)
-        if slug and headline and headline[-1] != "null":
-            try:
-                indexes[slug.group(1)] = float(headline[-1])
-            except ValueError:
-                continue
+    page = 1
+    while page <= max_pages:
+        try:
+            req = urllib.request.Request(
+                f"{AA_LANGUAGE_MODELS_FREE_URL}?page={page}",
+                headers={"x-api-key": api_key},
+            )
+            with urllib.request.urlopen(req, timeout=30) as response:
+                payload = json.loads(response.read().decode())
+        except Exception as e:
+            print(f"Error fetching AA agentic index (page {page}): {e}", file=sys.stderr)
+            break
+        for m in payload.get("data", []):
+            value = (m.get("evaluations") or {}).get("artificial_analysis_agentic_index")
+            if value is not None and m.get("slug"):
+                indexes[m["slug"]] = value
+        pagination = payload.get("pagination") or {}
+        if not pagination.get("has_more"):
+            break
+        page += 1
     return indexes
 
 def process_aa_data(
@@ -76,8 +74,7 @@ def process_aa_data(
 ) -> dict | None:
     """Transform API response into a slug-keyed dictionary of scores.
 
-    ``agentic_indexes`` maps AA slugs to Agentic Index scores scraped from
-    the AA website (the free API does not expose the field yet). When
+    ``agentic_indexes`` maps AA slugs to Agentic Index scores from the API;
     omitted, agentic scores are left as ``None``; call
     ``merge_agentic_scores`` afterwards to populate them.
     """
@@ -119,18 +116,19 @@ def process_aa_data(
     scores_path.write_text(json.dumps(processed, indent=2))
     return processed
 
-def merge_agentic_scores(config: AppConfig) -> int:
-    """Scrape AA agentic scores and merge them into the saved scores JSON.
+def merge_agentic_scores(config: AppConfig, api_key: str) -> int:
+    """Fetch AA agentic scores from the API and merge them into the saved scores JSON.
 
     Only updates models that already exist in the processed scores file,
-    so the API fetch result is preserved and the scrape is best-effort.
+    and only when the API provides a value, so a failed/partial fetch never
+    wipes previously saved agentic data.
     Returns the number of models whose agentic score was set or changed.
     """
     scores_path = get_scores_path(config)
     if not scores_path.exists():
         raise RuntimeError("Processed scores file not found. Please run 'scores fetch' first.")
 
-    indexes = fetch_agentic_indexes()
+    indexes = fetch_agentic_index_from_api(api_key)
     if not indexes:
         return 0
 
@@ -141,15 +139,13 @@ def merge_agentic_scores(config: AppConfig) -> int:
 
     updated = 0
     for slug, entry in data.get("models", {}).items():
-        scraped = indexes.get(slug)
-        if scraped is None:
+        fetched = indexes.get(slug)
+        if fetched is None:
             continue
         entry.setdefault("scores", {})
-        if scraped is not None:
-            scraped = round(scraped, 1)
-        entry.setdefault("scores", {})
-        if entry["scores"].get("agentic") != scraped:
-            entry["scores"]["agentic"] = scraped
+        fetched = round(fetched, 1)
+        if entry["scores"].get("agentic") != fetched:
+            entry["scores"]["agentic"] = fetched
             updated += 1
 
     if updated:
@@ -208,7 +204,7 @@ def sync_scores_to_models(config: AppConfig) -> int:
             if slug and slug in processed_models:
                 new_scores = dict(processed_models[slug].get("scores") or {})
                 # Preserve the existing agentic score when the new value is
-                # unavailable (scrape gap), so a failed/partial scrape never
+                # unavailable (API gap), so a failed/partial fetch never
                 # wipes previously synced agentic data.
                 existing_agentic = (variant_info.get("scores") or {}).get("agentic")
                 if new_scores.get("agentic") is None and existing_agentic is not None:

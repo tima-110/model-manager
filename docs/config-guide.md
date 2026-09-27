@@ -115,8 +115,9 @@ Contains the processed intelligence, coding, and agentic scores fetched from Art
     - `scores`: A dictionary of indices (`intelligence`, `coding`, `agentic`) and speed metrics (`ttft` in seconds, `tps` in tokens/second).
     - `last_synced`: Timestamp of the last update.
 
-The `agentic` index is not exposed by the free AA API; it is scraped from the
-AA capabilities page and merged in by `scores fetch` (`merge_agentic_scores`).
+The `agentic` index is served by the AA language-models API (`artificial_analysis_agentic_index`)
+and merged in by `scores fetch` (`merge_agentic_scores`). Models without an API value keep
+their previously saved agentic score.
 
 ### 2. `models.json`
 The mapping layer that translates provider-specific IDs into AA slugs.
