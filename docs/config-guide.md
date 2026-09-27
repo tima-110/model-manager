@@ -23,6 +23,10 @@ This document describes the configuration and data storage for `model-manager`.
 | `litellm_cost_map_url` | String | `https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/litellm_internal_staging/model_prices_and_context_window.json` | Source URL for the upstream cost map. |
 | `tags.tier1_min_ratio` | Float | `0.85` | Minimum composite score (as a fraction of the library leader) for Tier 1. |
 | `tags.tier2_min_ratio` | Float | `0.70` | Minimum composite score (as a fraction of the library leader) for Tier 2. |
+| `schedule.enabled` | Boolean | `false` | Set by `schedule install` / `schedule remove`; whether the background schedule is active. |
+| `schedule.frequency` | String | `"daily"` | One of `daily`, `hourly`, `weekly`. |
+| `schedule.time` | String | `"02:00"` | Firing time in `HH:MM` (daily/weekly; hourly uses the minute). |
+| `schedule.max_scans` | Integer | `2` | Scan cycles per provider per scheduled run. |
 
 Tier ratios can be overridden per-invocation with `--t1-ratio` / `--t2-ratio` on `models tag tier`.
 
@@ -86,6 +90,15 @@ provider_order = ["gemini", "nvidia", "openrouter"]
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `provider_order` | List of strings | `[]` (= nvidia first, then remaining configured providers) | Preference order for the tier's alias. Unknown names are ignored with a warning; if no listed provider backs the tier, the best-composite in-tier variant on any provider is used. |
+
+### Scheduled Service Secrets (`model-manager-schedule.env`)
+
+`schedule install` exports the keychain entries stored under this app's service name into a `0600` env file so timer firings (possibly without a login session) can authenticate:
+
+- Linux: `~/.config/systemd/user/model-manager-schedule.env` (next to the unit files)
+- macOS: `~/Library/LaunchAgents/model-manager-schedule.env` (next to the plist)
+
+The service consumes it via `EnvironmentFile=` and `schedule run --env-file`; interactive runs without `--env-file` keep using the keychain (explicit environment always wins over the file, keychain remains the fallback). Refresh after key changes with `auth update-env` (or re-run `schedule install`); `schedule remove` deletes the file.
 
 ## Data Storage
 The tool maintains nine primary JSON files in the `data_dir`, plus per-provider
@@ -171,6 +184,9 @@ These files are produced by scan/generate commands rather than discovery:
 - `debug_scan_{provider}_{timestamp}.json`: request/response logs written when scanning with `--debug`.
 - `model_prices_and_context_window.json`: merged upstream + overrides cost map written to `litellm_service_dir` by `litellm cost-map build`.
 - Generated LiteLLM YAML: written to each provider's `output_path` (or `--output`) by `litellm generate config`, to `litellm_fallbacks_path` (or `--output`) by `litellm generate fallbacks`, to `litellm_aliases_path` (or `--output`) by `litellm generate aliases`, and to `litellm_router_settings_path` (or `--output`) by `litellm generate router_settings` (which reads the stub at `litellm_router_settings_stub_path` and never overwrites it). Alternatively, `litellm generate all` generates all provider configs, fallbacks, aliases, and router_settings at once, and can optionally build the cost map with `--build-cost-map`.
+- `restart_requests.jsonl` (at `litellm_restart_request_path`): append-only log of `{"timestamp", "reason", "requested_by"}` restart requests written by `litellm request-restart` (and each successful schedule run). Consumed by the LiteLLM-side watcher — never append foreign record types here.
+- `schedule_runs.jsonl` (in `data_dir`): append-only per-run record of `{timestamp, steps, errors, error_count}` written by every `schedule run`. The timer-facing status history.
+- `dashboard.html` (in `data_dir`): status dashboard written by `dashboard` and regenerated last by each schedule run.
 
 ## Resolution Flow
 When `model-manager aliases resolve <id>` is called, the following logic is applied:

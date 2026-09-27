@@ -14,7 +14,11 @@ pipx install -e .
 ```
 
 ## Quick Start
-1. **Store your API keys** (OpenRouter, Artificial Analysis, NVIDIA, Ollama, Gemini, HuggingFace):
+1. **Initialize** (writes the default config if absent, checks secrets, shows next steps):
+   ```bash
+   model-manager init
+   ```
+2. **Store your API keys** (OpenRouter, Artificial Analysis, NVIDIA, Ollama, Gemini, HuggingFace) — `init` prints the exact commands for any missing keys:
    ```bash
    model-manager auth set ARTIFICIAL_ANALYSIS_API_KEY=your_key_here
    model-manager auth list
@@ -47,6 +51,11 @@ pipx install -e .
    model-manager doctor
    model-manager dashboard --no-open
    ```
+8. **Automate it** (optional): install the background schedule to refresh scores, rescan, and regenerate configs on a timer:
+   ```bash
+   model-manager schedule install
+   model-manager schedule status
+   ```
 
 ## Global Options
 
@@ -61,6 +70,14 @@ These flags work on the root command and most subcommands:
 | `--json` | Where offered, emit machine-readable JSON instead of a Rich table. |
 
 ## Command Reference
+
+### `init` — First-run bootstrap
+
+```bash
+model-manager init [--config PATH]
+```
+
+Writes the default `config.toml` if none exists (never overwrites), verifies the data directory, lists supported providers with Stored/Missing key status, prints exact `auth set` commands for missing keys, and shows next steps.
 
 ### `models` — Manage the conceptual model library
 
@@ -131,6 +148,7 @@ Top-level batch commands plus one `fetch`/`scan` pair per provider (`openrouter`
 | `auth set KEY_NAME VALUE` | Store a key; also accepts `KEY=VALUE` as a single argument | `KEY_NAME`, `VALUE` |
 | `auth delete KEY_NAME` | Remove a key from the keychain | `KEY_NAME` |
 | `auth list` | Show Stored/Missing status for tracked keys | *(none)* |
+| `auth update-env` | Export keychain keys to the scheduled service's env file (re-run after key changes) | `--output/-o` |
 
 Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`.
 
@@ -161,7 +179,20 @@ Generates the HTML status dashboard. Opens it in a browser by default; `--no-ope
 model-manager doctor [--config PATH] [--verbose/-v]
 ```
 
-Prints a health report covering Python/package versions, config parse, data directory, JSON data files, secrets, provider caches, and LiteLLM config. `--verbose` adds file sizes. Exits non-zero on failure.
+Prints a health report covering Python/package versions, config parse, data directory, JSON data files, secrets, provider caches, LiteLLM config, and the restart-request log. `--verbose` adds file sizes. Exits non-zero on failure.
+
+### `schedule` — Automated background updates
+
+| Command | Description | Arguments / Flags |
+| :--- | :--- | :--- |
+| `schedule install` | Install the OS service/timer (systemd user timer on Linux, launchd on macOS) and enable the schedule in config | `--frequency/-f` (`daily`, `hourly`, `weekly`; default `daily`), `--time/-t` (`HH:MM`; default `02:00`), `--max-scans/-m` (default `2`), `--config` |
+| `schedule status` | Show schedule configuration and whether the service file is installed | `--config` |
+| `schedule run` | Execute the full pipeline immediately (scores fetch/sync → provider fetch/scan → `generate all` → restart request → dashboard) | `--config`, `--env-file` |
+| `schedule remove` | Stop, delete the service/timer and its secrets file, disable the schedule in config | `--config` |
+
+Each run appends a `{timestamp, steps, errors}` record to `data_dir/schedule_runs.jsonl` and exits non-zero when any step errors, so timer failures show up in `systemctl status`. The restart-request log (`restart_requests.jsonl`) is left untouched — an external watcher consumes it as restart orders.
+
+Scheduled runs may fire without a login session (locked keychain), so `install` exports keychain keys to a `0600` env file next to the service definition (`~/.config/systemd/user/model-manager-schedule.env` on Linux, `~/Library/LaunchAgents/` on macOS), referenced via `EnvironmentFile=` and `--env-file`. Interactive runs without `--env-file` keep using the keychain. After changing keys, refresh with `auth update-env` (or re-run `schedule install`).
 
 ## Guided Discovery Workflow
 
