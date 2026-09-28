@@ -44,25 +44,31 @@ def request_restart(
 def config_check(
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
-    """Validate the LiteLLM config file is present and parseable YAML."""
+    """Validate all LiteLLM configs: existence, parse, includes, references, DAG."""
+    from rich.table import Table
+
+    from model_manager.domain import litellm_check as check_mod
+
     cfg = load_config(config)
-    litellm_config = cfg.litellm_config_path
+    result = check_mod.check_litellm_configs(cfg)
 
-    console.print(f"LiteLLM config file: [bold]{litellm_config}[/bold]")
+    table = Table(title="LiteLLM Config Check")
+    table.add_column("File", style="cyan", no_wrap=True)
+    table.add_column("Check")
+    table.add_column("Result", justify="center")
+    table.add_column("Detail")
+    for c in result["checks"]:
+        table.add_row(
+            c["file"], c["check"],
+            "[green]PASS[/green]" if c["ok"] else "[red]FAIL[/red]",
+            c["detail"],
+        )
+    console.print(table)
 
-    if not litellm_config.exists():
-        console.print("[red]FAIL: File not found[/red]")
+    if result["errors"]:
+        console.print(f"[red]{len(result['errors'])} check(s) failed[/red]")
         raise typer.Exit(1)
-
-    try:
-        yaml.safe_load(litellm_config.read_text())
-        console.print("[green]PASS: Valid YAML[/green]")
-    except yaml.YAMLError as e:
-        console.print(f"[red]FAIL: Invalid YAML — {e}[/red]")
-        raise typer.Exit(1)
-    except PermissionError:
-        console.print("[red]FAIL: Permission denied[/red]")
-        raise typer.Exit(1)
+    console.print("[green]All LiteLLM configs valid[/green]")
 
 @cost_map_app.command("build")
 def cost_map_build(

@@ -293,7 +293,10 @@ def test_execute_schedule_pipeline(tmp_path: Path):
          patch(
              "model_manager.domain.schedule.generate_dashboard",
              return_value=tmp_path / "dashboard.html",
-         ) as mock_dash:
+         ) as mock_dash, \
+         patch(
+             "model_manager.domain.schedule._validate_configs", return_value=True
+         ):
 
         res = schedule.execute_schedule_pipeline(cfg)
 
@@ -366,6 +369,9 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
          patch(
              "model_manager.domain.schedule.generate_dashboard",
              return_value=tmp_path / "dashboard.html",
+         ), \
+         patch(
+             "model_manager.domain.schedule._validate_configs", return_value=True
          ):
 
         res = schedule.execute_schedule_pipeline(cfg)
@@ -552,6 +558,9 @@ def _pipeline_mocks(tmp_path: Path, scan_records: list[dict], gen_side_effect=No
         "model_manager.domain.schedule.generate_dashboard",
         return_value=tmp_path / "dashboard.html",
     ))
+    stack.enter_context(patch(
+        "model_manager.domain.schedule._validate_configs", return_value=True
+    ))
     return stack
 
 
@@ -636,3 +645,38 @@ def test_wait_for_proxy_fast_and_capped():
             "http://x", "k", interval=30, timeout=65, sleep=sleeps.append
         ) is False
     assert sleeps == [30, 30]  # capped: no endless polling
+
+
+def test_failed_validation_skips_restart(tmp_path: Path):
+    from model_manager.domain import schedule as schedule_mod
+
+    cfg = AppConfig(data_dir=tmp_path)
+    with _pipeline_mocks(tmp_path, [{"model": "m1", "status": "up", "code": "200"}]):
+        with patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": [], "errors": []},
+        ), patch(
+            "model_manager.domain.schedule._validate_configs", return_value=False
+        ), patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ) as mock_restart:
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+    mock_restart.assert_not_called()
+    assert any("skipped (config check failed)" in e for e in res["errors"])
+
+
+def test_check_validator_unit(tmp_path: Path):
+    from model_manager.domain import litellm_check as check_mod
+
+    cfg = AppConfig(
+        data_dir=tmp_path,
+        litellm_config_path=tmp_path / "absent.yaml",
+        litellm_fallbacks_path=tmp_path / "fb.yaml",
+        litellm_aliases_path=tmp_path / "al.yaml",
+        litellm_router_settings_stub_path=tmp_path / "stub.yaml",
+        litellm_router_settings_path=tmp_path / "rs.yaml",
+    )
+    report = check_mod.check_litellm_configs(cfg)
+    assert report["errors"]
+    assert any("File not found" in e for e in report["errors"])

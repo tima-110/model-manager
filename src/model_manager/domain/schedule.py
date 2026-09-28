@@ -449,16 +449,22 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     except Exception as e:
         results["errors"].append(f"litellm generate all: {e}")
 
-    # Step 6: litellm request-restart so the service picks up the new configs
-    try:
-        if results["errors"]:
-            reason = f"Scheduled pipeline completed with {len(results['errors'])} error(s)"
-        else:
-            reason = "Scheduled pipeline completed"
-        record = restart.request_restart(config, reason=reason)
-        results["steps"].append(f"litellm request-restart: logged at {record['timestamp']}")
-    except Exception as e:
-        results["errors"].append(f"litellm request-restart: {e}")
+    configs_valid = _validate_configs(config, results, phase="generate")
+
+    # Step 6: litellm request-restart so the service picks up the new configs.
+    # Skipped when validation failed: never bounce into invalid configs.
+    if not configs_valid:
+        results["errors"].append("litellm request-restart: skipped (config check failed)")
+    else:
+        try:
+            if results["errors"]:
+                reason = f"Scheduled pipeline completed with {len(results['errors'])} error(s)"
+            else:
+                reason = "Scheduled pipeline completed (config check clean)"
+            record = restart.request_restart(config, reason=reason)
+            results["steps"].append(f"litellm request-restart: logged at {record['timestamp']}")
+        except Exception as e:
+            results["errors"].append(f"litellm request-restart: {e}")
 
     # Step 7: poll, then validate the live deployment with a proxy scan.
     # New ledger entries trigger exactly one regenerate + second restart.
@@ -571,14 +577,36 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
     if regen_errors:
         results["errors"].append("litellm re-generate had errors; skipping second restart")
         return
+    if not _validate_configs(config, results, phase="re-generate"):
+        results["errors"].append("litellm request-restart (re-run): skipped (config check failed)")
+        return
     try:
         record = restart.request_restart(
             config,
-            reason=f"Scheduled re-run: {len(new_blocks)} new block(s) found post-restart",
+            reason=f"Scheduled re-run: {len(new_blocks)} new block(s) found post-restart (config check clean)",
         )
         results["steps"].append(f"litellm request-restart (re-run): logged at {record['timestamp']}")
     except Exception as e:
         results["errors"].append(f"litellm request-restart (re-run): {e}")
+
+
+def _validate_configs(config: AppConfig, results: dict[str, Any], phase: str) -> bool:
+    """Run the config integrity check; record outcome. Returns True if clean."""
+    from model_manager.domain import litellm_check as check_mod
+
+    try:
+        report = check_mod.check_litellm_configs(config)
+    except Exception as e:
+        results["errors"].append(f"litellm config check ({phase}): {e}")
+        return False
+    if report["errors"]:
+        results["errors"].append(
+            f"litellm config check ({phase}): {len(report['errors'])} failure(s): "
+            + "; ".join(report["errors"][:3])
+        )
+        return False
+    results["steps"].append(f"litellm config check ({phase}): clean ({len(report['checks'])} checks)")
+    return True
 
 
 def _record_schedule_run(config: AppConfig, results: dict[str, Any]) -> Path | None:

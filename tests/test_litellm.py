@@ -16,28 +16,82 @@ def test_litellm_config_check_help():
     assert result.exit_code == 0
 
 
-def test_litellm_config_check_valid_yaml(tmp_path: Path):
-    """Verify valid YAML passes."""
+def _check_cfg(tmp_path: Path, master_text: str = "general:\n  port: 4000\n") -> Path:
+    """Minimal isolated config: all litellm paths under tmp_path."""
+    (tmp_path / "litellm.yaml").write_text(master_text)
+    (tmp_path / "prov.yaml").write_text(
+        "model_list:\n  - model_name: nvidia_nim/m1\n    litellm_params: {model: x/m1}\n"
+    )
+    (tmp_path / "fallbacks.yaml").write_text("fallbacks: []\n")
+    (tmp_path / "aliases.yaml").write_text("model_group_alias:\n  tier1: nvidia_nim/m1\n")
+    (tmp_path / "stub.yaml").write_text("router_settings: {}\n")
+    (tmp_path / "rs.yaml").write_text(
+        "router_settings:\n  model_group_alias:\n    tier1: nvidia_nim/m1\n  fallbacks: []\n"
+    )
+    (tmp_path / "models.json").write_text(
+        '{"meta": {}, "models": {"m": {"display_name": "M", "family": "x", '
+        '"default_variant": "standard", "variants": {"standard": '
+        '{"aa_slug": "m", "scores": {"intelligence": 80, "coding": 80}, '
+        '"tags": ["tier-1"], "include_in_litellm": true, '
+        '"provider_ids": {"nvidia": {"m1": {}}}}}}}}'
+    )
     cfg_file = tmp_path / "config.toml"
-    litellm_cfg = tmp_path / "litellm.yaml"
-    litellm_cfg.write_text("general:\n  port: 4000\n")
-    cfg_file.write_text(f'litellm_config_path = "{litellm_cfg}"\n')
+    cfg_file.write_text(
+        f'data_dir = "{tmp_path}"\n'
+        f'litellm_config_path = "{tmp_path / "litellm.yaml"}"\n'
+        f'litellm_fallbacks_path = "{tmp_path / "fallbacks.yaml"}"\n'
+        f'litellm_aliases_path = "{tmp_path / "aliases.yaml"}"\n'
+        f'litellm_router_settings_stub_path = "{tmp_path / "stub.yaml"}"\n'
+        f'litellm_router_settings_path = "{tmp_path / "rs.yaml"}"\n'
+        '[providers.nvidia]\nkeys = ["K"]\nlitellm_prefix = "nvidia_nim"\n'
+    )
+    return cfg_file
 
+
+def test_litellm_config_check_valid_yaml(tmp_path: Path):
+    """Verify a consistent config set passes."""
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "litellm.yaml").write_text("include:\n  - prov.yaml\n")
     result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
     assert result.exit_code == 0
-    assert "PASS" in result.stdout
+    assert "All LiteLLM configs valid" in result.stdout
 
 
 def test_litellm_config_check_invalid_yaml(tmp_path: Path):
     """Verify invalid YAML fails."""
-    cfg_file = tmp_path / "config.toml"
-    litellm_cfg = tmp_path / "litellm.yaml"
-    litellm_cfg.write_text("key: [unclosed bracket\n")
-    cfg_file.write_text(f'litellm_config_path = "{litellm_cfg}"\n')
-
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "litellm.yaml").write_text("key: [unclosed bracket\n")
     result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
     assert result.exit_code == 1
-    assert "FAIL" in result.stdout
+    assert "check(s) failed" in result.stdout
+
+
+def test_litellm_config_check_unknown_alias_target(tmp_path: Path):
+    """Verify alias pointing at an unregistered model fails (domain level)."""
+    from model_manager.config import load_config
+    from model_manager.domain import litellm_check as check_mod
+
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "aliases.yaml").write_text("model_group_alias:\n  tier1: nvidia_nim/ghost\n")
+    result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
+    assert result.exit_code == 1
+    assert "check(s) failed" in result.stdout
+    # content assertion bypasses table truncation
+    errors = check_mod.check_litellm_configs(load_config(cfg_file))["errors"]
+    assert any("ghost" in e for e in errors)
+
+
+def test_litellm_config_check_fallback_cycle(tmp_path: Path):
+    """Verify a fallback cycle fails."""
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "fallbacks.yaml").write_text(
+        "fallbacks:\n"
+        "  - nvidia_nim/m1:\n"
+        "      - nvidia_nim/m1\n"
+    )
+    result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
+    assert result.exit_code == 1
+    assert "check(s) failed" in result.stdout
 
 
 def test_litellm_generate_all_help():
@@ -230,4 +284,4 @@ def test_litellm_config_check_missing(tmp_path: Path):
 
     result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
     assert result.exit_code == 1
-    assert "FAIL" in result.stdout
+    assert "check(s) failed" in result.stdout

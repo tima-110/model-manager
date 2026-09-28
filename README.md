@@ -156,7 +156,7 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 
 | Command | Description | Arguments / Flags |
 | :--- | :--- | :--- |
-| `litellm config check` | Validate the LiteLLM config file exists and is parseable YAML | `--config` |
+| `litellm config check` | Validate all LiteLLM configs: existence, parse, include resolution, alias/fallback references, fallback DAG | `--config` |
 | `litellm cost-map build` | Merge upstream cost map with local overrides, save to service dir | `--config`, `--source-url` |
 | `litellm generate all` | Generate all LiteLLM configuration files (all provider configs, fallbacks, aliases, and router_settings) | `--config`, `--dry-run`, `--build-cost-map`/`--cost-map` |
 | `litellm generate config [PROVIDER]` | Generate LiteLLM YAML for one provider, or all with `--all-providers` | `[PROVIDER]` (`nvidia`, `gemini`, `ollama`, `openrouter`, `huggingface`); `--config`, `--output/-o`, `--dry-run`, `--all-providers` |
@@ -191,7 +191,7 @@ Prints a health report covering Python/package versions, config parse, data dire
 | `schedule run` | Execute the full pipeline immediately (scores → provider fetch/scan → `generate all` → restart → poll + proxy validation scan → conditional re-generate + second restart → dashboard) | `--config`, `--env-file` |
 | `schedule remove` | Stop, delete the service/timer and its secrets file, disable the schedule in config | `--config` |
 
-Each run appends a `{timestamp, steps, errors}` record to `data_dir/schedule_runs.jsonl` and exits non-zero when any step errors, so timer failures show up in `systemctl status`. The restart-request log (`restart_requests.jsonl`) is left untouched — an external watcher consumes it as restart orders.
+Each run appends a `{timestamp, steps, errors}` record to `data_dir/schedule_runs.jsonl` and exits non-zero when any step errors, so timer failures show up in `systemctl status`. After each generate, configs are integrity-checked and the restart is skipped on failure — never bounce LiteLLM into invalid configs. The restart-request log (`restart_requests.jsonl`) is left untouched — an external watcher consumes it as restart orders.
 
 Scheduled runs may fire without a login session (locked keychain), so `install` exports keychain keys to a `0600` env file next to the service definition (`~/.config/systemd/user/model-manager-schedule.env` on Linux, `~/Library/LaunchAgents/` on macOS), referenced via `EnvironmentFile=` and `--env-file`. Interactive runs without `--env-file` keep using the keychain. After changing keys, refresh with `auth update-env` (or re-run `schedule install`).
 
