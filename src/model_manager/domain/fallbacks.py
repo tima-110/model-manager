@@ -59,6 +59,14 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
     }
     groups: dict[str, dict] = {}
     blocked = blocks.blocked_set(config)
+    # Same live-only banding as the alias collector so fallback grouping
+    # agrees with alias grouping even when a stored tag lags behind.
+    tier_map = tags.compute_tiers(
+        data,
+        t1_ratio=config.tags.tier1_min_ratio,
+        t2_ratio=config.tags.tier2_min_ratio,
+        only=tags.live_variant_keys(data, config, blocked),
+    )
     for key, v in tags.variant_scores(data).items():
         info = v["info"]
         if info.get("include_in_litellm") is False:
@@ -102,7 +110,7 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
             continue
 
         model_names.sort(key=lambda e: (e[0], -e[1]))
-        tier = _tier_of(info)
+        tier = _tier_of(info) or tier_map.get(key)
         groups[key] = {
             "tier": tier,
             "composite": comp,

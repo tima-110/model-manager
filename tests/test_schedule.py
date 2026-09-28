@@ -262,6 +262,7 @@ def test_execute_schedule_pipeline(tmp_path: Path):
          patch("model_manager.domain.scores.process_aa_data"), \
          patch("model_manager.domain.scores.merge_agentic_scores"), \
          patch("model_manager.domain.scores.sync_scores_to_models", return_value=5), \
+         patch("model_manager.domain.tags.assign_tier_tags", return_value=(2, {}, 60.0)), \
          patch("model_manager.domain.providers.list_providers", return_value=fake_providers), \
          patch("model_manager.domain.providers.run_discovery_workflow") as mock_fetch, \
          patch(
@@ -302,6 +303,7 @@ def test_execute_schedule_pipeline(tmp_path: Path):
 
         assert "scores fetch: success" in res["steps"]
         assert "scores sync: updated 5 variants" in res["steps"]
+        assert any(s.startswith("tags: updated 2 variants") for s in res["steps"])
         assert mock_fetch.call_count == 2
         assert "providers fetch-all: completed for 2/2 providers" in res["steps"]
         # scan honors the configured max_scans (default 2)
@@ -333,6 +335,7 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
 
     with patch("model_manager.domain.scores.get_api_key", return_value=None), \
          patch("model_manager.domain.scores.sync_scores_to_models", return_value=0), \
+         patch("model_manager.domain.tags.assign_tier_tags", return_value=(0, {}, 0.0)), \
          patch(
              "model_manager.domain.providers.list_providers",
              return_value=[_fake_provider("NVIDIA")],
@@ -533,6 +536,7 @@ def _pipeline_mocks(tmp_path: Path, scan_records: list[dict], gen_side_effect=No
     stack.enter_context(patch("model_manager.domain.scores.process_aa_data"))
     stack.enter_context(patch("model_manager.domain.scores.merge_agentic_scores"))
     stack.enter_context(patch("model_manager.domain.scores.sync_scores_to_models", return_value=1))
+    stack.enter_context(patch("model_manager.domain.tags.assign_tier_tags", return_value=(1, {}, 60.0)))
     stack.enter_context(patch(
         "model_manager.domain.providers.list_providers", return_value=[_fake_provider("P")]
     ))
@@ -601,8 +605,31 @@ def test_pipeline_new_blocks_trigger_single_repass(tmp_path: Path):
     assert mock_gen.call_count == 2
     assert mock_restart.call_count == 2
     assert any("new block(s), re-generating once" in s for s in res["steps"])
+    assert any("tags re-run: updated" in s for s in res["steps"])
     assert any("re-run" in s for s in res["steps"])
     assert res["errors"] == []
+
+
+def test_pipeline_tags_failure_recorded_and_continues(tmp_path: Path):
+    from model_manager.domain import schedule as schedule_mod
+
+    cfg = AppConfig(data_dir=tmp_path)
+    with _pipeline_mocks(tmp_path, [{"model": "m1", "status": "up", "code": "200"}]):
+        with patch(
+            "model_manager.domain.tags.assign_tier_tags",
+            side_effect=RuntimeError("disk full"),
+        ), patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": ["generate fallbacks: success"], "errors": []},
+        ) as mock_gen, patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ) as mock_restart:
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+    assert any(e.startswith("tags:") for e in res["errors"])
+    mock_gen.assert_called_once()
+    mock_restart.assert_called_once()
+    assert "litellm validation: clean, no re-generate needed" in res["steps"]
 
 
 def test_pipeline_dead_proxy_no_regenerate(tmp_path: Path):

@@ -18,7 +18,15 @@ def _write_library(data_dir: Path, models: dict) -> None:
     (data_dir / "models.json").write_text(json.dumps({"meta": {}, "models": models}, indent=2))
 
 
-def _scored(composite_variants: dict[str, tuple[float, float, float | None]]) -> dict:
+def _live_cfg(tmp_path: Path) -> AppConfig:
+    """Config with a single test provider so fixture legs count as live."""
+    return AppConfig(
+        data_dir=tmp_path,
+        providers={"acme": {"keys": ["K1"], "litellm_prefix": "acme"}},
+    )
+
+
+def _scored(composite_variants: dict[str, tuple[float, float, float | None]], legs: bool = True) -> dict:
     models: dict = {}
     for key, (i, c, a) in composite_variants.items():
         mid, vid = key.rsplit("/", 1)
@@ -26,7 +34,14 @@ def _scored(composite_variants: dict[str, tuple[float, float, float | None]]) ->
         scores = {"intelligence": i, "coding": c}
         if a is not None:
             scores["agentic"] = a
-        models[mid]["variants"][vid] = {"aa_slug": None, "provider_ids": {}, "scores": scores}
+        variant: dict = {"aa_slug": None, "scores": scores}
+        if legs:
+            variant["provider_ids"] = {
+                "acme": {f"{mid}-pid": {"assessment": "Good", "availability": 1.0}}
+            }
+        else:
+            variant["provider_ids"] = {}
+        models[mid]["variants"][vid] = variant
     return {"models": models}
 
 
@@ -96,7 +111,7 @@ def test_compute_tiers_empty():
 
 
 def test_assign_tier_tags_preserves_manual_tags(tmp_path: Path):
-    cfg = AppConfig(data_dir=tmp_path)
+    cfg = _live_cfg(tmp_path)
     data = _scored({
         "alpha/std": (60, 60, None),
         "beta/std": (30, 30, None),
@@ -117,12 +132,81 @@ def test_assign_tier_tags_preserves_manual_tags(tmp_path: Path):
 
 
 def test_assign_tier_tags_idempotent(tmp_path: Path):
-    cfg = AppConfig(data_dir=tmp_path)
+    cfg = _live_cfg(tmp_path)
     data = _scored({"alpha/std": (60, 60, None)})
     _write_library(tmp_path, data["models"])
     tags.assign_tier_tags(cfg)
     updated, _, _ = tags.assign_tier_tags(cfg)
     assert updated == 0
+
+
+def test_assign_strips_ledger_blocked(tmp_path: Path):
+    from model_manager.domain import blocks
+
+    cfg = _live_cfg(tmp_path)
+    data = _scored({
+        "alpha/std": (60, 60, None),
+        "beta/std": (55, 55, None),
+    })
+    data["models"]["beta"]["variants"]["std"]["tags"] = ["tier-1"]
+    _write_library(tmp_path, data["models"])
+    blocks.record_observation(
+        cfg, [blocks.provider_key("acme", "beta-pid")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
+
+    updated, tiers, leader = tags.assign_tier_tags(cfg)
+    # beta is out of the banding: leader stays alpha, beta loses its tier tag
+    assert leader == 60.0
+    assert tiers == {"alpha/std": "tier-1"}
+    saved = json.loads((tmp_path / "models.json").read_text())
+    assert saved["models"]["alpha"]["variants"]["std"]["tags"] == ["tier-1"]
+    assert saved["models"]["beta"]["variants"]["std"]["tags"] == []
+    assert updated >= 1
+
+
+def test_assign_strips_excluded_and_resets_leader(tmp_path: Path):
+    cfg = _live_cfg(tmp_path)
+    data = _scored({
+        "alpha/std": (60, 60, None),
+        "ghost/std": (99, 99, None),
+    })
+    data["models"]["ghost"]["variants"]["std"]["include_in_litellm"] = False
+    data["models"]["ghost"]["variants"]["std"]["tags"] = ["tier-1"]
+    _write_library(tmp_path, data["models"])
+
+    _, tiers, leader = tags.assign_tier_tags(cfg)
+    assert leader == 60.0
+    assert tiers == {"alpha/std": "tier-1"}
+    saved = json.loads((tmp_path / "models.json").read_text())
+    assert saved["models"]["ghost"]["variants"]["std"]["tags"] == []
+
+
+def test_assign_all_mode_keeps_blocked_ratios(tmp_path: Path):
+    from model_manager.domain import blocks
+
+    cfg = _live_cfg(tmp_path)
+    data = _scored({
+        "alpha/std": (60, 60, None),
+        "beta/std": (55, 55, None),
+    })
+    _write_library(tmp_path, data["models"])
+    blocks.record_observation(
+        cfg, [blocks.provider_key("acme", "beta-pid")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
+
+    _, tiers, leader = tags.assign_tier_tags(cfg, respect_blocks=False)
+    assert leader == 60.0
+    assert tiers["beta/std"] == "tier-1"
+    saved = json.loads((tmp_path / "models.json").read_text())
+    assert saved["models"]["beta"]["variants"]["std"]["tags"] == ["tier-1"]
+
+
+def test_live_variant_keys_unconfigured_provider(tmp_path: Path):
+    cfg = AppConfig(data_dir=tmp_path)
+    data = _scored({"alpha/std": (60, 60, None)})
+    assert tags.live_variant_keys(data, cfg) == set()
 
 
 def test_set_remove_tag(tmp_path: Path):
@@ -153,9 +237,13 @@ def test_cli_tag_tier_dry_run(tmp_path: Path, mock_config: AppConfig):
 def test_cli_tag_tier_writes(tmp_path: Path, mock_config: AppConfig):
     data = _scored({"alpha/std": (60, 60, None), "beta/std": (30, 30, None)})
     _write_library(mock_config.data_dir, data["models"])
-    # Point CLI at the temp data dir via config.toml
+    # Point CLI at the temp data dir via config.toml (with a provider so
+    # the fixture legs count as live under the default live mode).
     config_file = tmp_path / "config.toml"
-    config_file.write_text(f'data_dir = "{mock_config.data_dir}"\n')
+    config_file.write_text(
+        f'data_dir = "{mock_config.data_dir}"\n'
+        '[providers.acme]\nkeys = ["K1"]\nlitellm_prefix = "acme"\n'
+    )
 
     result = runner.invoke(app, ["models", "tag", "tier", "--config", str(config_file)])
     assert result.exit_code == 0
@@ -164,6 +252,31 @@ def test_cli_tag_tier_writes(tmp_path: Path, mock_config: AppConfig):
     saved = json.loads((mock_config.data_dir / "models.json").read_text())
     assert saved["models"]["alpha"]["variants"]["std"]["tags"] == ["tier-1"]
     assert saved["models"]["beta"]["variants"]["std"]["tags"] == ["tier-3"]
+
+
+def test_cli_tag_tier_all_flag(tmp_path: Path, mock_config: AppConfig):
+    from model_manager.domain import blocks
+
+    data = _scored({"alpha/std": (60, 60, None), "beta/std": (55, 55, None)})
+    _write_library(mock_config.data_dir, data["models"])
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        f'data_dir = "{mock_config.data_dir}"\n'
+        '[providers.acme]\nkeys = ["K1"]\nlitellm_prefix = "acme"\n'
+    )
+    blocked_cfg = AppConfig(
+        data_dir=mock_config.data_dir,
+        providers={"acme": {"keys": ["K1"], "litellm_prefix": "acme"}},
+    )
+    blocks.record_observation(
+        blocked_cfg, [blocks.provider_key("acme", "beta-pid")],
+        blocked=True, reason="scan assessment: unauthorized", source="scan",
+    )
+
+    result = runner.invoke(app, ["models", "tag", "tier", "--all", "--config", str(config_file)])
+    assert result.exit_code == 0
+    saved = json.loads((mock_config.data_dir / "models.json").read_text())
+    assert saved["models"]["beta"]["variants"]["std"]["tags"] == ["tier-1"]
 
 
 def test_cli_tag_ratio_validation(tmp_path: Path, mock_config: AppConfig):

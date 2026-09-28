@@ -91,14 +91,16 @@ def tag_tier(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview tier assignments without writing to models.json."),
     t1_ratio: float | None = typer.Option(None, "--t1-ratio", help="Override Tier 1 cutoff as a fraction of the top composite score."),
     t2_ratio: float | None = typer.Option(None, "--t2-ratio", help="Override Tier 2 cutoff as a fraction of the top composite score."),
+    show_all: bool = typer.Option(False, "--all", help="Band every scored variant, ignoring the availability ledger and LiteLLM exclusions."),
     config: Path | None = typer.Option(None, "--config", "-c"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Automatically assign tier tags (tier-1/2/3) to all scored model variants.
 
-    Tiers are relative to the best composite score in the library (avg of
-    available intelligence/coding/agentic indices), so they track scores as
-    models improve.
+    By default tiers band only the live variants (scored, unblocked,
+    LiteLLM-included) relative to the best live composite, and blocked or
+    excluded variants have their tier tags stripped. Tiers therefore track
+    both scores and availability as models improve or go dark.
     """
     cfg = load_config(config)
     t1 = t1_ratio if t1_ratio is not None else cfg.tags.tier1_min_ratio
@@ -109,7 +111,8 @@ def tag_tier(
         raise typer.Exit(2)
 
     data = models.storage.load_models_data(cfg)
-    tiers = tags.compute_tiers(data, t1_ratio=t1, t2_ratio=t2)
+    only = None if show_all else tags.live_variant_keys(data, cfg)
+    tiers = tags.compute_tiers(data, t1_ratio=t1, t2_ratio=t2, only=only)
 
     if not tiers:
         console.print("[yellow]No scored variants found in models.json. Run 'scores sync' first.[/yellow]")
@@ -129,7 +132,7 @@ def tag_tier(
         console.print(table)
 
     if not dry_run:
-        updated, _, _ = tags.assign_tier_tags(cfg, t1_ratio=t1, t2_ratio=t2)
+        updated, _, _ = tags.assign_tier_tags(cfg, t1_ratio=t1, t2_ratio=t2, respect_blocks=not show_all)
         if updated:
             console.print(f"[green]Assigned/updated tier tags for {updated} variants.[/green]")
         else:

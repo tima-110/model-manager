@@ -15,7 +15,7 @@ from typing import Any, Callable
 from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
 from model_manager.domain import generate_all as gen_all_mod
-from model_manager.domain import blocks, providers, restart, scores
+from model_manager.domain import blocks, providers, restart, scores, tags
 from model_manager.domain import service_env as service_env_mod
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
@@ -359,16 +359,18 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     2. scores sync
     3. providers fetch-all (absent mappings are ledger-blocked)
     4. providers scan-all (up to ``config.schedule.max_scans`` cycles)
-    5. litellm generate all (provider configs, fallbacks, aliases,
+    5. tier tags (block-aware re-tag: fresh scores + fresh ledger, so
+       stored tiers match what generation is about to emit)
+    6. litellm generate all (provider configs, fallbacks, aliases,
        router_settings — same shared step as the CLI command; ledger
        blocks are honored, user exclusions always win)
-    6. litellm request-restart (signals the service to pick up new configs)
+    7. litellm request-restart (signals the service to pick up new configs)
 
     Phase B (validate the deployment, at most one re-pass):
-    7. poll the proxy until responsive (cap 5 min), then proxy-scan the
-       live deployment; new ledger entries trigger exactly one
-       regenerate + second restart, then finish regardless.
-    8. dashboard (regenerates the status page last)
+    8. poll the proxy until responsive (cap 5 min), then proxy-scan the
+       live deployment; new ledger entries trigger a re-tag plus exactly
+       one regenerate + second restart, then finish regardless.
+    9. dashboard (regenerates the status page last)
 
     The pre-generate proxy scan was intentionally removed: it tested the
     *old* deployment, while upstream health is already covered by fetch
@@ -441,7 +443,18 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
             results["errors"].append(f"providers scan ({p.name}): {e}")
     results["steps"].append(f"providers scan-all: completed for {scan_success}/{len(all_providers)} providers")
 
-    # Step 5: litellm generate all (shared with the CLI command)
+    # Step 5: tier tags (block-aware). Scores are fresh from Step 2 and the
+    # ledger is fresh from Steps 3-4, so this is the only point where both
+    # inputs are current. Generation below reads these tags.
+    try:
+        updated, _tier_map, leader = tags.assign_tier_tags(config)
+        results["steps"].append(
+            f"tags: updated {updated} variants (live leader {leader:.1f})"
+        )
+    except Exception as e:
+        results["errors"].append(f"tags: {e}")
+
+    # Step 6: litellm generate all (shared with the CLI command)
     try:
         gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
         results["steps"].extend(f"litellm {s}" for s in gen_result["steps"])
@@ -451,7 +464,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
 
     configs_valid = _validate_configs(config, results, phase="generate")
 
-    # Step 6: litellm request-restart so the service picks up the new configs.
+    # Step 7: litellm request-restart so the service picks up the new configs.
     # Skipped when validation failed: never bounce into invalid configs.
     if not configs_valid:
         results["errors"].append("litellm request-restart: skipped (config check failed)")
@@ -466,11 +479,12 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
         except Exception as e:
             results["errors"].append(f"litellm request-restart: {e}")
 
-    # Step 7: poll, then validate the live deployment with a proxy scan.
-    # New ledger entries trigger exactly one regenerate + second restart.
+    # Step 8: poll, then validate the live deployment with a proxy scan.
+    # New ledger entries trigger a re-tag plus exactly one regenerate +
+    # second restart.
     _validate_deployment(config, results)
 
-    # Step 8: dashboard (regenerated last, from the freshest data)
+    # Step 9: dashboard (regenerated last, from the freshest data)
     try:
         dashboard_path = generate_dashboard(config)
         results["steps"].append(f"dashboard: wrote {dashboard_path}")
@@ -518,7 +532,8 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
 
     Appends step/error lines into ``results`` in place. Regenerates and
     re-restarts at most once, only when the validation scan adds new
-    ledger blocks. A dead proxy can only produce track-only failures, so
+    ledger blocks (a re-tag runs first so tiers match the new ledger).
+    A dead proxy can only produce track-only failures, so
     it can never trigger a regenerate on its own.
     """
     from model_manager.domain import auth as _auth
@@ -566,6 +581,13 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
     results["steps"].append(
         f"litellm validation: {len(new_blocks)} new block(s), re-generating once"
     )
+    try:
+        updated, _tier_map, leader = tags.assign_tier_tags(config)
+        results["steps"].append(
+            f"tags re-run: updated {updated} variants (live leader {leader:.1f})"
+        )
+    except Exception as e:
+        results["errors"].append(f"tags re-run: {e}")
     try:
         gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
         results["steps"].extend(f"litellm re-generate {s}" for s in gen_result["steps"])

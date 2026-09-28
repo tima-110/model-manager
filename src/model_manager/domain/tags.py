@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from model_manager.config import AppConfig
+from model_manager.domain import blocks as blocks_mod
 from model_manager.domain import storage
 
 TIER_TAG_PREFIX = "tier-"
@@ -30,15 +31,24 @@ def variant_scores(models_data: dict) -> dict[str, dict]:
     return flat
 
 
-def compute_tiers(models_data: dict, t1_ratio: float = 0.85, t2_ratio: float = 0.70) -> dict[str, str]:
+def compute_tiers(
+    models_data: dict,
+    t1_ratio: float = 0.85,
+    t2_ratio: float = 0.70,
+    only: set[str] | None = None,
+) -> dict[str, str]:
     """Return {variant_key: tier} using relative-to-leader bands.
 
-    Leader is the highest composite score in the library. Variants whose
-    composite is >= ``t1_ratio`` of the leader get tier-1, >= ``t2_ratio``
-    get tier-2, and the rest get tier-3. Variants without a composite score
-    are omitted.
+    Leader is the highest composite score in the (optionally restricted)
+    set. Pass ``only`` with the live-eligible variant keys to band just
+    the servable models; ``None`` bands every scored variant (legacy).
+    Variants whose composite is >= ``t1_ratio`` of the leader get tier-1,
+    >= ``t2_ratio`` get tier-2, and the rest get tier-3. Variants without
+    a composite score are omitted.
     """
     flat = variant_scores(models_data)
+    if only is not None:
+        flat = {k: v for k, v in flat.items() if k in only}
     comps = [v["composite"] for v in flat.values() if v["composite"] is not None]
     if not comps:
         return {}
@@ -57,27 +67,94 @@ def compute_tiers(models_data: dict, t1_ratio: float = 0.85, t2_ratio: float = 0
     return tiers
 
 
+def live_variant_keys(
+    models_data: dict,
+    config: AppConfig,
+    blocked: set[str] | None = None,
+) -> set[str]:
+    """Return variant keys with at least one emittable provider leg.
+
+    A variant is live when it is scored, not user-excluded (variant or
+    provider level), and has a leg on a configured provider whose ledger
+    keys (``provider:`` and derived ``litellm:``) are all unblocked.
+    ``include_*`` metadata keys are never treated as model IDs.
+    """
+    ledger = blocked if blocked is not None else blocks_mod.blocked_set(config)
+    live: set[str] = set()
+    for key, v in variant_scores(models_data).items():
+        info = v["info"]
+        if info.get("include_in_litellm") is False:
+            continue
+        if v["composite"] is None:
+            continue
+        prov_map = info.get("provider_ids", {}) or {}
+        for pname, pc in config.providers.items():
+            if not (pc.keys and pc.litellm_prefix):
+                continue
+            pmap = prov_map.get(pname) or prov_map.get(pname.capitalize())
+            if isinstance(pmap, dict):
+                if pmap.get("include_in_litellm") is False:
+                    continue
+                pids = [p for p in pmap if not str(p).startswith("include_")]
+            elif isinstance(pmap, (list, tuple)):
+                pids = [p for p in pmap if not str(p).startswith("include_")]
+            else:
+                continue
+            for pid in pids:
+                derived = blocks_mod.derived_keys(config, pname, pid)
+                if not any(k in ledger for k in derived):
+                    live.add(key)
+                    break
+            if key in live:
+                break
+    return live
+
+
 def _replace_tier_tags(tags: list[str], tier: str) -> list[str]:
     """Drop all tier-* tags and append the new tier tag. Preserves manual tags."""
     clean = [t for t in tags if not t.startswith(TIER_TAG_PREFIX)]
     return clean + [tier]
 
 
-def assign_tier_tags(config: AppConfig, t1_ratio: float = 0.85, t2_ratio: float = 0.70) -> tuple[int, dict[str, str], float]:
-    """Write tier tags into models.json. Returns (updated_count, tier_map, leader)."""
+def _strip_tier_tags(tags: list[str]) -> list[str]:
+    """Drop all tier-* tags. Preserves manual tags."""
+    return [t for t in tags if not t.startswith(TIER_TAG_PREFIX)]
+
+
+def assign_tier_tags(
+    config: AppConfig,
+    t1_ratio: float = 0.85,
+    t2_ratio: float = 0.70,
+    respect_blocks: bool = True,
+) -> tuple[int, dict[str, str], float]:
+    """Write tier tags into models.json. Returns (updated_count, tier_map, leader).
+
+    With ``respect_blocks`` (default), tiers band only the live variants
+    (scored, unblocked, LiteLLM-included) and the leader is the best live
+    composite; any variant outside the live map has its ``tier-*`` tags
+    stripped so tags never promise an unservable model. Pass
+    ``respect_blocks=False`` for the legacy ratio-only banding over every
+    scored variant.
+    """
     data = storage.load_models_data(config)
-    tiers = compute_tiers(data, t1_ratio=t1_ratio, t2_ratio=t2_ratio)
+    only = live_variant_keys(data, config) if respect_blocks else None
+    tiers = compute_tiers(data, t1_ratio=t1_ratio, t2_ratio=t2_ratio, only=only)
     flat = variant_scores(data)
-    comps = [v["composite"] for v in flat.values() if v["composite"] is not None]
-    leader = max(comps) if comps else 0.0
+    live_comps = [
+        flat[k]["composite"] for k in tiers
+        if flat[k]["composite"] is not None
+    ]
+    leader = max(live_comps) if live_comps else 0.0
 
     updated = 0
-    for key, tier in tiers.items():
-        model_id, variant_id = key.rsplit("/", 1)
-        tags = flat[key]["info"].setdefault("tags", [])
-        replaced = _replace_tier_tags(tags, tier)
+    for key, v in flat.items():
+        tags = v["info"].setdefault("tags", [])
+        if key in tiers:
+            replaced = _replace_tier_tags(tags, tiers[key])
+        else:
+            replaced = _strip_tier_tags(tags)
         if replaced != tags:
-            flat[key]["info"]["tags"] = replaced
+            v["info"]["tags"] = replaced
             updated += 1
 
     if updated:

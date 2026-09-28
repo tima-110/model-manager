@@ -129,7 +129,12 @@ def test_fallback_to_other_provider_without_nvidia(tmp_path: Path):
             {"intelligence": 60, "coding": 60}, tag="tier-3")),
     })
     result = model_group_aliases.build_alias_map(cfg)
-    assert result == {"tier3": "gemini/gemma-4-31b-it"}
+    # single live model cascades to all three aliases
+    assert result == {
+        "tier1": "gemini/gemma-4-31b-it",
+        "tier2": "gemini/gemma-4-31b-it",
+        "tier3": "gemini/gemma-4-31b-it",
+    }
 
 
 def test_custom_provider_order(tmp_path: Path):
@@ -237,8 +242,8 @@ def test_missing_tags_computed_from_scores(tmp_path: Path):
     })
     result = model_group_aliases.build_alias_map(cfg)
     assert result["tier1"] == "nvidia_nim/leader-1"
+    assert result["tier2"] == "nvidia_nim/leader-1"
     assert result["tier3"] == "gemini/laggard-1"
-    assert "tier2" not in result
 
 
 def test_empty_tier_omitted_and_empty_raises(tmp_path: Path):
@@ -249,11 +254,48 @@ def test_empty_tier_omitted_and_empty_raises(tmp_path: Path):
             {"intelligence": 90, "coding": 90}, tag="tier-2")),
     })
     result = model_group_aliases.build_alias_map(cfg)
-    assert result == {"tier2": "nvidia_nim/m-1"}
+    # tier1 backfills upward from tier2; tier3 cascades down from tier2
+    assert result == {
+        "tier1": "nvidia_nim/m-1",
+        "tier2": "nvidia_nim/m-1",
+        "tier3": "nvidia_nim/m-1",
+    }
 
     _write(tmp_path, {})
     with pytest.raises(RuntimeError):
         model_group_aliases.generate_aliases_yaml(cfg, dry_run=True)
+
+
+def test_two_live_models_cover_all_aliases(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write(tmp_path, {
+        "best": _model("Best", _variant(
+            {"nvidia": {"org/best-1": {"assessment": "Active"}}},
+            {"intelligence": 90, "coding": 90}, tag="tier-1")),
+        "next": _model("Next", _variant(
+            {"gemini": {"next-1": {"assessment": "Active"}}},
+            {"intelligence": 40, "coding": 40}, tag="tier-3")),
+    })
+    result = model_group_aliases.build_alias_map(cfg)
+    assert result["tier1"] == "nvidia_nim/best-1"
+    # no tier-2 candidate: tier2 cascades down from tier1
+    assert result["tier2"] == "nvidia_nim/best-1"
+    assert result["tier3"] == "gemini/next-1"
+
+
+def test_single_tier1_model_backs_all_aliases(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write(tmp_path, {
+        "solo": _model("Solo", _variant(
+            {"nvidia": {"org/solo-1": {"assessment": "Active"}}},
+            {"intelligence": 90, "coding": 90}, tag="tier-1")),
+    })
+    result = model_group_aliases.build_alias_map(cfg)
+    assert result == {
+        "tier1": "nvidia_nim/solo-1",
+        "tier2": "nvidia_nim/solo-1",
+        "tier3": "nvidia_nim/solo-1",
+    }
 
 
 def test_dry_run_yaml_shape(tmp_path: Path):

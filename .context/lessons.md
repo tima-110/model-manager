@@ -3,7 +3,11 @@
 Project-specific insights. If an entry turns out to apply broadly to other
 projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 
-<!-- Append entries below. Newest at bottom. -->
+### 2026-09-28: Block-Aware Tier Tags With Alias Cascade
+**Context:** Tier tags were pure score math over all variants, so dead/blocked high-scorers pinned the scale and aliases could point at unservable targets; `schedule run` never re-tagged.
+**Insight:** Band tiers over the live set only (scored + unblocked + LiteLLM-included, leader = best live composite), strip `tier-*` from non-live variants, and cascade alias picks (tier2 falls back to tier1 value, tier3 to tier2) so all three aliases stay defined whenever ≥1 live model exists. Tagging runs post-scan/pre-generate in the schedule pipeline plus a re-tag in the Phase-B repass. `include_in_litellm` keys inside provider_ids maps are by-design exclusion flags, not junk — skip `include_*` keys at each call site.
+**Apply when:** Tier/alias health diverges from scores, or a tier alias resolves to a dead target.
+**Global?** No — specific to this project's tier/alias/block-ledger design.
 ### 2026-05-25: Variant-Based Model Mapping
 **Context:** Mapping provider-specific model IDs to Artificial Analysis (AA) scores.
 **Insight:** A simple key-value alias map is insufficient because different providers may offer different versions (variants) of the same model (e.g., quantized vs. full), each with different performance indices.

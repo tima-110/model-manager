@@ -76,10 +76,14 @@ def _collect_candidates(config: AppConfig) -> dict[str, list[dict[str, Any]]]:
         if pc.keys and pc.litellm_prefix
     }
     blocked = blocks.blocked_set(config)
+    # Band only the live variants so the leader and ratio cutoffs track
+    # what can actually be served; blocked/excluded variants keep no say
+    # in where the tier boundaries fall.
     tier_map = tags.compute_tiers(
         data,
         t1_ratio=config.tags.tier1_min_ratio,
         t2_ratio=config.tags.tier2_min_ratio,
+        only=tags.live_variant_keys(data, config, blocked),
     )
 
     grouped: dict[str, list[dict[str, Any]]] = {t: [] for t in TIER_ALIAS_KEYS}
@@ -138,51 +142,60 @@ def _collect_candidates(config: AppConfig) -> dict[str, list[dict[str, Any]]]:
     return grouped
 
 
+def _pick_best(
+    candidates: list[dict[str, Any]],
+    order: list[str],
+    blocked: set[str],
+) -> str | None:
+    """Pick the best candidate target honoring provider order, else None."""
+    for pname in order:
+        backed = [c for c in candidates if pname in c["names"]]
+        backed.sort(key=lambda c: (-c["composite"], c["key"]))
+        for cand in backed:
+            target = cand["names"][pname]
+            if f"litellm:{target}" not in blocked:
+                return target
+    ordered = sorted(candidates, key=lambda c: (-c["composite"], c["key"]))
+    for cand in ordered:
+        if f"litellm:{cand['best']}" not in blocked:
+            return cand["best"]
+    return None
+
+
 def build_alias_map(config: AppConfig) -> dict[str, str]:
     """Build ``{alias: model_name}`` with tier purity over provider preference.
 
     Candidates are filtered to their own tier first; the per-tier provider
-    order then picks which in-tier variant wins. A tier with no provider
-    from its hierarchy falls back to its best composite on any provider.
-    Tiers without eligible variants are omitted.
+    order then picks which in-tier variant wins. Tiers without eligible
+    variants cascade: a missing tier inherits the nearest resolved alias
+    (tier2 falls back to tier1, tier3 to tier2), so one live model backs
+    all three aliases and two live models cover tier1 plus tier2/tier3.
+    A single-tagged model may therefore back more than one alias. Only
+    when no tier has any eligible variant is the map empty.
     """
     grouped = _collect_candidates(config)
 
-    alias_map: dict[str, str] = {}
     blocked = blocks.blocked_set(config)
+    picks: dict[str, str | None] = {}
     for tier_tag, alias_key in TIER_ALIAS_KEYS.items():
-        candidates = grouped.get(tier_tag, [])
-        if not candidates:
+        order = _provider_order(config, alias_key)
+        picks[alias_key] = _pick_best(grouped.get(tier_tag, []), order, blocked)
+
+    tier1 = picks["tier1"] or picks["tier2"] or picks["tier3"]
+    tier2 = picks["tier2"] or tier1
+    tier3 = picks["tier3"] or tier2
+    resolved = {"tier1": tier1, "tier2": tier2, "tier3": tier3}
+
+    alias_map: dict[str, str] = {}
+    for alias_key in ("tier1", "tier2", "tier3"):
+        picked = resolved[alias_key]
+        if picked is None:
             log.warning("No eligible variants for %s; omitting alias.", alias_key)
             continue
-        order = _provider_order(config, alias_key)
-        picked: str | None = None
-        for pname in order:
-            backed = [c for c in candidates if pname in c["names"]]
-            backed.sort(key=lambda c: (-c["composite"], c["key"]))
-            for cand in backed:
-                target = cand["names"][pname]
-                if f"litellm:{target}" in blocked:
-                    continue
-                picked = target
-                break
-            if picked is not None:
-                break
-        if picked is None:
-            candidates.sort(key=lambda c: (-c["composite"], c["key"]))
-            for cand in candidates:
-                if f"litellm:{cand['best']}" not in blocked:
-                    picked = cand["best"]
-                    break
-            if picked is None:
-                log.warning(
-                    "All %s candidates blocked; omitting alias.",
-                    alias_key,
-                )
-                continue
+        if picked != picks[alias_key]:
             log.warning(
-                "No %s variant on providers %s; using %s.",
-                alias_key, ", ".join(order) or "(none)", picked,
+                "No eligible %s variant; cascading to %s.",
+                alias_key, picked,
             )
         alias_map[alias_key] = picked
 
