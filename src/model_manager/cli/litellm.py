@@ -466,7 +466,7 @@ def litellm_scan(
     try:
         from model_manager.domain import blocks as _blocks
 
-        _blocks.record_probe_observations(cfg, records)
+        _blocks.record_probe_observations(cfg, records, targets.get("alias_targets"))
     except Exception:
         pass
 

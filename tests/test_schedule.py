@@ -273,6 +273,7 @@ def test_execute_schedule_pipeline(tmp_path: Path):
              return_value={"steps": ["generate fallbacks: success"], "errors": []},
          ) as mock_gen, \
          patch("model_manager.domain.auth.get_secret", return_value="k"), \
+         patch("model_manager.domain.schedule._wait_for_proxy", return_value=True), \
          patch(
              "model_manager.domain.litellm_scan.enumerate_targets",
              return_value={"models": ["m1"], "aliases": []},
@@ -346,6 +347,7 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
              return_value={"steps": [], "errors": []},
          ), \
          patch("model_manager.domain.auth.get_secret", return_value="k"), \
+         patch("model_manager.domain.schedule._wait_for_proxy", return_value=True), \
          patch(
              "model_manager.domain.litellm_scan.enumerate_targets",
              return_value={"models": [], "aliases": []},
@@ -513,3 +515,124 @@ def test_cli_schedule_commands(tmp_path: Path):
         result = runner.invoke(app, ["schedule", "remove", "-c", str(cfg_file)])
         assert result.exit_code == 0
         assert "Successfully removed model-manager schedule." in result.stdout
+
+
+def _pipeline_mocks(tmp_path: Path, scan_records: list[dict], gen_side_effect=None):
+    """Context stack for a full pipeline run with mocked network steps."""
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    stack.enter_context(patch("model_manager.domain.scores.get_api_key", return_value="k"))
+    stack.enter_context(patch("model_manager.domain.scores.fetch_aa_data", return_value={"m": 1}))
+    stack.enter_context(patch("model_manager.domain.scores.process_aa_data"))
+    stack.enter_context(patch("model_manager.domain.scores.merge_agentic_scores"))
+    stack.enter_context(patch("model_manager.domain.scores.sync_scores_to_models", return_value=1))
+    stack.enter_context(patch(
+        "model_manager.domain.providers.list_providers", return_value=[_fake_provider("P")]
+    ))
+    stack.enter_context(patch("model_manager.domain.providers.run_discovery_workflow", return_value=[{"id": "x"}]))
+    stack.enter_context(patch(
+        "model_manager.domain.providers.scan_provider_models",
+        return_value={"scanned": 1, "cycles": 1, "assessments": {}},
+    ))
+    stack.enter_context(patch("model_manager.domain.auth.get_secret", return_value="k"))
+    stack.enter_context(patch("model_manager.domain.schedule._wait_for_proxy", return_value=True))
+    stack.enter_context(patch(
+        "model_manager.domain.litellm_scan.enumerate_targets",
+        return_value={"models": ["m1"], "aliases": [], "alias_targets": {}},
+    ))
+    stack.enter_context(patch(
+        "model_manager.domain.litellm_scan.scan_targets", return_value=scan_records
+    ))
+    stack.enter_context(patch(
+        "model_manager.domain.litellm_scan.save_litellm_scan",
+        return_value=tmp_path / "litellm_scan.json",
+    ))
+    stack.enter_context(patch(
+        "model_manager.domain.schedule.generate_dashboard",
+        return_value=tmp_path / "dashboard.html",
+    ))
+    return stack
+
+
+def test_pipeline_clean_validation_single_pass(tmp_path: Path):
+    from model_manager.domain import schedule as schedule_mod
+
+    cfg = AppConfig(data_dir=tmp_path)
+    with _pipeline_mocks(tmp_path, [{"model": "m1", "status": "up", "code": "200"}]):
+        with patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": ["generate fallbacks: success"], "errors": []},
+        ) as mock_gen, patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ) as mock_restart:
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+    assert mock_gen.call_count == 1
+    assert mock_restart.call_count == 1
+    assert "litellm validation: clean, no re-generate needed" in res["steps"]
+    assert res["errors"] == []
+
+
+def test_pipeline_new_blocks_trigger_single_repass(tmp_path: Path):
+    from model_manager.domain import schedule as schedule_mod
+
+    cfg = AppConfig(data_dir=tmp_path)
+    bad = {"model": "m1", "kind": "model", "status": "gone", "code": "410"}
+    with _pipeline_mocks(tmp_path, [bad]):
+        with patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": ["generate fallbacks: success"], "errors": []},
+        ) as mock_gen, patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ) as mock_restart:
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+    # exactly one re-pass even though the second scan would find blocks again
+    assert mock_gen.call_count == 2
+    assert mock_restart.call_count == 2
+    assert any("new block(s), re-generating once" in s for s in res["steps"])
+    assert any("re-run" in s for s in res["steps"])
+    assert res["errors"] == []
+
+
+def test_pipeline_dead_proxy_no_regenerate(tmp_path: Path):
+    from model_manager.domain import schedule as schedule_mod
+
+    cfg = AppConfig(data_dir=tmp_path)
+    with _pipeline_mocks(tmp_path, []):
+        with patch(
+            "model_manager.domain.schedule._wait_for_proxy", return_value=False
+        ), patch(
+            "model_manager.domain.litellm_scan.scan_targets",
+            side_effect=RuntimeError("connection refused"),
+        ), patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": ["generate fallbacks: success"], "errors": []},
+        ) as mock_gen, patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ) as mock_restart:
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+    assert mock_gen.call_count == 1
+    assert mock_restart.call_count == 1
+    assert any("unresponsive" in e for e in res["errors"])
+    assert any("litellm proxy scan" in e for e in res["errors"])
+
+
+def test_wait_for_proxy_fast_and_capped():
+    from model_manager.domain import schedule as schedule_mod
+
+    with patch(
+        "model_manager.domain.litellm_scan.fetch_proxy_models", return_value=["a"]
+    ):
+        assert schedule_mod._wait_for_proxy("http://x", "k") is True
+    sleeps: list[float] = []
+    with patch(
+        "model_manager.domain.litellm_scan.fetch_proxy_models",
+        side_effect=RuntimeError("down"),
+    ):
+        assert schedule_mod._wait_for_proxy(
+            "http://x", "k", interval=30, timeout=65, sleep=sleeps.append
+        ) is False
+    assert sleeps == [30, 30]  # capped: no endless polling

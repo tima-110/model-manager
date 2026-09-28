@@ -205,6 +205,26 @@ def test_ledger_blocked_alias_omitted(tmp_path: Path):
         model_group_aliases.generate_aliases_yaml(cfg, dry_run=True)
 
 
+def test_blocked_pick_falls_through_to_healthy(tmp_path: Path):
+    """A blocked top pick must not veto the alias when others are healthy."""
+    from model_manager.domain import blocks
+
+    cfg = _cfg(tmp_path)
+    _write(tmp_path, {
+        "best": _model("Best", _variant(
+            {"nvidia": {"org/best-1": {"assessment": "Active"}}},
+            {"intelligence": 99, "coding": 99}, tag="tier-1")),
+        "good": _model("Good", _variant(
+            {"nvidia": {"org/good-1": {"assessment": "Active"}}},
+            {"intelligence": 90, "coding": 90}, tag="tier-1")),
+    })
+    blocks.record_observation(
+        cfg, ["litellm:nvidia_nim/best-1"],
+        blocked=True, reason="proxy probe: gone", code="410", source="proxy",
+    )
+    assert model_group_aliases.build_alias_map(cfg)["tier1"] == "nvidia_nim/good-1"
+
+
 def test_missing_tags_computed_from_scores(tmp_path: Path):
     cfg = _cfg(tmp_path)
     _write(tmp_path, {

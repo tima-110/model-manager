@@ -65,6 +65,7 @@ def enumerate_targets(config: AppConfig) -> dict[str, list[str]]:
                 models.append(name)
 
     aliases: list[str] = []
+    alias_targets: dict[str, str] = {}
     for candidate in (config.litellm_router_settings_path, config.litellm_aliases_path):
         try:
             doc = _load_yaml(candidate)
@@ -74,13 +75,15 @@ def enumerate_targets(config: AppConfig) -> dict[str, list[str]]:
             alias_map = (doc.get("router_settings") or {}).get("model_group_alias") or {}
         else:
             alias_map = doc.get("model_group_alias") or {}
-        for alias in alias_map:
+        for alias, target in alias_map.items():
             if alias not in aliases:
                 aliases.append(alias)
+            if isinstance(target, str) and target:
+                alias_targets.setdefault(alias, target)
         if aliases:
             break
 
-    return {"models": models, "aliases": aliases}
+    return {"models": models, "aliases": aliases, "alias_targets": alias_targets}
 
 
 def fetch_proxy_models(base_url: str, api_key: str, timeout: int = 30) -> list[str]:

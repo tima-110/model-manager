@@ -60,6 +60,7 @@ def test_enumerate_targets_models_and_all_aliases(tmp_path: Path):
     assert targets["models"] == ["alpha", "beta"]
     # ALL aliases from the merged router_settings file, not just tiers
     assert targets["aliases"] == ["tier1", "myalias"]
+    assert targets["alias_targets"] == {"tier1": "alpha", "myalias": "beta"}
 
 
 def test_enumerate_targets_falls_back_to_aliases_file(tmp_path: Path):

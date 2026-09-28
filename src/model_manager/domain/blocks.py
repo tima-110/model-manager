@@ -203,17 +203,28 @@ def record_assessment_observations(
 
 
 def record_probe_observations(
-    config: AppConfig, records: list[dict[str, Any]]
+    config: AppConfig, records: list[dict[str, Any]],
+    alias_targets: dict[str, str] | None = None,
 ) -> dict[str, int]:
     """Fold LiteLLM proxy probe records into the ledger.
 
     ``up`` releases; block-listed statuses/codes block; everything else
-    (timeouts, 500s, empties, rate limits) is track-only.
+    (timeouts, 500s, empties, rate limits) is track-only. Alias probes
+    record against their *resolved target* (an alias name says nothing
+    about future picks), while stale ``alias:`` keys are released.
     """
+    resolved = alias_targets or {}
     blocked = released = 0
     for rec in records:
         name = rec.get("model", "")
-        keys = alias_keys(name) if rec.get("kind") == "alias" else litellm_keys(name)
+        if rec.get("kind") == "alias":
+            # Migrate legacy alias-namespace entries out: the alias name
+            # must never veto future picks.
+            record_observation(config, [f"alias:{name}"], blocked=False, reason="")
+            target = resolved.get(name, name)
+            keys = [f"litellm:{target}"]
+        else:
+            keys = [f"litellm:{name}"]
         status, code = rec.get("status"), rec.get("code")
         if status == "up":
             record_observation(config, keys, blocked=False, reason="")

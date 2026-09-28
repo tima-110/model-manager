@@ -162,7 +162,7 @@ def build_alias_map(config: AppConfig) -> dict[str, str]:
             backed.sort(key=lambda c: (-c["composite"], c["key"]))
             for cand in backed:
                 target = cand["names"][pname]
-                if f"alias:{alias_key}" in blocked or f"litellm:{target}" in blocked:
+                if f"litellm:{target}" in blocked:
                     continue
                 picked = target
                 break
@@ -171,7 +171,7 @@ def build_alias_map(config: AppConfig) -> dict[str, str]:
         if picked is None:
             candidates.sort(key=lambda c: (-c["composite"], c["key"]))
             for cand in candidates:
-                if f"alias:{alias_key}" not in blocked and f"litellm:{cand['best']}" not in blocked:
+                if f"litellm:{cand['best']}" not in blocked:
                     picked = cand["best"]
                     break
             if picked is None:

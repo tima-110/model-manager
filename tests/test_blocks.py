@@ -91,15 +91,18 @@ def test_assessment_mapping(tmp_path: Path):
 
 def test_probe_mapping_with_alias_keys(tmp_path: Path):
     cfg = _cfg(tmp_path)
+    # legacy alias-namespace entry must migrate out, not veto anything
+    blocks.record_observation(cfg, ["alias:tier1"], blocked=True, reason="old", source="proxy")
     recs = [
         {"model": "tier1", "kind": "alias", "status": "gone", "code": "410"},
         {"model": "m1", "kind": "model", "status": "up", "code": "200"},
         {"model": "m2", "kind": "model", "status": "down", "code": "500"},
     ]
-    res = blocks.record_probe_observations(cfg, recs)
+    res = blocks.record_probe_observations(cfg, recs, {"tier1": "nvidia_nim/old-pick"})
     assert res == {"blocked": 1, "released": 1}  # per-target counts
-    assert "alias:tier1" in blocks.blocked_set(cfg)
-    assert "litellm:tier1" in blocks.blocked_set(cfg)
+    # alias probe blocks its *resolved target*, releases the alias key
+    assert "litellm:nvidia_nim/old-pick" in blocks.blocked_set(cfg)
+    assert "alias:tier1" not in blocks.blocked_set(cfg)
     assert "litellm:m2" not in blocks.blocked_set(cfg)
 
 

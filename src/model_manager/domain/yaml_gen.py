@@ -148,6 +148,7 @@ def generate_provider_yaml(
     blocked = blocks.blocked_set(config)
 
     entries: list[dict[str, Any]] = []
+    blocked_skips = 0
 
     for model_id, model_data in all_models.items():
         variants = model_data.get("variants", {})
@@ -168,8 +169,10 @@ def generate_provider_yaml(
 
                 # Skip ledger-blocked targets (fetch-absence, failed scans)
                 if blocks.provider_key(provider, pid) in blocked:
+                    blocked_skips += 1
                     continue
                 if f"litellm:{model_name}" in blocked:
+                    blocked_skips += 1
                     continue
 
                 # Replicate for each API key
@@ -189,6 +192,12 @@ def generate_provider_yaml(
                     })
 
     if not entries:
+        if blocked_skips:
+            raise RuntimeError(
+                f"No entries generated for provider '{provider}': all "
+                f"{blocked_skips} mapped target(s) are ledger-blocked "
+                "(see `model-manager doctor`)."
+            )
         raise RuntimeError(
             f"No entries generated for provider '{provider}'. "
             "Check that models.json has mapped provider_ids for this provider."

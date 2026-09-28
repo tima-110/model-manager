@@ -7,9 +7,10 @@ import sys
 import shutil
 import platform
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
@@ -353,16 +354,26 @@ def get_schedule_status(config: AppConfig) -> dict[str, Any]:
 def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     """Execute the full model-manager schedule pipeline.
 
+    Phase A (plan from desired state):
     1. scores fetch
     2. scores sync
     3. providers fetch-all (absent mappings are ledger-blocked)
     4. providers scan-all (up to ``config.schedule.max_scans`` cycles)
-    5. litellm proxy scan (probe results feed the ledger)
-    6. litellm generate all (provider configs, fallbacks, aliases,
+    5. litellm generate all (provider configs, fallbacks, aliases,
        router_settings — same shared step as the CLI command; ledger
        blocks are honored, user exclusions always win)
-    7. litellm request-restart (signals the service to pick up new configs)
+    6. litellm request-restart (signals the service to pick up new configs)
+
+    Phase B (validate the deployment, at most one re-pass):
+    7. poll the proxy until responsive (cap 5 min), then proxy-scan the
+       live deployment; new ledger entries trigger exactly one
+       regenerate + second restart, then finish regardless.
     8. dashboard (regenerates the status page last)
+
+    The pre-generate proxy scan was intentionally removed: it tested the
+    *old* deployment, while upstream health is already covered by fetch
+    and provider scans. Only the post-restart scan can validate what was
+    just deployed.
 
     Every run appends a record to ``data_dir/schedule_runs.jsonl`` with its
     steps and errors. The restart-request file is left untouched: it is
@@ -430,35 +441,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
             results["errors"].append(f"providers scan ({p.name}): {e}")
     results["steps"].append(f"providers scan-all: completed for {scan_success}/{len(all_providers)} providers")
 
-    # Step 5: litellm proxy scan (feeds availability into generation below)
-    try:
-        from model_manager.domain import auth as _auth
-        from model_manager.domain import litellm_scan as _scan
-
-        proxy_key = _auth.get_secret(_scan.LITELLM_API_KEY_NAME)
-        if not proxy_key:
-            results["errors"].append("litellm proxy scan: LITELLM_MASTER_KEY missing")
-        else:
-            proxy_targets = _scan.enumerate_targets(config)
-            proxy_records = _scan.scan_targets(
-                _scan.DEFAULT_BASE_URL, proxy_key,
-                proxy_targets["models"] + proxy_targets["aliases"],
-                kinds={**{m: "model" for m in proxy_targets["models"]},
-                       **{a: "alias" for a in proxy_targets["aliases"]}},
-            )
-            try:
-                blocks.record_probe_observations(config, proxy_records)
-            except Exception:
-                pass
-            path = _scan.save_litellm_scan(config, proxy_records)
-            n_up = sum(1 for r in proxy_records if r["status"] == "up")
-            results["steps"].append(
-                f"litellm proxy scan: {n_up}/{len(proxy_records)} up (saved to {path})"
-            )
-    except Exception as e:
-        results["errors"].append(f"litellm proxy scan: {e}")
-
-    # Step 6: litellm generate all (shared with the CLI command)
+    # Step 5: litellm generate all (shared with the CLI command)
     try:
         gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
         results["steps"].extend(f"litellm {s}" for s in gen_result["steps"])
@@ -466,7 +449,7 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     except Exception as e:
         results["errors"].append(f"litellm generate all: {e}")
 
-    # Step 7: litellm request-restart so the service picks up the new configs
+    # Step 6: litellm request-restart so the service picks up the new configs
     try:
         if results["errors"]:
             reason = f"Scheduled pipeline completed with {len(results['errors'])} error(s)"
@@ -476,6 +459,10 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
         results["steps"].append(f"litellm request-restart: logged at {record['timestamp']}")
     except Exception as e:
         results["errors"].append(f"litellm request-restart: {e}")
+
+    # Step 7: poll, then validate the live deployment with a proxy scan.
+    # New ledger entries trigger exactly one regenerate + second restart.
+    _validate_deployment(config, results)
 
     # Step 8: dashboard (regenerated last, from the freshest data)
     try:
@@ -489,6 +476,109 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     _record_schedule_run(config, results)
 
     return results
+
+
+def _wait_for_proxy(
+    base_url: str,
+    api_key: str,
+    *,
+    interval: int = 15,
+    timeout: int = 300,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Poll the proxy model list until responsive or the attempt cap expires.
+
+    Attempts are bounded (``ceil(timeout / interval)``) rather than
+    wall-clock-gated, so behavior is identical under real and fake clocks.
+    """
+    import math
+
+    attempts = max(1, math.ceil(timeout / interval))
+    for n in range(attempts):
+        try:
+            from model_manager.domain import litellm_scan as _scan
+
+            _scan.fetch_proxy_models(base_url, api_key, timeout=10)
+            return True
+        except Exception:
+            pass
+        if n < attempts - 1:
+            sleep(interval)
+    return False
+
+
+def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
+    """Phase B: poll, proxy-scan the live deployment, single conditional re-pass.
+
+    Appends step/error lines into ``results`` in place. Regenerates and
+    re-restarts at most once, only when the validation scan adds new
+    ledger blocks. A dead proxy can only produce track-only failures, so
+    it can never trigger a regenerate on its own.
+    """
+    from model_manager.domain import auth as _auth
+    from model_manager.domain import litellm_scan as _scan
+
+    proxy_key = _auth.get_secret(_scan.LITELLM_API_KEY_NAME)
+    if not proxy_key:
+        results["errors"].append("litellm proxy scan: LITELLM_MASTER_KEY missing")
+        return
+
+    if _wait_for_proxy(_scan.DEFAULT_BASE_URL, proxy_key):
+        results["steps"].append("litellm proxy: responsive after restart")
+    else:
+        results["errors"].append("litellm proxy: unresponsive 5 min after restart request")
+
+    before = blocks.blocked_set(config)
+    try:
+        proxy_targets = _scan.enumerate_targets(config)
+        proxy_records = _scan.scan_targets(
+            _scan.DEFAULT_BASE_URL, proxy_key,
+            proxy_targets["models"] + proxy_targets["aliases"],
+            kinds={**{m: "model" for m in proxy_targets["models"]},
+                   **{a: "alias" for a in proxy_targets["aliases"]}},
+        )
+        try:
+            blocks.record_probe_observations(
+                config, proxy_records, proxy_targets.get("alias_targets")
+            )
+        except Exception:
+            pass
+        path = _scan.save_litellm_scan(config, proxy_records)
+        n_up = sum(1 for r in proxy_records if r["status"] == "up")
+        results["steps"].append(
+            f"litellm proxy scan: {n_up}/{len(proxy_records)} up (saved to {path})"
+        )
+    except Exception as e:
+        results["errors"].append(f"litellm proxy scan: {e}")
+        return
+
+    new_blocks = blocks.blocked_set(config) - before
+    if not new_blocks:
+        results["steps"].append("litellm validation: clean, no re-generate needed")
+        return
+
+    results["steps"].append(
+        f"litellm validation: {len(new_blocks)} new block(s), re-generating once"
+    )
+    try:
+        gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
+        results["steps"].extend(f"litellm re-generate {s}" for s in gen_result["steps"])
+        regen_errors = list(gen_result["errors"])
+        results["errors"].extend(f"litellm re-generate {e}" for e in regen_errors)
+    except Exception as e:
+        results["errors"].append(f"litellm re-generate all: {e}")
+        return
+    if regen_errors:
+        results["errors"].append("litellm re-generate had errors; skipping second restart")
+        return
+    try:
+        record = restart.request_restart(
+            config,
+            reason=f"Scheduled re-run: {len(new_blocks)} new block(s) found post-restart",
+        )
+        results["steps"].append(f"litellm request-restart (re-run): logged at {record['timestamp']}")
+    except Exception as e:
+        results["errors"].append(f"litellm request-restart (re-run): {e}")
 
 
 def _record_schedule_run(config: AppConfig, results: dict[str, Any]) -> Path | None:
