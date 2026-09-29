@@ -28,8 +28,13 @@ def test_path_resolution_precedence(tmp_path: Path):
 
     # 2. Config section override
     custom_dir = tmp_path / "custom_dash"
-    cfg.dashboard = DashboardConfig(enabled=True, out_dir=str(custom_dir), out_file="report.html")
+    cfg.dashboard = DashboardConfig(enabled=True, out_dir=custom_dir, out_file="report.html")
     assert get_dashboard_output_path(cfg) == custom_dir / "report.html"
+
+    # 2b. Empty-string out_dir (legacy TOML) coerces to None -> data_dir fallback
+    cfg.dashboard = DashboardConfig(enabled=True, out_dir="", out_file="report.html")
+    assert cfg.dashboard.out_dir is None
+    assert get_dashboard_output_path(cfg) == data_dir / "report.html"
 
     # 3. Disabled config section falls back to historical default
     cfg.dashboard.enabled = False
@@ -102,6 +107,58 @@ def test_publish_artifact_git_workflow(tmp_path: Path):
     res3 = publish_artifact_git(artifact, branch="main")
     assert res3["committed"] is True
     assert res3["pushed"] is True
+
+
+@pytest.mark.skipif(not shutil.which("git"), reason="git executable not found")
+def test_publish_artifact_git_contention_rebases(tmp_path: Path):
+    """Two writers to the same remote branch: second rebases and wins."""
+    remote_dir = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote_dir)], check=True, capture_output=True)
+
+    def _clone(name: str) -> Path:
+        d = tmp_path / name
+        subprocess.run(["git", "clone", str(remote_dir), str(d)], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=d, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=d, check=True)
+        return d
+
+    # Seed remote via first clone
+    seed = _clone("seed")
+    subprocess.run(["git", "checkout", "-b", "main"], cwd=seed, check=True, capture_output=True)
+    (seed / "README.md").write_text("# Repo")
+    subprocess.run(["git", "add", "README.md"], cwd=seed, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=seed, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "main"], cwd=seed, check=True)
+
+    work_a = _clone("work_a")
+    work_b = _clone("work_b")
+    for w in (work_a, work_b):
+        subprocess.run(["git", "checkout", "main"], cwd=w, check=True, capture_output=True)
+
+    # Writer A publishes first
+    art_a = work_a / "dashboard.html"
+    art_a.write_text("<h1>A</h1>")
+    res_a = publish_artifact_git(art_a, branch="main")
+    assert res_a["pushed"] is True
+
+    # Writer B is now stale (fetched before A pushed) — must rebase, not fail
+    art_b = work_b / "dashboard.html"
+    art_b.write_text("<h1>B</h1>")
+    res_b = publish_artifact_git(art_b, branch="main")
+    assert res_b["committed"] is True
+    assert res_b["pushed"] is True
+
+    # Last-writer-wins: remote has B, history is linear (A + B on top)
+    content = subprocess.run(
+        ["git", "show", "main:dashboard.html"],
+        cwd=remote_dir, capture_output=True, text=True, check=True
+    ).stdout
+    assert content == "<h1>B</h1>"
+    count = subprocess.run(
+        ["git", "rev-list", "--count", "main"],
+        cwd=remote_dir, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert int(count) >= 3  # init + A + B
 
 
 def test_publish_artifact_git_non_repo(tmp_path: Path):

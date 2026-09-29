@@ -29,7 +29,7 @@ This document describes the configuration and data storage for `model-manager`.
 | `schedule.time` | String | `"02:00"` | Firing time in `HH:MM` (daily/weekly; hourly uses the minute). |
 | `schedule.max_scans` | Integer | `2` | Scan cycles per provider per scheduled run. |
 | `dashboard.enabled` | Boolean | `true` | Master toggle for dashboard artifact settings. |
-| `dashboard.out_dir` | String | `""` | Directory for the HTML artifact (empty falls back to `data_dir`). |
+| `dashboard.out_dir` | Path | _(unset)_ | Directory for the HTML artifact (unset falls back to `data_dir`). |
 | `dashboard.out_file` | String | `"dashboard.html"` | File name for the HTML artifact (empty falls back to `dashboard.html`). |
 | `dashboard.git_enabled` | Boolean | `false` | Master toggle for git publish (must default OFF). |
 | `dashboard.git_branch` | String | `""` | Target remote branch name (empty pushes current branch upstream). |

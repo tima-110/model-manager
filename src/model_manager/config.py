@@ -75,10 +75,19 @@ class TagConfig(BaseModel):
 class DashboardConfig(BaseModel):
     """Configuration for status dashboard artifact output and git publishing."""
     enabled: bool = True
-    out_dir: str = ""
+    out_dir: Path | None = None
     out_file: str = "dashboard.html"
     git_enabled: bool = False
     git_branch: str = ""
+
+    @field_validator("out_dir", mode="before")
+    @classmethod
+    def normalize_out_dir(cls, v: str | Path | None) -> Path | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return Path(v).expanduser()
 
 
 class TierAliasConfig(BaseModel):
@@ -254,7 +263,7 @@ def get_dashboard_output_path(config: AppConfig, override: Path | str | None = N
     if override:
         return Path(override).expanduser()
     if config.dashboard.enabled:
-        out_dir = Path(config.dashboard.out_dir).expanduser() if config.dashboard.out_dir and config.dashboard.out_dir.strip() else config.data_dir
+        out_dir = config.dashboard.out_dir if config.dashboard.out_dir else config.data_dir
         out_file = config.dashboard.out_file.strip() if config.dashboard.out_file and config.dashboard.out_file.strip() else "dashboard.html"
         return out_dir / out_file
     return config.data_dir / "dashboard.html"

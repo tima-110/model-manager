@@ -15,7 +15,7 @@ from typing import Any, Callable
 from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
 from model_manager.domain import generate_all as gen_all_mod
-from model_manager.domain import blocks, providers, restart, scores, tags
+from model_manager.domain import blocks, git, providers, restart, scores, tags
 from model_manager.domain import service_env as service_env_mod
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
@@ -490,13 +490,11 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
         step_msg = f"dashboard: wrote {dashboard_path}"
         git_payload: dict[str, Any] | None = None
         if config.dashboard.enabled and config.dashboard.git_enabled:
-            from model_manager.domain.git import publish_artifact_git, ArtifactGitError
-
             try:
-                git_res = publish_artifact_git(dashboard_path, branch=config.dashboard.git_branch)
+                git_res = git.publish_artifact_git(dashboard_path, branch=config.dashboard.git_branch)
                 git_payload = {"pushed": git_res["pushed"], "committed": git_res["committed"], "commit": git_res["commit"]}
                 step_msg += f" (git committed={git_res['committed']}, pushed={git_res['pushed']})"
-            except ArtifactGitError as git_err:
+            except git.ArtifactGitError as git_err:
                 sys.stderr.write(f"Warning: Git publish failed: {git_err}\n")
                 git_payload = {"pushed": False, "committed": False, "error": str(git_err)}
                 step_msg += f" (git publish failed: {git_err})"

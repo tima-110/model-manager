@@ -48,8 +48,55 @@ def _run_git(
     return proc.returncode, stdout, stderr
 
 
+def _is_no_upstream_error(msg: str) -> bool:
+    """Check if a push failure indicates a missing upstream branch."""
+    lowered = msg.lower()
+    return (
+        "no upstream" in lowered
+        or "has no upstream branch" in lowered
+        or "set-upstream" in lowered
+    )
+
+
+def _is_rejected_error(msg: str) -> bool:
+    """Check if a push failure indicates the remote has moved (contention)."""
+    lowered = msg.lower()
+    return (
+        "non-fast-forward" in lowered
+        or "fetch first" in lowered
+        or "fetch-first" in lowered
+        or "failed to push some refs" in lowered
+        or "[rejected]" in lowered
+    )
+
+
+def _fetch_and_rebase(parent_dir: Path, target_branch: str) -> None:
+    """Fetch remote and rebase local work on top, favoring local artifact.
+
+    The local commit only touches the generated artifact, so ``-X theirs``
+    (theirs = commit being replayed during a rebase) implements
+    last-writer-wins for that file while fast-forwarding any unrelated
+    remote changes. Aborts cleanly on failure so the repo is never left
+    mid-rebase.
+    """
+    _run_git(["fetch", "origin", target_branch], cwd=parent_dir, timeout=120)
+    try:
+        _run_git(
+            ["rebase", "-X", "theirs", f"origin/{target_branch}"],
+            cwd=parent_dir,
+            timeout=120,
+        )
+    except ArtifactGitError as e:
+        _run_git(["rebase", "--abort"], cwd=parent_dir, check=False)
+        raise ArtifactGitError(f"git rebase onto origin/{target_branch} failed: {e}") from e
+
+
 def publish_artifact_git(output: Path, branch: str = "") -> dict[str, Any]:
     """Commit and push an artifact file to a git remote repository.
+
+    Pushes the current HEAD to the target branch. If the remote has moved
+    (non-fast-forward), fetches and rebases with last-writer-wins for the
+    artifact (``-X theirs``) and retries the push once.
 
     Args:
         output: Path to the generated artifact file.
@@ -102,26 +149,38 @@ def publish_artifact_git(output: Path, branch: str = "") -> dict[str, Any]:
     commit_msg = f"Update {out_path.name} ({ts})"
     _run_git(["commit", "-m", commit_msg, "--", out_path.name], cwd=parent_dir)
 
-    # 5. Get commit SHA
-    _, commit_sha, _ = _run_git(["rev-parse", "HEAD"], cwd=parent_dir)
-
-    # 6. Push to remote
+    # 6. Push to remote (with contention handling)
+    detached = cur_branch.strip() == "HEAD"
     if branch.strip():
-        _run_git(["push", "origin", branch.strip()], cwd=parent_dir, timeout=300)
         pushed_branch = branch.strip()
+        try:
+            _run_git(["push", "origin", f"HEAD:{pushed_branch}"], cwd=parent_dir, timeout=300)
+        except ArtifactGitError as e:
+            msg = str(e)
+            if _is_no_upstream_error(msg):
+                _run_git(["push", "-u", "origin", f"HEAD:{pushed_branch}"], cwd=parent_dir, timeout=300)
+            elif _is_rejected_error(msg) and not detached:
+                _fetch_and_rebase(parent_dir, pushed_branch)
+                _run_git(["push", "origin", f"HEAD:{pushed_branch}"], cwd=parent_dir, timeout=300)
+            else:
+                raise
     else:
-        # Plain git push
+        # Plain git push (current branch / upstream)
         push_code, _, push_err = _run_git(["push"], cwd=parent_dir, timeout=300, check=False)
         if push_code == 0:
             pushed_branch = target_branch
+        elif _is_no_upstream_error(push_err) and not detached:
+            _run_git(["push", "-u", "origin", target_branch], cwd=parent_dir, timeout=300)
+            pushed_branch = target_branch
+        elif _is_rejected_error(push_err) and not detached:
+            _fetch_and_rebase(parent_dir, target_branch)
+            _run_git(["push"], cwd=parent_dir, timeout=300)
+            pushed_branch = target_branch
         else:
-            # Fallback to git push -u origin <current-branch> if no upstream or plain push failed
-            err_msg = push_err.lower()
-            if "no upstream" in err_msg or "has no upstream branch" in err_msg or "set-upstream" in err_msg or push_code != 0:
-                _run_git(["push", "-u", "origin", target_branch], cwd=parent_dir, timeout=300)
-                pushed_branch = target_branch
-            else:
-                raise ArtifactGitError(f"git push failed: {push_err}")
+            raise ArtifactGitError(f"git push failed: {push_err or f'exit code {push_code}'}")
+
+    # SHA may have changed across a rebase — re-read
+    _, commit_sha, _ = _run_git(["rev-parse", "HEAD"], cwd=parent_dir)
 
     return {
         "committed": True,
