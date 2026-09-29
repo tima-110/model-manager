@@ -28,6 +28,11 @@ This document describes the configuration and data storage for `model-manager`.
 | `schedule.day` | String | `"monday"` | Day of week for `weekly` frequency (name or abbreviation). |
 | `schedule.time` | String | `"02:00"` | Firing time in `HH:MM` (daily/weekly; hourly uses the minute). |
 | `schedule.max_scans` | Integer | `2` | Scan cycles per provider per scheduled run. |
+| `dashboard.enabled` | Boolean | `true` | Master toggle for dashboard artifact settings. |
+| `dashboard.out_dir` | String | `""` | Directory for the HTML artifact (empty falls back to `data_dir`). |
+| `dashboard.out_file` | String | `"dashboard.html"` | File name for the HTML artifact (empty falls back to `dashboard.html`). |
+| `dashboard.git_enabled` | Boolean | `false` | Master toggle for git publish (must default OFF). |
+| `dashboard.git_branch` | String | `""` | Target remote branch name (empty pushes current branch upstream). |
 | `blocking.block_signals` | List of strings | (see below) | Observed statuses/codes that block a target from generated configs. |
 
 Default `block_signals`: `unauthorized`, `forbidden`, `not_found`, `gone`, `unsupported`, `payment_required`, `401`, `403`, `404`, `402`, `410` (matched case-insensitively against scan assessments, probe statuses, and HTTP codes). Remove a token to stop blocking on it. Fetch-absence always blocks regardless of this list. The first clean observation releases a target.

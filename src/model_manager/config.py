@@ -72,6 +72,15 @@ class TagConfig(BaseModel):
     tier2_min_ratio: float = 0.70
 
 
+class DashboardConfig(BaseModel):
+    """Configuration for status dashboard artifact output and git publishing."""
+    enabled: bool = True
+    out_dir: str = ""
+    out_file: str = "dashboard.html"
+    git_enabled: bool = False
+    git_branch: str = ""
+
+
 class TierAliasConfig(BaseModel):
     """Provider preference order for one tier's group alias."""
     provider_order: list[str] = []
@@ -102,6 +111,7 @@ class AppConfig(BaseModel):
     providers: dict[str, ProviderConfig] = {}
     tags: TagConfig = TagConfig()
     tier_providers: TierProvidersConfig = TierProvidersConfig()
+    dashboard: DashboardConfig = DashboardConfig()
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_fallbacks_path: Path = Path("/etc/litellm/litellm-fallbacks.yaml")
@@ -238,3 +248,13 @@ def get_litellm_cost_map_output_path(config: AppConfig) -> Path:
 def get_litellm_restart_request_path(config: AppConfig) -> Path:
     """Return path to the LiteLLM restart requests file."""
     return config.litellm_restart_request_path
+
+def get_dashboard_output_path(config: AppConfig, override: Path | str | None = None) -> Path:
+    """Return the output path for the dashboard HTML artifact."""
+    if override:
+        return Path(override).expanduser()
+    if config.dashboard.enabled:
+        out_dir = Path(config.dashboard.out_dir).expanduser() if config.dashboard.out_dir and config.dashboard.out_dir.strip() else config.data_dir
+        out_file = config.dashboard.out_file.strip() if config.dashboard.out_file and config.dashboard.out_file.strip() else "dashboard.html"
+        return out_dir / out_file
+    return config.data_dir / "dashboard.html"

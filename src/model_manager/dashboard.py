@@ -10,6 +10,7 @@ import yaml
 
 from model_manager.config import (
     AppConfig,
+    get_dashboard_output_path,
     get_free_models_path,
     get_nvidia_models_path,
     get_ollama_models_path,
@@ -24,11 +25,12 @@ from model_manager.config import (
 from model_manager.domain import blocks, storage, scores
 
 
-def generate_dashboard(cfg: AppConfig) -> Path:
-    """Gather data, render HTML, write to data_dir. Returns output path."""
+def generate_dashboard(cfg: AppConfig, out_path: Path | None = None) -> Path:
+    """Gather data, render HTML, write to output path. Returns output path."""
     data = _collect_data(cfg)
     html_content = _render_html(data)
-    output = cfg.data_dir / "dashboard.html"
+    output = get_dashboard_output_path(cfg, override=out_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(html_content)
     return output
 

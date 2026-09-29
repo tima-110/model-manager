@@ -434,8 +434,9 @@ def test_scan_provider_models_missing_cache(tmp_path: Path):
 
     cfg = AppConfig(data_dir=tmp_path)
     provider = next(p for p in providers_mod.list_providers() if p.name == "NVIDIA")
-    with pytest.raises(RuntimeError, match="cache not found"):
-        providers_mod.scan_provider_models(provider, cfg, max_scans=1)
+    with patch("model_manager.domain.auth.get_secret", return_value="dummy_key"):
+        with pytest.raises(RuntimeError, match="cache not found"):
+            providers_mod.scan_provider_models(provider, cfg, max_scans=1)
 
 
 def test_scan_provider_models_success(tmp_path: Path):

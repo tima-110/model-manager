@@ -169,10 +169,12 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 ### `dashboard` — Generate a status dashboard
 
 ```bash
-model-manager dashboard [--no-open] [--config PATH]
+model-manager dashboard [--out PATH] [--git-push | --no-git-push] [--no-open] [--config PATH]
 ```
 
 Generates the HTML status dashboard. Opens it in a browser by default; `--no-open` only prints the output path.
+- `--out PATH`: Write the HTML artifact to an explicit path (overrides config).
+- `--git-push` / `--no-git-push`: Force commit + push to Git on or off for this run (overrides `git_enabled`).
 
 ### `doctor` — Diagnose tool health and environment
 
@@ -231,6 +233,21 @@ ROOT (JSON Object)
 ```
 
 This allows the system to perform a **reverse lookup**: it finds a provider ID in the tree and then "climbs up" to resolve the model's performance scores via the `aa_slug`.
+
+## Artifact Publishing
+
+`model-manager` can automatically publish status artifacts (`dashboard.html`) to a Git repository (e.g., a shared dashboards repo). Configure `[dashboard]` in `config.toml`:
+
+```toml
+[dashboard]
+enabled = true
+out_dir = "/path/to/dashboards-repo"
+out_file = "dashboard.html"
+git_enabled = true
+git_branch = "main"
+```
+
+When `git_enabled = true` (or `--git-push` is passed), `dashboard` and `schedule run` automatically stage, check changes, commit with a timestamped message (`Update dashboard.html (...)`), and push to the remote repository. Git failures emit a stderr warning without causing the command or scheduled job to fail.
 
 ## Configuration
 Detailed configuration options can be found in the [Configuration Guide](docs/config-guide.md).

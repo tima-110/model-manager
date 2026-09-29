@@ -487,7 +487,22 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     # Step 9: dashboard (regenerated last, from the freshest data)
     try:
         dashboard_path = generate_dashboard(config)
-        results["steps"].append(f"dashboard: wrote {dashboard_path}")
+        step_msg = f"dashboard: wrote {dashboard_path}"
+        git_payload: dict[str, Any] | None = None
+        if config.dashboard.enabled and config.dashboard.git_enabled:
+            from model_manager.domain.git import publish_artifact_git, ArtifactGitError
+
+            try:
+                git_res = publish_artifact_git(dashboard_path, branch=config.dashboard.git_branch)
+                git_payload = {"pushed": git_res["pushed"], "committed": git_res["committed"], "commit": git_res["commit"]}
+                step_msg += f" (git committed={git_res['committed']}, pushed={git_res['pushed']})"
+            except ArtifactGitError as git_err:
+                sys.stderr.write(f"Warning: Git publish failed: {git_err}\n")
+                git_payload = {"pushed": False, "committed": False, "error": str(git_err)}
+                step_msg += f" (git publish failed: {git_err})"
+        results["steps"].append(step_msg)
+        if git_payload:
+            results["git"] = git_payload
     except Exception as e:
         results["errors"].append(f"dashboard: {e}")
 
