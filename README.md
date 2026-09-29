@@ -176,6 +176,23 @@ Generates the HTML status dashboard. Opens it in a browser by default; `--no-ope
 - `--out PATH`: Write the HTML artifact to an explicit path (overrides config).
 - `--git-push` / `--no-git-push`: Force commit + push to Git on or off for this run (overrides `git_enabled`).
 
+### `radar` — Generate the interactive benchmark radar
+
+```bash
+model-manager radar [--out PATH] [--git-push | --no-git-push] [--no-open] [--config PATH]
+```
+
+Generates a static, self-contained radar page (Quality-vs-Cost Pareto scatter, AA reference pinning, insight cards, evaluation matrix, YAML draft export) from local JSON files only — no network, no live proxy connection. Same flags as `dashboard`; configure defaults plus pre-pinned baselines under `[radar]` (`out_dir`, `out_file`, `git_enabled`, `git_branch`, `pinned_references`).
+
+### `prices` — Manage the local price library
+
+| Command | Description | Arguments / Flags |
+| :--- | :--- | :--- |
+| `prices fetch` | Build `model_prices.json` from cost overrides + OpenRouter catalog + upstream cost map | `--source-url`, `--skip-openrouter`, `--skip-upstream`, `--config`, `--json` |
+| `prices list` | List entries in the local price library | `--filter/-f`, `--config`, `--json` |
+
+The radar page reads `model_prices.json` when present; models without a price sit on a labeled no-price rail. Run `prices fetch` to fill gaps.
+
 ### `doctor` — Diagnose tool health and environment
 
 ```bash

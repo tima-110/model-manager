@@ -14,6 +14,8 @@ from .auth import auth_app
 from .litellm import litellm_app
 from .dashboard import dashboard_app
 from .doctor import doctor_app
+from .prices import prices_app
+from .radar import radar_app
 from .schedule import schedule_app
 
 app = typer.Typer(
@@ -51,6 +53,8 @@ app.add_typer(auth_app, name="auth")
 app.add_typer(litellm_app, name="litellm")
 app.add_typer(dashboard_app, name="dashboard")
 app.add_typer(doctor_app, name="doctor")
+app.add_typer(prices_app, name="prices")
+app.add_typer(radar_app, name="radar")
 app.add_typer(schedule_app, name="schedule")
 
 

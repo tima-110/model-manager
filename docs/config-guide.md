@@ -33,6 +33,12 @@ This document describes the configuration and data storage for `model-manager`.
 | `dashboard.out_file` | String | `"dashboard.html"` | File name for the HTML artifact (empty falls back to `dashboard.html`). |
 | `dashboard.git_enabled` | Boolean | `false` | Master toggle for git publish (must default OFF). |
 | `dashboard.git_branch` | String | `""` | Target remote branch name (empty pushes current branch upstream). |
+| `radar.enabled` | Boolean | `true` | Master toggle for radar artifact settings. |
+| `radar.out_dir` | Path | _(unset)_ | Directory for the radar HTML artifact (unset falls back to `data_dir`). |
+| `radar.out_file` | String | `"radar.html"` | File name for the radar HTML artifact (empty falls back to `radar.html`). |
+| `radar.git_enabled` | Boolean | `false` | Master toggle for radar git publish (must default OFF). |
+| `radar.git_branch` | String | `""` | Target remote branch name (empty pushes current branch upstream). |
+| `radar.pinned_references` | List of strings | `[]` | AA slugs pre-pinned as baselines on the radar page (empty by default). |
 | `blocking.block_signals` | List of strings | (see below) | Observed statuses/codes that block a target from generated configs. |
 
 Default `block_signals`: `unauthorized`, `forbidden`, `not_found`, `gone`, `unsupported`, `payment_required`, `401`, `403`, `404`, `402`, `410` (matched case-insensitively against scan assessments, probe statuses, and HTTP codes). Remove a token to stop blocking on it. Fetch-absence always blocks regardless of this list. The first clean observation releases a target.
@@ -196,6 +202,15 @@ A dictionary where keys are **Model IDs** and values are partial or full model m
 - `_meta`: (Optional) Metadata about the local overrides.
 - `model-id`: Dictionary containing fields to override (e.g., `input_cost_per_token`, `max_tokens`).
 
+### 10. `model_prices.json`
+The local price library read by the radar page (`radar` never fetches prices itself). Built by `prices fetch` from local overrides first, then the OpenRouter full model catalog, then the upstream LiteLLM cost map (first source wins per key).
+
+**Schema:**
+- `meta`: Sync metadata (timestamp, sources, total entries).
+- `prices`: A dictionary keyed by **lowercased model id or AA slug**.
+    - `blended_per_1m`: Blended USD price per 1M tokens (mean of prompt + completion).
+    - `source`: One of `override`, `openrouter`, `litellm-upstream`.
+
 ### Scan Results and Generated Artifacts
 
 These files are produced by scan/generate commands rather than discovery:
@@ -208,6 +223,7 @@ These files are produced by scan/generate commands rather than discovery:
 - `schedule_runs.jsonl` (in `data_dir`): append-only per-run record of `{timestamp, steps, errors, error_count}` written by every `schedule run`. The timer-facing status history.
 - `model_blocks.json` (in `data_dir`): availability ledger (see Availability Blocks above).
 - `dashboard.html` (in `data_dir`): status dashboard written by `dashboard` and regenerated last by each schedule run.
+- `radar.html` (in `data_dir`): static interactive benchmark radar written by `radar` (Pareto scatter, pin drawer, matrix, YAML draft export).
 - `litellm_scan.json` (in `data_dir`): per-model proxy probe records (`kind`, `status`, `ttft_ms`, `tps`, `tpm_est`, token counts, `reasoning_chunks`/`reasoning_chars`, `finish_reason`, `attempts`) plus a run summary, written by `litellm scan`. Status `empty` means HTTP 200 with neither content nor reasoning chunks; an `empty` first attempt is retried once at 4x token headroom (thinking models share the cap between reasoning and content). Targets come from the generated YAMLs plus every alias in the merged router_settings file; shown as a table on the dashboard.
 
 ## Resolution Flow

@@ -90,6 +90,25 @@ class DashboardConfig(BaseModel):
         return Path(v).expanduser()
 
 
+class RadarConfig(BaseModel):
+    """Configuration for the interactive benchmark-radar artifact and price data."""
+    enabled: bool = True
+    out_dir: Path | None = None
+    out_file: str = "radar.html"
+    git_enabled: bool = False
+    git_branch: str = ""
+    pinned_references: list[str] = []
+
+    @field_validator("out_dir", mode="before")
+    @classmethod
+    def normalize_out_dir(cls, v: str | Path | None) -> Path | None:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return Path(v).expanduser()
+
+
 class TierAliasConfig(BaseModel):
     """Provider preference order for one tier's group alias."""
     provider_order: list[str] = []
@@ -121,6 +140,7 @@ class AppConfig(BaseModel):
     tags: TagConfig = TagConfig()
     tier_providers: TierProvidersConfig = TierProvidersConfig()
     dashboard: DashboardConfig = DashboardConfig()
+    radar: RadarConfig = RadarConfig()
     litellm_service_dir: Path = Path("/var/www/local_json_data")
     litellm_config_path: Path = Path("/etc/litellm/litellm.yaml")
     litellm_fallbacks_path: Path = Path("/etc/litellm/litellm-fallbacks.yaml")
@@ -267,3 +287,19 @@ def get_dashboard_output_path(config: AppConfig, override: Path | str | None = N
         out_file = config.dashboard.out_file.strip() if config.dashboard.out_file and config.dashboard.out_file.strip() else "dashboard.html"
         return out_dir / out_file
     return config.data_dir / "dashboard.html"
+
+
+def get_radar_output_path(config: AppConfig, override: Path | str | None = None) -> Path:
+    """Return the output path for the radar HTML artifact."""
+    if override:
+        return Path(override).expanduser()
+    if config.radar.enabled:
+        out_dir = config.radar.out_dir if config.radar.out_dir else config.data_dir
+        out_file = config.radar.out_file.strip() if config.radar.out_file and config.radar.out_file.strip() else "radar.html"
+        return out_dir / out_file
+    return config.data_dir / "radar.html"
+
+
+def get_prices_path(config: AppConfig) -> Path:
+    """Return path to the model price library JSON file."""
+    return config.data_dir / "model_prices.json"
