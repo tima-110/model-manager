@@ -14,8 +14,9 @@ from typing import Any, Callable
 
 from model_manager.config import AppConfig, save_config
 from model_manager.dashboard import generate_dashboard
+from model_manager.radar import generate_radar
 from model_manager.domain import generate_all as gen_all_mod
-from model_manager.domain import blocks, git, providers, restart, scores, tags
+from model_manager.domain import blocks, git, prices as prices_mod, providers, restart, scores, tags
 from model_manager.domain import service_env as service_env_mod
 
 SYSTEMD_SERVICE_NAME = "model-manager-schedule"
@@ -371,6 +372,10 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
        live deployment; new ledger entries trigger a re-tag plus exactly
        one regenerate + second restart, then finish regardless.
     9. dashboard (regenerates the status page last)
+    10. prices fetch (rebuilds model_prices.json from overrides +
+        OpenRouter catalog + upstream cost map; recorded, never fatal)
+    11. radar (regenerates the interactive page from the fresh library,
+        with git publish mirroring dashboard)
 
     The pre-generate proxy scan was intentionally removed: it tested the
     *old* deployment, while upstream health is already covered by fetch
@@ -487,28 +492,76 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     # Step 9: dashboard (regenerated last, from the freshest data)
     try:
         dashboard_path = generate_dashboard(config)
-        step_msg = f"dashboard: wrote {dashboard_path}"
-        git_payload: dict[str, Any] | None = None
-        if config.dashboard.enabled and config.dashboard.git_enabled:
-            try:
-                git_res = git.publish_artifact_git(dashboard_path, branch=config.dashboard.git_branch)
-                git_payload = {"pushed": git_res["pushed"], "committed": git_res["committed"], "commit": git_res["commit"]}
-                step_msg += f" (git committed={git_res['committed']}, pushed={git_res['pushed']})"
-            except git.ArtifactGitError as git_err:
-                sys.stderr.write(f"Warning: Git publish failed: {git_err}\n")
-                git_payload = {"pushed": False, "committed": False, "error": str(git_err)}
-                step_msg += f" (git publish failed: {git_err})"
-        results["steps"].append(step_msg)
-        if git_payload:
-            results["git"] = git_payload
+        _publish_artifact(
+            dashboard_path, branch=config.dashboard.git_branch,
+            enabled=config.dashboard.enabled, git_enabled=config.dashboard.git_enabled,
+            label="dashboard", results=results, result_key="git",
+        )
     except Exception as e:
         results["errors"].append(f"dashboard: {e}")
+
+    # Step 10: prices fetch (public sources only: overrides + OpenRouter
+    # catalog + upstream cost map — no keychain needed, headless-safe).
+    # Failures are recorded, never fatal: radar below falls back to the
+    # existing library (unpriced models sit on the no-price rail).
+    try:
+        prices_path = prices_mod.build_price_library(config)
+        try:
+            total = len(prices_mod.load_prices(config))
+        except Exception:
+            total = "?"
+        results["steps"].append(f"prices: wrote {prices_path} ({total} entries)")
+    except Exception as e:
+        results["errors"].append(f"prices: {e}")
+
+    # Step 11: radar (generated after prices so it reads the fresh library)
+    try:
+        radar_path = generate_radar(config)
+        _publish_artifact(
+            radar_path, branch=config.radar.git_branch,
+            enabled=config.radar.enabled, git_enabled=config.radar.git_enabled,
+            label="radar", results=results, result_key="radar_git",
+        )
+    except Exception as e:
+        results["errors"].append(f"radar: {e}")
 
     # Record the run. Kept separate from the restart-request file, which an
     # external watcher consumes line-by-line as restart orders.
     _record_schedule_run(config, results)
 
     return results
+
+
+def _publish_artifact(
+    output: Path,
+    *,
+    branch: str,
+    enabled: bool,
+    git_enabled: bool,
+    label: str,
+    results: dict[str, Any],
+    result_key: str,
+) -> None:
+    """Append the "<label>: wrote ..." step for a generated HTML artifact.
+
+    Publishes to git when enabled, mirroring the dashboard flow. Appends
+    the step line to ``results`` in place (and ``results[result_key]`` when
+    a publish was attempted).
+    """
+    step_msg = f"{label}: wrote {output}"
+    git_payload: dict[str, Any] | None = None
+    if enabled and git_enabled:
+        try:
+            git_res = git.publish_artifact_git(output, branch=branch)
+            git_payload = {"pushed": git_res["pushed"], "committed": git_res["committed"], "commit": git_res["commit"]}
+            step_msg += f" (git committed={git_res['committed']}, pushed={git_res['pushed']})"
+        except git.ArtifactGitError as git_err:
+            sys.stderr.write(f"Warning: Git publish failed: {git_err}\n")
+            git_payload = {"pushed": False, "committed": False, "error": str(git_err)}
+            step_msg += f" (git publish failed: {git_err})"
+    results["steps"].append(step_msg)
+    if git_payload:
+        results[result_key] = git_payload
 
 
 def _wait_for_proxy(

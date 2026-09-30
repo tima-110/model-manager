@@ -223,7 +223,7 @@ These files are produced by scan/generate commands rather than discovery:
 - `schedule_runs.jsonl` (in `data_dir`): append-only per-run record of `{timestamp, steps, errors, error_count}` written by every `schedule run`. The timer-facing status history.
 - `model_blocks.json` (in `data_dir`): availability ledger (see Availability Blocks above).
 - `dashboard.html` (in `data_dir`): status dashboard written by `dashboard` and regenerated last by each schedule run.
-- `radar.html` (in `data_dir`): static interactive benchmark radar written by `radar` (Pareto scatter, pin drawer, matrix, YAML draft export).
+- `radar.html` (in `data_dir`): static interactive benchmark radar written by `radar`. Each `schedule run` rebuilds `model_prices.json` first (via `prices fetch` logic: overrides + OpenRouter catalog + upstream cost map) and then regenerates the radar page, with git publish honoring the `[radar]` table.
 - `litellm_scan.json` (in `data_dir`): per-model proxy probe records (`kind`, `status`, `ttft_ms`, `tps`, `tpm_est`, token counts, `reasoning_chunks`/`reasoning_chars`, `finish_reason`, `attempts`) plus a run summary, written by `litellm scan`. Status `empty` means HTTP 200 with neither content nor reasoning chunks; an `empty` first attempt is retried once at 4x token headroom (thinking models share the cap between reasoning and content). Targets come from the generated YAMLs plus every alias in the merged router_settings file; shown as a table on the dashboard.
 
 ## Resolution Flow

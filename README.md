@@ -207,7 +207,7 @@ Prints a health report covering Python/package versions, config parse, data dire
 | :--- | :--- | :--- |
 | `schedule install` | Install the OS service/timer (systemd user timer on Linux, launchd on macOS) and enable the schedule in config | `--frequency/-f` (`daily`, `hourly`, `weekly`; default `daily`), `--day/-d` (weekly only; default `monday`), `--time/-t` (`HH:MM`; default `02:00`), `--max-scans/-m` (default `2`), `--config` |
 | `schedule status` | Show schedule configuration and whether the service file is installed | `--config` |
-| `schedule run` | Execute the full pipeline immediately (scores → provider fetch/scan → `generate all` → restart → poll + proxy validation scan → conditional re-generate + second restart → dashboard) | `--config`, `--env-file` |
+| `schedule run` | Execute the full pipeline immediately (scores → provider fetch/scan → `generate all` → restart → poll + proxy validation scan → conditional re-generate + second restart → dashboard → prices → radar) | `--config`, `--env-file` |
 | `schedule remove` | Stop, delete the service/timer and its secrets file, disable the schedule in config | `--config` |
 
 Each run appends a `{timestamp, steps, errors}` record to `data_dir/schedule_runs.jsonl` and exits non-zero when any step errors, so timer failures show up in `systemctl status`. After each generate, configs are integrity-checked and the restart is skipped on failure — never bounce LiteLLM into invalid configs. The restart-request log (`restart_requests.jsonl`) is left untouched — an external watcher consumes it as restart orders.
@@ -264,7 +264,7 @@ git_enabled = true
 git_branch = "main"
 ```
 
-When `git_enabled = true` (or `--git-push` is passed), `dashboard` and `schedule run` automatically stage, check changes, commit with a timestamped message (`Update dashboard.html (...)`), and push to the remote repository. Git failures emit a stderr warning without causing the command or scheduled job to fail.
+When `git_enabled = true` (or `--git-push` is passed), `dashboard`, `radar`, and `schedule run` automatically stage, check changes, commit with a timestamped message (`Update dashboard.html (...)` / `Update radar.html (...)`), and push to the remote repository. Git failures emit a stderr warning without causing the command or scheduled job to fail. Each `schedule run` also rebuilds `model_prices.json` (failures recorded, never fatal) before regenerating the radar page so it reads fresh prices.
 
 ## Configuration
 Detailed configuration options can be found in the [Configuration Guide](docs/config-guide.md).

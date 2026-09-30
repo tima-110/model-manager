@@ -296,6 +296,14 @@ def test_execute_schedule_pipeline(tmp_path: Path):
              return_value=tmp_path / "dashboard.html",
          ) as mock_dash, \
          patch(
+             "model_manager.domain.prices.build_price_library",
+             return_value=tmp_path / "model_prices.json",
+         ) as mock_prices, \
+         patch(
+             "model_manager.domain.schedule.generate_radar",
+             return_value=tmp_path / "radar.html",
+         ) as mock_radar, \
+         patch(
              "model_manager.domain.schedule._validate_configs", return_value=True
          ):
 
@@ -317,6 +325,10 @@ def test_execute_schedule_pipeline(tmp_path: Path):
         assert any("litellm request-restart" in s for s in res["steps"])
         mock_dash.assert_called_once()
         assert any(s.startswith("dashboard: wrote") for s in res["steps"])
+        mock_prices.assert_called_once()
+        assert any(s.startswith("prices: wrote") for s in res["steps"])
+        mock_radar.assert_called_once()
+        assert any(s.startswith("radar: wrote") for s in res["steps"])
         assert res["errors"] == []
 
         # run record appended, restart file untouched by status tracking
@@ -374,6 +386,14 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
              return_value=tmp_path / "dashboard.html",
          ), \
          patch(
+             "model_manager.domain.prices.build_price_library",
+             return_value=tmp_path / "model_prices.json",
+         ), \
+         patch(
+             "model_manager.domain.schedule.generate_radar",
+             return_value=tmp_path / "radar.html",
+         ), \
+         patch(
              "model_manager.domain.schedule._validate_configs", return_value=True
          ):
 
@@ -384,6 +404,99 @@ def test_execute_schedule_pipeline_fetch_error_continues(tmp_path: Path):
         # restart reason reflects the earlier errors
         assert any("litellm request-restart" in s for s in res["steps"])
         assert any(s.startswith("dashboard: wrote") for s in res["steps"])
+
+
+def test_execute_schedule_pipeline_prices_error_continues(tmp_path: Path):
+    """A failing prices fetch is recorded but radar still runs on stale prices."""
+    cfg = AppConfig(data_dir=tmp_path)
+
+    with patch("model_manager.domain.scores.get_api_key", return_value=None), \
+         patch("model_manager.domain.scores.sync_scores_to_models", return_value=0), \
+         patch("model_manager.domain.tags.assign_tier_tags", return_value=(0, {}, 0.0)), \
+         patch(
+             "model_manager.domain.providers.list_providers",
+             return_value=[_fake_provider("NVIDIA")],
+         ), \
+         patch(
+             "model_manager.domain.providers.run_discovery_workflow",
+             return_value=[{"id": "x"}],
+         ), \
+         patch(
+             "model_manager.domain.providers.scan_provider_models",
+             return_value={"scanned": 0, "cycles": 0},
+         ), \
+         patch(
+             "model_manager.domain.generate_all.run_generate_all",
+             return_value={"steps": [], "errors": []},
+         ), \
+         patch("model_manager.domain.auth.get_secret", return_value="k"), \
+         patch("model_manager.domain.schedule._wait_for_proxy", return_value=True), \
+         patch(
+             "model_manager.domain.litellm_scan.enumerate_targets",
+             return_value={"models": [], "aliases": []},
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.scan_targets", return_value=[]
+         ), \
+         patch(
+             "model_manager.domain.litellm_scan.save_litellm_scan",
+             return_value=tmp_path / "litellm_scan.json",
+         ), \
+         patch(
+             "model_manager.domain.restart.request_restart",
+             return_value={"timestamp": "2026-01-01T00:00:00Z"},
+         ), \
+         patch(
+             "model_manager.domain.schedule.generate_dashboard",
+             return_value=tmp_path / "dashboard.html",
+         ), \
+         patch(
+             "model_manager.domain.prices.build_price_library",
+             side_effect=RuntimeError("offline"),
+         ), \
+         patch(
+             "model_manager.domain.schedule.generate_radar",
+             return_value=tmp_path / "radar.html",
+         ) as mock_radar, \
+         patch(
+             "model_manager.domain.schedule._validate_configs", return_value=True
+         ):
+
+        res = schedule.execute_schedule_pipeline(cfg)
+
+        assert any(e.startswith("prices:") for e in res["errors"])
+        mock_radar.assert_called_once()
+        assert any(s.startswith("radar: wrote") for s in res["steps"])
+
+
+def test_execute_schedule_pipeline_radar_git_publish(tmp_path: Path):
+    """Radar git publish mirrors the dashboard flow when enabled."""
+    from model_manager.config import RadarConfig
+
+    cfg = AppConfig(
+        data_dir=tmp_path,
+        radar=RadarConfig(enabled=True, git_enabled=True, git_branch="main"),
+    )
+
+    with _pipeline_mocks(tmp_path, [{"model": "m1", "status": "up", "code": "200"}]):
+        with patch(
+            "model_manager.domain.generate_all.run_generate_all",
+            return_value={"steps": [], "errors": []},
+        ), patch(
+            "model_manager.domain.restart.request_restart",
+            return_value={"timestamp": "t"},
+        ), patch(
+            "model_manager.domain.git.publish_artifact_git",
+            return_value={"committed": True, "pushed": True, "commit": "sha999"},
+        ) as mock_pub:
+            from model_manager.domain import schedule as schedule_mod
+
+            res = schedule_mod.execute_schedule_pipeline(cfg)
+
+    mock_pub.assert_called_once()
+    assert any("radar: wrote" in s and "pushed=True" in s for s in res["steps"])
+    assert res["radar_git"]["pushed"] is True
+    assert res["errors"] == []
 
 
 def test_install_schedule_rejects_bad_time(tmp_path: Path):
@@ -561,6 +674,14 @@ def _pipeline_mocks(tmp_path: Path, scan_records: list[dict], gen_side_effect=No
     stack.enter_context(patch(
         "model_manager.domain.schedule.generate_dashboard",
         return_value=tmp_path / "dashboard.html",
+    ))
+    stack.enter_context(patch(
+        "model_manager.domain.prices.build_price_library",
+        return_value=tmp_path / "model_prices.json",
+    ))
+    stack.enter_context(patch(
+        "model_manager.domain.schedule.generate_radar",
+        return_value=tmp_path / "radar.html",
     ))
     stack.enter_context(patch(
         "model_manager.domain.schedule._validate_configs", return_value=True

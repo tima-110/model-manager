@@ -207,6 +207,8 @@ def test_schedule_pipeline_git_publish(tmp_path: Path):
          patch("model_manager.domain.schedule._wait_for_proxy", return_value=True), \
          patch("model_manager.domain.litellm_scan.enumerate_targets", return_value={"models": [], "aliases": []}), \
          patch("model_manager.domain.litellm_scan.scan_targets", return_value=[]), \
+         patch("model_manager.domain.prices.build_price_library", return_value=tmp_path / "model_prices.json"), \
+         patch("model_manager.domain.schedule.generate_radar", return_value=tmp_path / "radar.html"), \
          patch("model_manager.domain.git.publish_artifact_git", return_value={"committed": True, "pushed": True, "commit": "sha123"}) as mock_pub:
 
         res = execute_schedule_pipeline(cfg)
