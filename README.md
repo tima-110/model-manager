@@ -182,7 +182,7 @@ Generates the HTML status dashboard. Opens it in a browser by default; `--no-ope
 model-manager radar [--out PATH] [--git-push | --no-git-push] [--no-open] [--config PATH]
 ```
 
-Generates a static, self-contained radar page (Quality-vs-Cost Pareto scatter, AA reference pinning, insight cards, evaluation matrix, YAML draft export) from local JSON files only — no network, no live proxy connection. Same flags as `dashboard`; configure defaults plus pre-pinned baselines under `[radar]` (`out_dir`, `out_file`, `git_enabled`, `git_branch`, `pinned_references`).
+Generates a static, self-contained radar page (Intelligence-vs-Cost Pareto scatter, AA reference pinning, insight cards, evaluation matrix, YAML draft export) from local JSON files only — no network, no live proxy connection. Same flags as `dashboard`; configure defaults plus pre-pinned baselines under `[radar]` (`out_dir`, `out_file`, `git_enabled`, `git_branch`, `pinned_references`).
 
 ### `prices` — Manage the local price library
 
@@ -253,7 +253,7 @@ This allows the system to perform a **reverse lookup**: it finds a provider ID i
 
 ## Artifact Publishing
 
-`model-manager` can automatically publish status artifacts (`dashboard.html`) to a Git repository (e.g., a shared dashboards repo). Configure `[dashboard]` in `config.toml`:
+`model-manager` can automatically publish status artifacts (`dashboard.html`, `radar.html`) to a Git repository (e.g., a shared dashboards repo). Configure `[dashboard]` in `config.toml`:
 
 ```toml
 [dashboard]
@@ -263,6 +263,8 @@ out_file = "dashboard.html"
 git_enabled = true
 git_branch = "main"
 ```
+
+The `[radar]` table mirrors it (`out_dir`, `out_file = "radar.html"`, `git_enabled`, `git_branch`, plus `pinned_references`).
 
 When `git_enabled = true` (or `--git-push` is passed), `dashboard`, `radar`, and `schedule run` automatically stage, check changes, commit with a timestamped message (`Update dashboard.html (...)` / `Update radar.html (...)`), and push to the remote repository. Git failures emit a stderr warning without causing the command or scheduled job to fail. Each `schedule run` also rebuilds `model_prices.json` (failures recorded, never fatal) before regenerating the radar page so it reads fresh prices.
 

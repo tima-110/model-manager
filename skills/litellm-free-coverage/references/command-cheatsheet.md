@@ -12,6 +12,8 @@
 - `schedule status` — timer state (read-only)
 - `litellm config check` — integrity validation (read-only)
 - `dashboard --no-open` — regenerates the HTML page (writes data_dir only)
+- `radar --no-open` — regenerates the interactive radar page (writes data_dir only)
+- `prices list [--filter X]` — local price library entries (read-only)
 
 ## Actions (explicit approval first)
 - `models discover <id>`, `models add`, `models variant update` — library writes

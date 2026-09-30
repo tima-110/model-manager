@@ -38,3 +38,6 @@ Config: `~/.config/model-manager/config.toml`.
 - `restart_requests.jsonl` — restart orders for the external watcher.
   Append-only; never write foreign record types here.
 - `schedule_runs.jsonl`, `dashboard.html` (in `data_dir`) — run history, status page.
+- `model_prices.json`, `radar.html` (in `data_dir`) — blended $/1M price
+  library (overrides > OpenRouter > upstream) and the interactive radar
+  snapshot; refreshed by every `schedule run` after the dashboard.

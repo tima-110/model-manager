@@ -126,7 +126,7 @@ provider_order = ["gemini", "nvidia", "openrouter"]
 The service consumes it via `EnvironmentFile=` and `schedule run --env-file`; interactive runs without `--env-file` keep using the keychain (explicit environment always wins over the file, keychain remains the fallback). Refresh after key changes with `auth update-env` (or re-run `schedule install`); `schedule remove` deletes the file.
 
 ## Data Storage
-The tool maintains nine primary JSON files in the `data_dir`, plus per-provider
+The tool maintains ten primary JSON files in the `data_dir`, plus per-provider
 scan results and generated LiteLLM artifacts (see below).
 
 ### 1. `model_scores.json`
