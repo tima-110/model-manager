@@ -543,10 +543,11 @@ tbody tr:hover{background:#20242f}
     </div>
     <div style="overflow-x:auto"><table id="matrix">
       <thead><tr>
-        <th>Model</th><th>Status</th>
-        <th class="num" data-dim="intelligence">Intelligence</th>
-        <th class="num" data-dim="coding">Coding</th>
-        <th class="num" data-dim="agentic">Agentic</th>
+        <th data-sort="model" style="cursor:pointer">Model <span class="sort-icon"></span></th>
+        <th data-sort="status" style="cursor:pointer">Status <span class="sort-icon"></span></th>
+        <th class="num" data-sort="intelligence" data-dim="intelligence" style="cursor:pointer">Intelligence <span class="sort-icon"></span></th>
+        <th class="num" data-sort="coding" data-dim="coding" style="cursor:pointer">Coding <span class="sort-icon"></span></th>
+        <th class="num" data-sort="agentic" data-dim="agentic" style="cursor:pointer">Agentic <span class="sort-icon"></span></th>
         <th class="num">TTFT</th>
         <th class="num">Price /1M</th><th>Action</th>
       </tr></thead>
@@ -565,7 +566,7 @@ tbody tr:hover{background:#20242f}
 </div></div>
 <script>
 var DATA = __RADAR_PAYLOAD__;
-var state = {q:"", dim:"intelligence", log:true, tab:"active", staged:[], pins:(DATA.pins||[]).slice()};
+var state = {q:"", dim:"intelligence", log:true, tab:"active", staged:[], pins:(DATA.pins||[]).slice(), sortCol:null, sortDir:"asc"};
 try {
   var saved = JSON.parse(localStorage.getItem("radar_pins") || "[]");
   if (saved.length) state.pins = saved;
@@ -843,9 +844,54 @@ function tierBadge(tier, pinned){
   if (tier === "AA_INDEX") return '<span class="badge b-aa">AA Index</span>';
   return '<span class="badge b-proxy">In Proxy</span>';
 }
+function getStatusLabel(m){
+  var pinned = state.pins.indexOf(m.id) >= 0;
+  if (pinned || m.tier === "AA_REFERENCE") return "AA Reference";
+  if (m.tier === "PROVIDER_CANDIDATE") return "Candidate";
+  if (m.tier === "AA_INDEX") return "AA Index";
+  return "In Proxy";
+}
+function updateSortHeaders(){
+  document.querySelectorAll("#matrix th[data-sort]").forEach(function(th){
+    var col = th.getAttribute("data-sort");
+    var icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (state.sortCol === col) {
+      icon.textContent = state.sortDir === "asc" ? " ▲" : " ▼";
+    } else {
+      icon.textContent = " ↕";
+    }
+  });
+}
 function renderTable(){
+  updateSortHeaders();
   var tb = document.querySelector("#matrix tbody");
-  var rows = filtered().map(function(m){
+  var rows = filtered();
+  if (state.sortCol) {
+    rows.sort(function(a, b){
+      var va, vb;
+      if (state.sortCol === "model") {
+        va = (a.display || a.model || "").toLowerCase();
+        vb = (b.display || b.model || "").toLowerCase();
+      } else if (state.sortCol === "status") {
+        va = getStatusLabel(a).toLowerCase();
+        vb = getStatusLabel(b).toLowerCase();
+      } else if (state.sortCol === "intelligence" || state.sortCol === "coding" || state.sortCol === "agentic") {
+        va = a.scores[state.sortCol];
+        vb = b.scores[state.sortCol];
+      }
+      if (va === vb) {
+        var sa = (a.display || a.model || "").toLowerCase();
+        var sb = (b.display || b.model || "").toLowerCase();
+        return sa < sb ? -1 : (sa > sb ? 1 : 0);
+      }
+      if (va === null || va === undefined) return 1;
+      if (vb === null || vb === undefined) return -1;
+      var cmp = (va < vb) ? -1 : (va > vb ? 1 : 0);
+      return state.sortDir === "asc" ? cmp : -cmp;
+    });
+  }
+  var renderedRows = rows.map(function(m){
     var pinned = state.pins.indexOf(m.id) >= 0;
     var action;
     if (pinned || m.tier === "AA_REFERENCE") {
@@ -870,7 +916,7 @@ function renderTable(){
       cell(ttft) +
       '<td class="num">' + fmtPrice(m.price_per_1m) + '</td><td>' + action + '</td></tr>';
   });
-  tb.innerHTML = rows.length ? rows.join("") :
+  tb.innerHTML = renderedRows.length ? renderedRows.join("") :
     '<tr><td colspan="8" class="muted">No rows match. Adjust the filter or tabs.</td></tr>';
   tb.querySelectorAll("[data-stage]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -941,6 +987,18 @@ function yamlFor(m){
 }
 function renderAll(){ renderScatter(); renderTable(); renderPins(); renderInsights(); renderStaged(); }
 
+document.querySelectorAll("#matrix th[data-sort]").forEach(function(th){
+  th.addEventListener("click", function(){
+    var col = th.getAttribute("data-sort");
+    if (state.sortCol === col) {
+      state.sortDir = (state.sortDir === "asc") ? "desc" : "asc";
+    } else {
+      state.sortCol = col;
+      state.sortDir = (col === "model" || col === "status") ? "asc" : "desc";
+    }
+    renderTable();
+  });
+});
 document.getElementById("q").addEventListener("input", function(e){ state.q = e.target.value; renderScatter(); renderTable(); });
 document.getElementById("dim").addEventListener("change", function(e){ state.dim = e.target.value; renderAll(); });
 document.getElementById("scaleLog").addEventListener("click", function(){

@@ -177,3 +177,17 @@ def test_radar_cli_no_open(tmp_path: Path):
     assert result.exit_code == 0, result.output
     assert out_file.exists()
     assert "Radar written to" in result.output
+
+
+def test_radar_table_sorting(tmp_path: Path):
+    _seed_library(tmp_path)
+    cfg = _cfg(tmp_path)
+    html = generate_radar(cfg).read_text()
+
+    # Assert headers have data-sort attributes for Model, Status, Intelligence, Coding, Agentic
+    for col in ("model", "status", "intelligence", "coding", "agentic"):
+        assert f'data-sort="{col}"' in html, col
+
+    # Assert sorting JS state & functions exist
+    for marker in ('sortCol:null', 'sortDir:"asc"', "getStatusLabel", "updateSortHeaders", "#matrix th[data-sort]"):
+        assert marker in html, marker
