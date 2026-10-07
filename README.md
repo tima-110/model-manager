@@ -201,6 +201,16 @@ model-manager doctor [--config PATH] [--verbose/-v]
 
 Prints a health report covering Python/package versions, config parse, data directory, JSON data files, secrets, provider caches, LiteLLM config, and the restart-request log. `--verbose` adds file sizes. Exits non-zero on failure.
 
+### `reference-sets` — Manage model reference sets
+
+| Command | Description | Arguments / Flags |
+| :--- | :--- | :--- |
+| `reference-sets create NAME` | Create a new reference set | `NAME` (required); `--display-name/-d`, `--config`, `--json` |
+| `reference-sets remove NAME` | Remove a reference set | `NAME` (required); `--config`, `--json` |
+| `reference-sets add-item NAME MODEL VARIANT SLUG` | Add a model variant (and its AA slug) to a reference set | `NAME`, `MODEL`, `VARIANT`, `SLUG` (required); `--config`, `--json` |
+| `reference-sets remove-item NAME MODEL VARIANT` | Remove a model variant from a reference set | `NAME`, `MODEL`, `VARIANT` (required); `--config`, `--json` |
+| `reference-sets list` | List all defined reference sets and their items (with scores) | `--config`, `--json` |
+
 ### `schedule` — Automated background updates
 
 | Command | Description | Arguments / Flags |
