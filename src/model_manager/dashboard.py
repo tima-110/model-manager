@@ -157,6 +157,9 @@ def _collect_data(cfg: AppConfig) -> dict:
     # --- Top scores list ---
     score_rows = _build_score_rows(lib_models, all_scores)
 
+    # --- Reference sets ---
+    reference_sets = models_data.get("reference_sets", {})
+
     # --- Provider snapshots ---
     providers = ["openrouter", "nvidia", "ollama", "gemini", "huggingface"]
     provider_paths = {
@@ -292,6 +295,8 @@ def _collect_data(cfg: AppConfig) -> dict:
         "last_updated": last_updated,
         "health_rows": health_rows,
         "score_rows": score_rows,
+        "reference_sets": reference_sets,
+        "all_scores": all_scores,
         "model_rows": model_rows,
         "provider_snapshots": provider_snapshots,
         "provider_coverage": f"{sum(1 for s in provider_snapshots.values() if s['count'] > 0)}/{len(providers)}",
@@ -522,6 +527,55 @@ def _render_html(data: dict) -> str:
         model_table += "</table>"
     else:
         model_table = '<div class="no-data">No models defined. Add models with <code>model-manager models add</code>.</div>'
+
+    # --- Reference Sets section ---
+    ref_sets_table = ""
+    if r.get("reference_sets"):
+        trs = []
+        for set_id, set_data in r["reference_sets"].items():
+            display_name = set_data.get("display_name", set_id)
+            items = set_data.get("items", [])
+            for i, item in enumerate(items):
+                model = item.get("model", "")
+                variant = item.get("variant", "")
+                slug = item.get("aa_slug", "")
+
+                # Try to find scores for this slug in all_scores
+                intel_str = '<span class="muted">&mdash;</span>'
+                coding_str = '<span class="muted">&mdash;</span>'
+                agentic_str = '<span class="muted">&mdash;</span>'
+
+                if slug and slug in r.get("all_scores", {}):
+                    scores_data = r["all_scores"][slug].get("scores", {})
+                    if scores_data.get("intelligence") is not None:
+                        intel_str = f'{scores_data["intelligence"]:.1f}'
+                    if scores_data.get("coding") is not None:
+                        coding_str = f'{scores_data["coding"]:.1f}'
+                    if scores_data.get("agentic") is not None:
+                        agentic_str = f'{scores_data["agentic"]:.1f}'
+
+                set_col = f'<td rowspan="{len(items)}" style="vertical-align: top"><b>{html.escape(display_name)}</b><br><span class="muted" style="font-size:0.8rem">({html.escape(set_id)})</span></td>' if i == 0 else ''
+
+                trs.append(f"""
+                <tr>
+                  {set_col}
+                  <td>{html.escape(model)}</td>
+                  <td>{html.escape(variant)}</td>
+                  <td><span class="mono">{html.escape(slug)}</span></td>
+                  <td class="score-cell">{intel_str}</td>
+                  <td class="score-cell">{coding_str}</td>
+                  <td class="score-cell">{agentic_str}</td>
+                </tr>
+                """)
+        if trs:
+            ref_sets_table = f"""
+            <table class="data-table">
+              <thead><tr><th>Reference Set</th><th>Model</th><th>Variant</th><th>AA Slug</th><th class="num">Intelligence</th><th class="num">Coding</th><th class="num">Agentic</th></tr></thead>
+              <tbody>{"".join(trs)}</tbody>
+            </table>
+            """
+    else:
+        ref_sets_table = '<div class="muted">No reference sets defined. Run <code>model-manager reference-sets create</code>.</div>'
 
     # --- Provider snapshots ---
     prov_sections = ""
@@ -824,6 +878,9 @@ function sortTable(n, isNumeric) {{
 
   <h2>Scores</h2>
   {scores_table}
+
+  <h2>Reference Sets</h2>
+  {ref_sets_table}
 
   <h2>Provider Snapshots</h2>
   <div class="section-row">{prov_sections}</div>

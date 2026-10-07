@@ -169,6 +169,9 @@ def collect_radar_data(cfg: AppConfig) -> dict:
                     ),
                 })
 
+    # Add reference sets
+    ref_sets = models_data.get("reference_sets", {})
+
     # Unmapped provider-cache models become candidates (score-less when unknown).
     slug_index = {s.lower(): s for s in all_scores}
     candidates = 0
@@ -327,6 +330,7 @@ def collect_radar_data(cfg: AppConfig) -> dict:
         "missing_pins": missing_pins,
         "recommendations": recommendations,
         "reference_catalog": catalog,
+        "reference_sets": ref_sets,
         "counts": {
             "proxy": sum(1 for r in rows if r["tier"] == PROXY_TIER),
             "candidates": sum(1 for r in rows if r["tier"] == CANDIDATE_TIER),
@@ -773,8 +777,38 @@ function renderScatter(){
     if (state.pins.indexOf(m.id) < 0) return;
     var v = dimVal(m);
     if (v === null || v === undefined) return;
-    pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad)});
+    pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad), isRef: false});
   });
+
+  // Reference Sets pinning
+  var refSetColors = ["#f97316", "#eab308", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899"];
+  var colorIndex = 0;
+  if (state.pins) {
+      state.pins.forEach(function(pinId) {
+          if (pinId.indexOf("refset/") === 0) {
+              var setId = pinId.slice(7);
+              var refSet = DATA.reference_sets[setId];
+              if (!refSet) return;
+              var c = refSetColors[colorIndex % refSetColors.length];
+              colorIndex++;
+              var slugs = refSet.items.map(function(item) { return item.aa_slug; });
+
+              // To properly reference all benchmark models (even unconfigured ones), iterate over reference_catalog
+              DATA.reference_catalog.forEach(function(e) {
+                 if (slugs.indexOf(e.slug) >= 0) {
+                     var synthId = "reference/" + e.slug;
+                     var m = byId[synthId] || synthRowForPin(synthId) || {id: synthId, display: e.name || e.slug, scores: e.scores};
+                     var v = dimVal(m);
+                     if (v === null || v === undefined) return;
+                     // Prevent duplicates if already drawing this
+                     if (pinLevels.filter(function(p) { return p.m.id === m.id && p.isRef; }).length > 0) return;
+                     pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad), isRef: true, c: c});
+                 }
+              });
+          }
+      });
+  }
+
   pinLevels.sort(function(a,b){ return a.y - b.y; });
   var lastLy = -1e9;
   pinLevels.forEach(function(p){
@@ -784,8 +818,9 @@ function renderScatter(){
     p.ly = ly;
   });
   pinLevels.forEach(function(p){
-    s += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + p.y.toFixed(1) + '" y2="' + p.y.toFixed(1) + '" stroke="#06b6d4" stroke-width="1" stroke-dasharray="6 3" opacity="0.55"/>';
-    s += '<text x="' + (W - pad.r - 4) + '" y="' + (p.ly - 4).toFixed(1) + '" fill="#06b6d4" font-size="10" font-family="JetBrains Mono,monospace" text-anchor="end" opacity="0.9">' + esc(p.m.display) + ' ' + dimLabel(p.v) + '</text>';
+    var c = p.isRef ? p.c : "#06b6d4";
+    s += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + p.y.toFixed(1) + '" y2="' + p.y.toFixed(1) + '" stroke="' + c + '" stroke-width="1" stroke-dasharray="6 3" opacity="0.55"/>';
+    s += '<text x="' + (W - pad.r - 4) + '" y="' + (p.ly - 4).toFixed(1) + '" fill="' + c + '" font-size="10" font-family="JetBrains Mono,monospace" text-anchor="end" opacity="0.9">' + esc(p.m.display) + ' ' + dimLabel(p.v) + '</text>';
   });
   // Rail separator when unpriced points exist.
   if (priced.length !== pts.length) {
@@ -933,13 +968,35 @@ function renderTable(){
 }
 function renderPins(){
   var sel = document.getElementById("pinSelect");
-  sel.innerHTML = DATA.reference_catalog.map(function(e){
+  var html = '<optgroup label="Models">';
+  html += DATA.reference_catalog.map(function(e){
     return '<option value="' + esc(e.slug) + '">' + esc(e.name) + '</option>';
   }).join("");
+  html += '</optgroup>';
+
+  var refSetKeys = Object.keys(DATA.reference_sets || {});
+  if (refSetKeys.length > 0) {
+    html += '<optgroup label="Reference Sets">';
+    html += refSetKeys.map(function(key) {
+      return '<option value="refset/' + esc(key) + '">' + esc(DATA.reference_sets[key].display_name || key) + '</option>';
+    }).join("");
+    html += '</optgroup>';
+  }
+
+  sel.innerHTML = html;
+
   var box = document.getElementById("chips");
   box.innerHTML = state.pins.map(function(id){
-    var m = byId[id];
-    var label = m ? m.display : id;
+    var label = id;
+    if (id.indexOf("refset/") === 0) {
+        var setId = id.slice(7);
+        if (DATA.reference_sets && DATA.reference_sets[setId]) {
+            label = "Set: " + (DATA.reference_sets[setId].display_name || setId);
+        }
+    } else {
+        var m = byId[id];
+        label = m ? m.display : id;
+    }
     return '<span class="chip">\\u25C6 ' + esc(label) +
       ' <button data-unpin="' + esc(id) + '">\\u00d7</button></span>';
   }).join("") || '<span class="muted">Nothing pinned.</span>';
@@ -1023,8 +1080,12 @@ document.querySelectorAll("#tabs button").forEach(function(b){
 });
 document.getElementById("pinBtn").addEventListener("click", function(){
   var slug = document.getElementById("pinSelect").value;
-  var ref = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
-  pin(ref ? ref.id : "reference/" + slug);
+  if (slug.indexOf("refset/") === 0) {
+    pin(slug);
+  } else {
+    var ref = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
+    pin(ref ? ref.id : "reference/" + slug);
+  }
 });
 document.getElementById("exportBtn").addEventListener("click", function(){
   var out = "model_list:\\n" + state.staged.map(function(id){
