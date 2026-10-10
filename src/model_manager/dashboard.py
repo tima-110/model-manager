@@ -194,7 +194,7 @@ def _collect_data(cfg: AppConfig) -> dict:
     else:
         litellm_config_error = "File not found"
 
-    # --- Fallback chains (litellm-fallbacks.yaml) ---
+    # --- Fallback chains (litellm-fallbacks.yaml & user-defined) ---
     fallbacks_path = cfg.litellm_fallbacks_path
     fallbacks_exists = False
     fallbacks_valid = False
@@ -222,6 +222,13 @@ def _collect_data(cfg: AppConfig) -> dict:
             fallbacks_error = str(e)
     fallback_chain_count = len(fallback_chains)
     fallback_entry_count = sum(len(c["fallbacks"]) for c in fallback_chains)
+
+    user_variant_fallbacks: dict[str, list[str]] = {}
+    for mid, m_info in lib_models.items():
+        for vid, v_info in m_info.get("variants", {}).items():
+            fbs = v_info.get("fallbacks")
+            if fbs:
+                user_variant_fallbacks[f"{mid}/{vid}"] = list(fbs)
 
     # --- LiteLLM proxy scan (litellm_scan.json) ---
     litellm_scan_path = cfg.data_dir / "litellm_scan.json"
@@ -318,6 +325,7 @@ def _collect_data(cfg: AppConfig) -> dict:
             "chains": fallback_chains,
             "chain_count": fallback_chain_count,
             "entry_count": fallback_entry_count,
+            "user_variant_fallbacks": user_variant_fallbacks,
         },
         "litellm_scan": {
             "path": str(litellm_scan_path),
@@ -646,11 +654,22 @@ def _render_html(data: dict) -> str:
         fb_table = ('<div class="no-data">No fallbacks file yet. Run '
                     '<code>model-manager litellm generate fallbacks</code> to create one.</div>')
 
+    user_fb_table = ""
+    ufb = fb.get("user_variant_fallbacks", {})
+    if ufb:
+        user_fb_table = '<h3>User-Defined Variant Fallbacks</h3><table class="data-table"><tr><th>Variant</th><th>Configured Fallback Targets</th></tr>'
+        for key, targets in sorted(ufb.items()):
+            subj = html.escape(key)
+            names = " &rarr; ".join(html.escape(t) for t in targets)
+            user_fb_table += f'<tr><td class="mono">{subj}</td><td class="mono">{names}</td></tr>'
+        user_fb_table += "</table>"
+
     fb_section = f"""
     <table class="data-table">
       <tr><td>Fallbacks path</td><td class="mono">{html.escape(fb['path'])}</td></tr>
       <tr><td>Status</td><td><span style="color:{fb_color}">&#9679;</span> {fb_status}</td></tr>
     </table>
+    {user_fb_table}
     {fb_table}"""
 
     # --- LiteLLM proxy scan table ---

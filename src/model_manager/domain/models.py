@@ -130,6 +130,113 @@ def update_variant(
     return True
 
 
+def normalize_variant_key(target: str, models_data: dict) -> str:
+    """Normalize 'model' or 'model/variant' string to canonical 'model/variant'."""
+    if "/" in target:
+        return target
+    model_info = models_data.get("models", {}).get(target)
+    if model_info:
+        default_var = model_info.get("default_variant", "standard")
+        return f"{target}/{default_var}"
+    return f"{target}/standard"
+
+
+def set_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str, fallbacks_list: list[str]) -> bool:
+    """Set user-defined fallbacks for a model variant. Returns False if variant not found."""
+    data = storage.load_models_data(config)
+    variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
+    if variant is None:
+        return False
+
+    subj_key = f"{model_id}/{variant_id}"
+    normalized: list[str] = []
+    for item in fallbacks_list:
+        norm = normalize_variant_key(item, data)
+        if norm != subj_key and norm not in normalized:
+            normalized.append(norm)
+
+    variant["fallbacks"] = normalized
+
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    storage.save_models_data(config, data)
+    return True
+
+
+def add_variant_fallback(config: AppConfig, model_id: str, variant_id: str, fallback_target: str) -> bool:
+    """Add a fallback target to a model variant. Returns False if variant not found."""
+    data = storage.load_models_data(config)
+    variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
+    if variant is None:
+        return False
+
+    norm_target = normalize_variant_key(fallback_target, data)
+    subj_key = f"{model_id}/{variant_id}"
+    if norm_target == subj_key:
+        raise ValueError("A variant cannot be set as its own fallback.")
+
+    current = variant.get("fallbacks", [])
+    if norm_target not in current:
+        variant["fallbacks"] = current + [norm_target]
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        storage.save_models_data(config, data)
+    return True
+
+
+def remove_variant_fallback(config: AppConfig, model_id: str, variant_id: str, fallback_target: str) -> bool:
+    """Remove a fallback target from a model variant. Returns False if variant not found or target missing."""
+    data = storage.load_models_data(config)
+    variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
+    if variant is None:
+        return False
+
+    norm_target = normalize_variant_key(fallback_target, data)
+    current = variant.get("fallbacks", [])
+    if norm_target in current or fallback_target in current:
+        variant["fallbacks"] = [f for f in current if f != norm_target and f != fallback_target]
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        storage.save_models_data(config, data)
+        return True
+    return False
+
+
+def clear_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str) -> bool:
+    """Clear user-defined fallbacks for a model variant. Returns False if variant not found."""
+    data = storage.load_models_data(config)
+    variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
+    if variant is None:
+        return False
+
+    if "fallbacks" in variant:
+        del variant["fallbacks"]
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        storage.save_models_data(config, data)
+    return True
+
+
+def get_variant_fallbacks(config: AppConfig, model_id: str | None = None, variant_id: str | None = None) -> dict[str, list[str]]:
+    """Return {model/variant: [fallback_targets]} for variants with defined fallbacks."""
+    data = storage.load_models_data(config)
+    result: dict[str, list[str]] = {}
+    for mid, m_info in data.get("models", {}).items():
+        if model_id and mid != model_id:
+            continue
+        for vid, v_info in m_info.get("variants", {}).items():
+            if variant_id and vid != variant_id:
+                continue
+            fb = v_info.get("fallbacks")
+            if fb:
+                result[f"{mid}/{vid}"] = list(fb)
+    return result
+
+
 def search_aa_candidates(config: AppConfig, query: str) -> List[Dict[str, str]]:
     """Search the raw AA dataset for potential model candidates based on a query."""
     path = get_raw_scores_path(config)

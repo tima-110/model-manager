@@ -22,6 +22,121 @@ models_app.add_typer(variant_app, name="variant")
 tag_app = typer.Typer(help="Tag model variants (auto tiers + manual tags).")
 models_app.add_typer(tag_app, name="tag")
 
+# Fallback sub-commands
+fallback_app = typer.Typer(help="Manage user-defined fallbacks for model variants.")
+variant_app.add_typer(fallback_app, name="fallback")
+models_app.add_typer(fallback_app, name="fallback")
+
+@fallback_app.command("add")
+def fallback_add(
+    model: str,
+    variant: str,
+    target: str = typer.Argument(..., help="Fallback target model or model/variant (e.g. 'minimax-m2.7' or 'minimax-m2.7/standard')."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Add a fallback target to a model variant."""
+    cfg = load_config(config)
+    try:
+        if not models.add_variant_fallback(cfg, model, variant, target):
+            console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+            raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    data = models.storage.load_models_data(cfg)
+    norm = models.normalize_variant_key(target, data)
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "target": norm}, indent=2))
+    else:
+        console.print(f"[green]Added fallback [bold]{norm}[/bold] for [bold]{model}/{variant}[/bold].[/green]")
+
+@fallback_app.command("remove")
+def fallback_remove(
+    model: str,
+    variant: str,
+    target: str = typer.Argument(..., help="Fallback target model or model/variant to remove."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Remove a fallback target from a model variant."""
+    cfg = load_config(config)
+    if not models.remove_variant_fallback(cfg, model, variant, target):
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found or fallback target '[bold]{target}[/bold]' missing.[/red]")
+        raise typer.Exit(1)
+
+    data = models.storage.load_models_data(cfg)
+    norm = models.normalize_variant_key(target, data)
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "removed_target": norm}, indent=2))
+    else:
+        console.print(f"[green]Removed fallback [bold]{norm}[/bold] from [bold]{model}/{variant}[/bold].[/green]")
+
+@fallback_app.command("set")
+def fallback_set(
+    model: str,
+    variant: str,
+    targets: list[str] = typer.Argument(..., help="Array of fallback target model/variants."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Set the full array of fallback targets for a model variant."""
+    cfg = load_config(config)
+    if not models.set_variant_fallbacks(cfg, model, variant, targets):
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+        raise typer.Exit(1)
+
+    fbs = models.get_variant_fallbacks(cfg, model, variant).get(f"{model}/{variant}", [])
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "fallbacks": fbs}, indent=2))
+    else:
+        console.print(f"[green]Set fallbacks for [bold]{model}/{variant}[/bold]: {', '.join(fbs)}[/green]")
+
+@fallback_app.command("clear")
+def fallback_clear(
+    model: str,
+    variant: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Clear all user-defined fallbacks from a model variant."""
+    cfg = load_config(config)
+    if not models.clear_variant_fallbacks(cfg, model, variant):
+        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+        raise typer.Exit(1)
+
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant, "cleared": True}, indent=2))
+    else:
+        console.print(f"[green]Cleared fallbacks for [bold]{model}/{variant}[/bold].[/green]")
+
+@fallback_app.command("list")
+def fallback_list(
+    model: str | None = typer.Option(None, "--model", "-m", help="Filter by model ID."),
+    variant: str | None = typer.Option(None, "--variant", "-v", help="Filter by variant ID."),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """List user-defined fallbacks for model variants."""
+    cfg = load_config(config)
+    all_fbs = models.get_variant_fallbacks(cfg, model, variant)
+
+    if json_output:
+        console.print(json.dumps(all_fbs, indent=2))
+        return
+
+    if not all_fbs:
+        console.print("[yellow]No user-defined variant fallbacks configured.[/yellow]")
+        return
+
+    table = Table(title="User-Defined Variant Fallbacks")
+    table.add_column("Model / Variant", style="cyan")
+    table.add_column("Fallback Model/Variants", style="magenta")
+    for key, fbs in sorted(all_fbs.items()):
+        table.add_row(key, " -> ".join(f"[bold]{fb}[/bold]" for fb in fbs))
+    console.print(table)
+
 @variant_app.command("update")
 def variant_update(
     model: str,

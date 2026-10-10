@@ -115,6 +115,7 @@ def _collect_variants(config: AppConfig) -> dict[str, dict]:
             "tier": tier,
             "composite": comp,
             "model_names": [mn for _, _, _, mn in model_names],
+            "user_fallbacks": info.get("fallbacks", []),
             # Per-model metadata used for global DAG ranking. Same
             # derivation loop as generate_provider_yaml, so these names
             # are exactly what lands in the per-provider model_list files.
@@ -256,21 +257,6 @@ def validate_fallbacks(
         "malformed": malformed,
         "self_edges": self_edges,
         "duplicate_subjects": duplicates,
-        "cycles": find_cycles(fallback_list),
-    }
-    unknown: set[str] = set()
-    if valid_names is not None:
-        for subject, targets in adj.items():
-            if subject not in valid_names:
-                unknown.add(subject)
-            unknown.update(t for t in targets if t not in valid_names)
-    self_edges = sorted(
-        s for s, targets in adj.items() if s in targets
-    )
-    return {
-        "unknown_names": sorted(unknown),
-        "malformed": malformed,
-        "self_edges": self_edges,
         "cycles": find_cycles(fallback_list),
     }
 
@@ -473,20 +459,36 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
         same_tier.sort(key=lambda e: e[0])
         same_tier_names[subject_key] = [mn for _, mn in same_tier]
 
+    models_data = storage.load_models_data(config)
+    from model_manager.domain.models import normalize_variant_key
+
     raw: list[dict[str, list[str]]] = []
     for subject_key, subject in groups.items():
         tier_names = same_tier_names[subject_key]
+        user_fbs = subject.get("user_fallbacks") or []
 
         for subject_name in subject["model_names"]:
             other_same = [mn for mn in subject["model_names"] if mn != subject_name]
-            ordered = other_same + list(tier_names)
-            # Keep only registered names, strictly downhill in global rank.
-            srank = ranks[subject_name]
-            downhill = [
-                n for n in ordered
-                if n != subject_name and n in valid and ranks[n] > srank
-            ]
-            fallback_list = downhill[:limit]
+
+            if user_fbs:
+                user_ordered: list[str] = list(other_same)
+                for fb_target in user_fbs:
+                    norm_target = normalize_variant_key(fb_target, models_data)
+                    target_group = groups.get(norm_target)
+                    if target_group:
+                        for mn in target_group["model_names"]:
+                            if mn != subject_name and mn not in user_ordered:
+                                user_ordered.append(mn)
+                candidates = [n for n in user_ordered if n != subject_name and n in valid]
+            else:
+                ordered = other_same + list(tier_names)
+                srank = ranks[subject_name]
+                candidates = [
+                    n for n in ordered
+                    if n != subject_name and n in valid and ranks[n] > srank
+                ]
+
+            fallback_list = candidates[:limit]
             if fallback_list:
                 raw.append({subject_name: fallback_list})
 
