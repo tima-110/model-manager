@@ -378,3 +378,90 @@ def test_assert_valid_fallbacks_gate():
             [{"a": ["b"]}, {"b": ["a"]}], {"a", "b"})
     with pytest.raises(RuntimeError, match="unregistered"):
         fallbacks.assert_valid_fallbacks([{"a": ["ghost"]}], {"a"})
+
+
+def test_user_defined_fallbacks_respected(tmp_path: Path):
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    # Set user defined fallbacks for deepseek-v4/flash -> ["glm-5.1/standard", "minimax-m2.7/standard"]
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/standard", "minimax-m2.7/standard"])
+
+    result = fallbacks.build_fallbacks(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "ollama/deepseek-v4-flash"
+
+    assert subj in by_key
+    # Same variant other provider first
+    assert by_key[subj][0] == "nvidia_nim/deepseek-v4-flash"
+    # Respect user-requested order: glm-5.1 before minimax-m2.7
+    assert "ollama/glm-5.1" in by_key[subj]
+    assert "ollama/minimax-m2.7" in by_key[subj]
+    assert by_key[subj].index("ollama/glm-5.1") < by_key[subj].index("ollama/minimax-m2.7")
+
+
+def test_user_defined_fallbacks_blocked_skipped(tmp_path: Path):
+    from model_manager.domain import blocks, models
+
+    cfg = _library(tmp_path)
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["minimax-m2.7/standard", "glm-5.1/standard"])
+
+    # Block both provider copies of minimax-m2.7
+    blocks.record_observation(
+        cfg, [blocks.provider_key("nvidia", "minimaxai/minimax-m2.7"), blocks.provider_key("ollama", "minimax-m2.7")],
+        blocked=True, reason="maintenance", source="scan",
+    )
+
+    result = fallbacks.build_fallbacks(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "nvidia_nim/deepseek-v4-flash"
+
+    # minimax-m2.7 is blocked on all providers so it must be skipped
+    assert "ollama/minimax-m2.7" not in by_key[subj]
+    assert "nvidia_nim/minimax-m2.7" not in by_key[subj]
+    # glm-5.1 should be included
+    assert "ollama/glm-5.1" in by_key[subj]
+
+
+def test_user_defined_fallbacks_crud_cli(tmp_path: Path):
+    from model_manager.cli.models import fallback_app
+
+    cfg = _library(tmp_path)
+    config_file = tmp_path / "config.toml"
+    providers_toml = "\n".join(
+        f'[providers.{name}]\nkeys=["K1"]\nlitellm_prefix="{pc.litellm_prefix}"'
+        for name, pc in cfg.providers.items()
+    )
+    config_file.write_text(
+        f'data_dir = "{cfg.data_dir}"\nlitellm_fallbacks_path = "{cfg.litellm_fallbacks_path}"\n{providers_toml}\n'
+    )
+
+    # 1. Add
+    res = runner.invoke(fallback_app, ["add", "deepseek-v4", "flash", "minimax-m2.7", "-c", str(config_file)])
+    assert res.exit_code == 0
+    assert "Added fallback" in res.output
+
+    # 2. Add second
+    res = runner.invoke(fallback_app, ["add", "deepseek-v4", "flash", "glm-5.1/standard", "-c", str(config_file)])
+    assert res.exit_code == 0
+
+    # 3. List
+    res = runner.invoke(fallback_app, ["list", "--json", "-c", str(config_file)])
+    assert res.exit_code == 0
+    assert "minimax-m2.7/standard" in res.output
+    assert "glm-5.1/standard" in res.output
+
+    # 4. Remove
+    res = runner.invoke(fallback_app, ["remove", "deepseek-v4", "flash", "minimax-m2.7", "-c", str(config_file)])
+    assert res.exit_code == 0
+    assert "Removed fallback" in res.output
+
+    # 5. Set
+    res = runner.invoke(fallback_app, ["set", "deepseek-v4", "flash", "glm-5.1", "minimax-m2.7", "-c", str(config_file)])
+    assert res.exit_code == 0
+    assert "Set fallbacks" in res.output
+
+    # 6. Clear
+    res = runner.invoke(fallback_app, ["clear", "deepseek-v4", "flash", "-c", str(config_file)])
+    assert res.exit_code == 0
+    assert "Cleared fallbacks" in res.output

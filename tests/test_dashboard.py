@@ -67,3 +67,17 @@ def test_dashboard_renders_scores_table(tmp_path: Path):
     assert "Coding" in html
     assert "Agentic" in html
     assert "sortTable" in html
+
+
+def test_dashboard_renders_user_defined_fallbacks(tmp_path: Path):
+    cfg = _empty_cfg(tmp_path)
+    models_path = cfg.data_dir / "models.json"
+    models_path.write_text(
+        '{"models": {"deepseek-v4": {"variants": {"flash": {"fallbacks": ["minimax-m2.7/standard", "glm-5.1/standard"]}}}}}'
+    )
+    output = generate_dashboard(cfg)
+    html = output.read_text()
+    assert "User-Defined Variant Fallbacks" in html
+    assert "deepseek-v4/flash" in html
+    assert "minimax-m2.7/standard" in html
+    assert "glm-5.1/standard" in html
