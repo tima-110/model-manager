@@ -556,6 +556,51 @@ def test_user_fallbacks_never_truncated_by_limit(tmp_path: Path):
     assert "ollama/minimax-m2.7" in by_key[subj]
 
 
+def test_user_fallbacks_skip_dead_copies_keep_healthy(tmp_path: Path):
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    # glm-5.1: ollama copy Ratelimited, nvidia copy Dead.
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/standard"])
+
+    result = fallbacks.build_fallbacks(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "ollama/deepseek-v4-flash"
+
+    assert "ollama/glm-5.1" in by_key[subj]
+    assert "nvidia_nim/glm-5.1" not in by_key[subj]
+
+
+def test_user_fallbacks_all_dead_target_skipped(tmp_path: Path, caplog):
+    import logging
+
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    data = json.loads((tmp_path / "models.json").read_text())
+    data["models"]["sickly"] = {
+        "display_name": "Sickly", "family": "x", "default_variant": "standard",
+        "variants": {
+            "standard": _variant({
+                "nvidia": {"sick/sickly": {"assessment": "Dead", "availability": 0.0}},
+                "ollama": {"sickly": {"assessment": "Dead", "availability": 0.0}},
+            }, {"intelligence": 10, "coding": 10}),
+        },
+    }
+    (tmp_path / "models.json").write_text(json.dumps(data, indent=2))
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["sickly/standard"])
+
+    with caplog.at_level(logging.WARNING):
+        result = fallbacks.build_fallbacks(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "ollama/deepseek-v4-flash"
+
+    assert not any("sickly" in name for name in by_key[subj])
+    # Auto tail still fills the chain.
+    assert len(by_key[subj]) > 0
+    assert "no healthy provider copies" in caplog.text
+
+
 def test_user_fallbacks_cli_rejects_bad_targets(tmp_path: Path):
     from model_manager.cli.models import fallback_app
 

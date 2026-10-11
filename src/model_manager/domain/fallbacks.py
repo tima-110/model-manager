@@ -26,6 +26,11 @@ STATUS_RANK = {
 }
 UNKNOWN_RANK = 6
 
+# Provider copies assessed Weak or Dead are skipped when expanding
+# user-defined fallback targets: LiteLLM would only pay a timeout there.
+# Unscanned copies (UNKNOWN_RANK) are kept — no signal means no exclusion.
+UNHEALTHY_RANKS = frozenset({STATUS_RANK["weak"], STATUS_RANK["dead"]})
+
 
 def status_rank(assessment: str | None) -> int:
     """Map an assessment string to its ordering rank (lower is preferred)."""
@@ -416,7 +421,8 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
     User-defined variant fallbacks (``fallbacks`` in models.json) are
     expanded first, in user order, with no tier/rank filtering — only
     unservable targets (unknown variant, excluded from LiteLLM, or fully
-    blocked) are skipped with a warning. The auto-generated downhill tail
+    blocked) and provider copies assessed Weak/Dead are skipped with a
+    warning; unscanned copies are kept. The auto-generated downhill tail
     is appended after the user entries to fill up to *limit*; user entries
     are never truncated (the list may exceed *limit* when the user
     configured more). Targets outside the generated ``model_list``/aliases
@@ -492,9 +498,20 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
                             fb_target, subject_key,
                         )
                         continue
+                    details = target_group.get("details", {})
+                    kept = 0
                     for mn in target_group["model_names"]:
+                        if details.get(mn, {}).get("status_rank") in UNHEALTHY_RANKS:
+                            continue
                         if mn != subject_name and mn not in user_part and mn in valid:
                             user_part.append(mn)
+                            kept += 1
+                    if kept == 0:
+                        log.warning(
+                            "User fallback target %r for %r has no healthy "
+                            "provider copies (all Weak/Dead); skipping",
+                            fb_target, subject_key,
+                        )
                 srank = ranks[subject_name]
                 auto_tail = [
                     n for n in tier_names

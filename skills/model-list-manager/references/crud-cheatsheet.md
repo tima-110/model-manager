@@ -69,7 +69,8 @@ Reads are always safe; every command below mutates `models.json` unless noted.
   entries.
 - Rejected writes: unknown model/variant, self-edges, cycle-closing orders
   (confirm every target exists in `models list` first). Blocked/unservable
-  targets are skipped at generation with a warning. User entries lead the
+  targets and Weak/Dead-assessed provider copies are skipped at generation
+  with a warning (unscanned copies are kept). User entries lead the
   generated chain and are never truncated; the auto downhill tail fills the
   remainder.
 

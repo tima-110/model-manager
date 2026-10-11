@@ -130,8 +130,8 @@ Fallbacks pin the head of a variant's generated LiteLLM chain. They are
 stored as `fallbacks` (ordered `model/variant` strings) on the variant in
 `models.json`; the generator expands them first, in user order, with no
 tier/rank filtering, then appends the auto-generated downhill tail. User
-entries are never truncated; blocked or unservable targets are skipped with
-a warning. Reachable as `models fallback ...` (alias: `models variant
+entries are never truncated; blocked, unservable, or Weak/Dead-assessed
+provider copies are skipped with a warning (unscanned copies are kept). Reachable as `models fallback ...` (alias: `models variant
 fallback ...`).
 
 - **Read**: `models fallback list [--model <m>] [--variant <v>] [--json]` —
