@@ -141,8 +141,78 @@ def normalize_variant_key(target: str, models_data: dict) -> str:
     return f"{target}/standard"
 
 
+def resolve_fallback_target(target: str, models_data: dict) -> str:
+    """Normalize *target* and validate that the model/variant exists.
+
+    Raises ValueError naming the unknown model or variant. Short
+    ``'model'`` forms resolve via the model's ``default_variant``.
+    """
+    norm = normalize_variant_key(target, models_data)
+    mid, _, vid = norm.partition("/")
+    model_info = models_data.get("models", {}).get(mid)
+    if model_info is None:
+        raise ValueError(f"Unknown fallback target model '{mid}'.")
+    if vid not in model_info.get("variants", {}):
+        raise ValueError(f"Unknown fallback target variant '{norm}'.")
+    return norm
+
+
+def _check_no_variant_cycle(models_data: dict, subj_key: str, proposed: list[str]) -> None:
+    """Raise ValueError if *proposed* fallbacks for *subj_key* close a cycle.
+
+    Runs DFS over the variant-level graph (``model/variant`` nodes, edges
+    from each variant's ``fallbacks`` list, with *proposed* substituted for
+    the subject). Targets with no outgoing edges are leaves. Mirrors the
+    semantics of ``fallbacks.find_cycles`` without importing it (models must
+    stay importable from fallbacks).
+    """
+    adj: dict[str, list[str]] = {}
+    for mid, m_info in models_data.get("models", {}).items():
+        for vid, v_info in m_info.get("variants", {}).items():
+            key = f"{mid}/{vid}"
+            fbs = proposed if key == subj_key else (v_info.get("fallbacks") or [])
+            if fbs:
+                adj[key] = list(fbs)
+
+    visited: dict[str, int] = {}
+    stack: list[str] = []
+    cycle: list[str] | None = None
+
+    def dfs(node: str) -> bool:
+        nonlocal cycle
+        visited[node] = 1
+        stack.append(node)
+        for nxt in adj.get(node, []):
+            if nxt == node:
+                cycle = [node, node]
+                return True
+            state = visited.get(nxt, 0)
+            if state == 1:
+                cycle = stack[stack.index(nxt):] + [nxt]
+                return True
+            if state == 0 and nxt in adj and dfs(nxt):
+                return True
+        stack.pop()
+        visited[node] = 2
+        return False
+
+    for node in adj:
+        if visited.get(node, 0) == 0 and dfs(node):
+            break
+    if cycle:
+        raise ValueError(
+            "Setting this fallback would create a cycle: "
+            + " -> ".join(cycle)
+            + "."
+        )
+
+
 def set_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str, fallbacks_list: list[str]) -> bool:
-    """Set user-defined fallbacks for a model variant. Returns False if variant not found."""
+    """Set user-defined fallbacks for a model variant. Returns False if variant not found.
+
+    Raises ValueError for unknown targets, self-edges, or cycles.
+    An empty result removes the ``fallbacks`` key instead of storing ``[]``.
+    """
     data = storage.load_models_data(config)
     variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
     if variant is None:
@@ -151,10 +221,22 @@ def set_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str, fal
     subj_key = f"{model_id}/{variant_id}"
     normalized: list[str] = []
     for item in fallbacks_list:
-        norm = normalize_variant_key(item, data)
-        if norm != subj_key and norm not in normalized:
+        norm = resolve_fallback_target(item, data)
+        if norm == subj_key:
+            raise ValueError("A variant cannot be set as its own fallback.")
+        if norm not in normalized:
             normalized.append(norm)
 
+    if not normalized:
+        if "fallbacks" in variant:
+            del variant["fallbacks"]
+            if "meta" not in data:
+                data["meta"] = {}
+            data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            storage.save_models_data(config, data)
+        return True
+
+    _check_no_variant_cycle(data, subj_key, normalized)
     variant["fallbacks"] = normalized
 
     if "meta" not in data:
@@ -165,7 +247,10 @@ def set_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str, fal
 
 
 def add_variant_fallback(config: AppConfig, model_id: str, variant_id: str, fallback_target: str) -> bool:
-    """Add a fallback target to a model variant. Returns False if variant not found."""
+    """Add a fallback target to a model variant. Returns False if variant not found.
+
+    Raises ValueError for unknown targets, self-edges, or cycles.
+    """
     data = storage.load_models_data(config)
     variant = data.get("models", {}).get(model_id, {}).get("variants", {}).get(variant_id)
     if variant is None:
@@ -177,12 +262,17 @@ def add_variant_fallback(config: AppConfig, model_id: str, variant_id: str, fall
         raise ValueError("A variant cannot be set as its own fallback.")
 
     current = variant.get("fallbacks", [])
-    if norm_target not in current:
-        variant["fallbacks"] = current + [norm_target]
-        if "meta" not in data:
-            data["meta"] = {}
-        data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        storage.save_models_data(config, data)
+    if norm_target in current:
+        return True
+    norm_target = resolve_fallback_target(fallback_target, data)
+
+    proposed = current + [norm_target]
+    _check_no_variant_cycle(data, subj_key, proposed)
+    variant["fallbacks"] = proposed
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    storage.save_models_data(config, data)
     return True
 
 

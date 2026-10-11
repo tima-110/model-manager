@@ -413,10 +413,19 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
     alias priority (``[tier_providers.<tier>]`` provider order, then
     composite), capped at *limit* entries.
 
-    Edges only point "downhill" in the global rank, so the output is a
-    directed acyclic graph: if A lists B, B never lists A or any ancestor
-    of A. Targets outside the generated ``model_list``/aliases are omitted,
-    as are subjects left with no valid downhill target.
+    User-defined variant fallbacks (``fallbacks`` in models.json) are
+    expanded first, in user order, with no tier/rank filtering — only
+    unservable targets (unknown variant, excluded from LiteLLM, or fully
+    blocked) are skipped with a warning. The auto-generated downhill tail
+    is appended after the user entries to fill up to *limit*; user entries
+    are never truncated (the list may exceed *limit* when the user
+    configured more). Targets outside the generated ``model_list``/aliases
+    are omitted, as are subjects left with no valid target.
+
+    The result passes through :func:`sanitize_fallbacks`, which drops any
+    residual cycle-closing back-edge (order-preserving, so earlier — i.e.
+    user — entries win), and :func:`generate_fallbacks_yaml` re-validates
+    with :func:`assert_valid_fallbacks` before serializing.
     """
     from model_manager.domain.model_group_aliases import _provider_order
 
@@ -471,15 +480,30 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
             other_same = [mn for mn in subject["model_names"] if mn != subject_name]
 
             if user_fbs:
-                user_ordered: list[str] = list(other_same)
+                # User entries first (no rank filtering), then auto tail.
+                user_part: list[str] = list(other_same)
                 for fb_target in user_fbs:
                     norm_target = normalize_variant_key(fb_target, models_data)
                     target_group = groups.get(norm_target)
-                    if target_group:
-                        for mn in target_group["model_names"]:
-                            if mn != subject_name and mn not in user_ordered:
-                                user_ordered.append(mn)
-                candidates = [n for n in user_ordered if n != subject_name and n in valid]
+                    if target_group is None:
+                        log.warning(
+                            "User fallback target %r for %r has no servable "
+                            "providers; skipping",
+                            fb_target, subject_key,
+                        )
+                        continue
+                    for mn in target_group["model_names"]:
+                        if mn != subject_name and mn not in user_part and mn in valid:
+                            user_part.append(mn)
+                srank = ranks[subject_name]
+                auto_tail = [
+                    n for n in tier_names
+                    if n != subject_name and n in valid
+                    and ranks[n] > srank and n not in user_part
+                ]
+                # User entries are never truncated; auto fills the remainder.
+                room = max(0, limit - len(user_part))
+                fallback_list = user_part + auto_tail[:room]
             else:
                 ordered = other_same + list(tier_names)
                 srank = ranks[subject_name]
@@ -487,8 +511,7 @@ def build_fallbacks(config: AppConfig, limit: int = 5) -> list[dict[str, list[st
                     n for n in ordered
                     if n != subject_name and n in valid and ranks[n] > srank
                 ]
-
-            fallback_list = candidates[:limit]
+                fallback_list = candidates[:limit]
             if fallback_list:
                 raw.append({subject_name: fallback_list})
 

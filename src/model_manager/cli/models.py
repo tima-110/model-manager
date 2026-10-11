@@ -83,8 +83,12 @@ def fallback_set(
 ) -> None:
     """Set the full array of fallback targets for a model variant."""
     cfg = load_config(config)
-    if not models.set_variant_fallbacks(cfg, model, variant, targets):
-        console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+    try:
+        if not models.set_variant_fallbacks(cfg, model, variant, targets):
+            console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+            raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
     fbs = models.get_variant_fallbacks(cfg, model, variant).get(f"{model}/{variant}", [])

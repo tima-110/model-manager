@@ -465,3 +465,120 @@ def test_user_defined_fallbacks_crud_cli(tmp_path: Path):
     res = runner.invoke(fallback_app, ["clear", "deepseek-v4", "flash", "-c", str(config_file)])
     assert res.exit_code == 0
     assert "Cleared fallbacks" in res.output
+
+
+def test_user_fallbacks_reject_unknown_targets(tmp_path: Path):
+    import pytest
+
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    with pytest.raises(ValueError, match="Unknown fallback target model"):
+        models.add_variant_fallback(cfg, "deepseek-v4", "flash", "ghost-model")
+    with pytest.raises(ValueError, match="Unknown fallback target model"):
+        models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["ghost-model"])
+    with pytest.raises(ValueError, match="Unknown fallback target variant"):
+        models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/nonexistent"])
+    # Nothing persisted on rejection.
+    assert models.get_variant_fallbacks(cfg) == {}
+
+
+def test_user_fallbacks_set_rejects_self_edge(tmp_path: Path):
+    import pytest
+
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    with pytest.raises(ValueError, match="own fallback"):
+        models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["deepseek-v4/flash"])
+    assert models.get_variant_fallbacks(cfg) == {}
+
+
+def test_user_fallbacks_reject_cycles_on_save(tmp_path: Path):
+    import pytest
+
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/standard"])
+    with pytest.raises(ValueError, match="cycle"):
+        models.set_variant_fallbacks(cfg, "glm-5.1", "standard", ["deepseek-v4/flash"])
+    # Rejected write leaves the subject untouched.
+    assert models.get_variant_fallbacks(cfg, "glm-5.1", "standard") == {}
+    with pytest.raises(ValueError, match="cycle"):
+        models.add_variant_fallback(cfg, "glm-5.1", "standard", "deepseek-v4/flash")
+    assert models.get_variant_fallbacks(cfg, "glm-5.1", "standard") == {}
+
+
+def test_user_fallbacks_set_empty_removes_key(tmp_path: Path):
+    import json
+
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/standard"])
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", [])
+    data = json.loads((tmp_path / "models.json").read_text())
+    assert "fallbacks" not in data["models"]["deepseek-v4"]["variants"]["flash"]
+    assert models.get_variant_fallbacks(cfg) == {}
+
+
+def test_user_fallbacks_first_then_auto_tail(tmp_path: Path):
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    models.set_variant_fallbacks(cfg, "deepseek-v4", "flash", ["glm-5.1/standard"])
+
+    result = fallbacks.build_fallbacks(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "ollama/deepseek-v4-flash"
+
+    assert by_key[subj][0] == "nvidia_nim/deepseek-v4-flash"
+    # User target precedes the auto-generated same-tier tail.
+    assert "ollama/glm-5.1" in by_key[subj]
+    assert "ollama/minimax-m2.7" in by_key[subj]
+    assert by_key[subj].index("ollama/glm-5.1") < by_key[subj].index("ollama/minimax-m2.7")
+
+
+def test_user_fallbacks_never_truncated_by_limit(tmp_path: Path):
+    from model_manager.domain import models
+
+    cfg = _library(tmp_path)
+    models.set_variant_fallbacks(
+        cfg, "deepseek-v4", "flash", ["glm-5.1/standard", "minimax-m2.7/standard"]
+    )
+
+    result = fallbacks.build_fallbacks(cfg, limit=1)
+    by_key = {next(iter(m)): list(m.values())[0] for m in result}
+    subj = "ollama/deepseek-v4-flash"
+
+    assert "ollama/glm-5.1" in by_key[subj]
+    assert "ollama/minimax-m2.7" in by_key[subj]
+
+
+def test_user_fallbacks_cli_rejects_bad_targets(tmp_path: Path):
+    from model_manager.cli.models import fallback_app
+
+    cfg = _library(tmp_path)
+    config_file = tmp_path / "config.toml"
+    providers_toml = "\n".join(
+        f'[providers.{name}]\nkeys=["K1"]\nlitellm_prefix="{pc.litellm_prefix}"'
+        for name, pc in cfg.providers.items()
+    )
+    config_file.write_text(
+        f'data_dir = "{cfg.data_dir}"\nlitellm_fallbacks_path = "{cfg.litellm_fallbacks_path}"\n{providers_toml}\n'
+    )
+
+    res = runner.invoke(fallback_app, ["add", "deepseek-v4", "flash", "ghost-model", "-c", str(config_file)])
+    assert res.exit_code == 1
+    assert "Unknown fallback target" in res.output
+
+    res = runner.invoke(fallback_app, ["set", "deepseek-v4", "flash", "ghost-model", "-c", str(config_file)])
+    assert res.exit_code == 1
+    assert "Unknown fallback target" in res.output
+
+    res = runner.invoke(
+        fallback_app, ["set", "deepseek-v4", "flash", "deepseek-v4/flash", "-c", str(config_file)]
+    )
+    assert res.exit_code == 1
+    assert "own fallback" in res.output
