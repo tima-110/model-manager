@@ -92,6 +92,13 @@ Writes the default `config.toml` if none exists (never overwrites), verifies the
 | `models tag list` | List current tags per variant | `--config`, `--json` |
 | `models tag set MODEL VARIANT TAG` | Manually add a tag to a variant | `MODEL`, `VARIANT`, `TAG`; `--config`, `--json` |
 | `models tag remove MODEL VARIANT TAG` | Remove a tag from a variant | `MODEL`, `VARIANT`, `TAG`; `--config`, `--json` |
+| `models fallback list` | List user-defined per-variant fallback targets | `--model/-m`, `--variant/-v`, `--config`, `--json` |
+| `models fallback add MODEL VARIANT TARGET` | Append one fallback target to a variant | `MODEL`, `VARIANT`, `TARGET` (required); `--config`, `--json` |
+| `models fallback set MODEL VARIANT TARGETS...` | Replace the full ordered fallback list for a variant | `MODEL`, `VARIANT`, `TARGETS` (required); `--config`, `--json` |
+| `models fallback remove MODEL VARIANT TARGET` | Remove one fallback target from a variant | `MODEL`, `VARIANT`, `TARGET` (required); `--config`, `--json` |
+| `models fallback clear MODEL VARIANT` | Clear all user-defined fallbacks from a variant | `MODEL`, `VARIANT` (required); `--config`, `--json` |
+
+User-defined fallbacks pin the head of a variant's generated chain: `generate fallbacks` expands them first in user order (Weak/Dead provider copies skipped), then appends the auto-generated downhill tail. Targets accept short form (`gemini-3.7` resolves via the target's `default_variant`) or full `model/variant`. Unknown targets, self-edges, and cycle-closing writes are rejected. Also reachable as `models variant fallback ...`.
 
 ### `scores` — Manage Artificial Analysis score ingestion
 
@@ -160,9 +167,9 @@ Tracked keys: `OPENROUTER_API_KEY`, `ARTIFICIAL_ANALYSIS_API_KEY`, `NVIDIA_API_K
 | `litellm cost-map build` | Merge upstream cost map with local overrides, save to service dir | `--config`, `--source-url` |
 | `litellm generate all` | Generate all LiteLLM configuration files (all provider configs, fallbacks, aliases, and router_settings) | `--config`, `--dry-run`, `--build-cost-map`/`--cost-map` |
 | `litellm generate config [PROVIDER]` | Generate LiteLLM YAML for one provider, or all with `--all-providers` | `[PROVIDER]` (`nvidia`, `gemini`, `ollama`, `openrouter`, `huggingface`); `--config`, `--output/-o`, `--dry-run`, `--all-providers` |
-| `litellm generate fallbacks` | Generate fallbacks YAML from tier tags and provider scans | `--config`, `--output/-o`, `--dry-run`, `--limit` (default `5`) |
+| `litellm generate fallbacks` | Generate fallbacks YAML from tier tags, provider scans, and user-defined variant fallbacks (user entries lead each chain) | `--config`, `--output/-o`, `--dry-run`, `--limit` (default `5`) |
 | `litellm generate aliases` | Generate `model_group_alias` YAML (tier1/2/3) from tier tags and per-tier provider order | `--config`, `--output/-o`, `--dry-run` |
-| `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
+| `litellm generate router_settings` | Merge generated fallbacks + aliases into the stub `router_settings` file (stub never overwritten; stub aliases inherit their target's chain) | `--config`, `--output/-o`, `--dry-run`, `--stub`, `--from-files`, `--limit` (default `5`) |
 | `litellm request-restart` | Request a restart of the LiteLLM service by logging a request entry | `--config`, `--reason/-r` |
 | `litellm scan` | Probe every model served by the LiteLLM proxy (including aliases) with fixed-size streamed completions; records TTFT/throughput to `litellm_scan.json` | `--config`, `--base-url`, `--timeout` (default `180`), `--max-tokens` (default `256`), `--filter/-f`, `--models`, `--skip-aliases`, `--dry-run`, `--json` |
 
@@ -250,6 +257,7 @@ ROOT (JSON Object)
         └── "variant-name" (e.g., "standard", "quantized-low")
             ├── aa_slug: "gemma-4-31b-it"  <--- [ LINK TO model_scores.json ]
             ├── notes: "Official FP16 version"
+            ├── fallbacks: ["other-model/standard", ...]  <--- [ USER-DEFINED chain head ]
             └── provider_ids (Object)
                 ├── "google"
                 │   └── [ "google/gemma-4-31b-it" ]

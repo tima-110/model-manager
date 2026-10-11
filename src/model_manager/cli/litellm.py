@@ -189,9 +189,10 @@ def generate_fallbacks(
 
     Reads models.json and provider scan results, and for every lens that
     ``generate config`` would include emits a ``fallbacks`` map keyed on each
-    provider's full model_name. Fallbacks prioritize the same model on other
-    providers (active first, dead last) followed by same-tier models ordered by
-    composite score.
+    provider's full model_name. User-defined variant fallbacks (``models
+    fallback ...``) lead each chain in user order; remaining slots fill with
+    the same model on other providers (active first, dead last) followed by
+    same-tier models ordered by composite score.
     """
     from model_manager.domain import fallbacks
 
