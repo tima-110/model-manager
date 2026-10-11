@@ -24,3 +24,8 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Insight:** `models.py` stores the `include_in_litellm` flag as a sibling key inside provider_ids maps, and every generator iterated all map keys as model IDs. Any map with the flag set (not exactly `False`) emitted a phantom model into model_list, fallbacks, and aliases. Fixed centrally in `_iter_provider_ids` with a metadata-key denylist so all collectors/generators are covered at once.
 **Apply when:** Iterating a JSON map that mixes entity IDs with metadata flags — filter flags at the single iterator, not at each call site.
 **Global?** Yes — sentinel-keys-beside-IDs is a recurring JSON-convention hazard in any codegen pipeline.
+### 2026-10-07: pipx Name Collision Pulled Wrong PyPI Package
+**Context:** `model-manager` command missing / `mm --help` showed a scientific-model-runs tool instead of the LiteLLM CLI. `pipx list` showed model-manager 0.8 (mwort/modelmanager) exposing `mm`/`modelmanager`, while local pyproject is 1.1.3 exposing `model-manager`.
+**Insight:** `pipx install model-manager` resolves the name on PyPI, not the local project — a generic name collision silently installs the wrong tool. Fix is `pipx uninstall model-manager` then `pipx install -e .` from the project root, and verify with `pipx list` (version + exposed apps) and `model-manager --version`.
+**Apply when:** A pipx-installed CLI shows unexpected commands/version, or `which <cmd>` is empty while `pipx list` claims it is installed — check the exposed app names vs pyproject `[project.scripts]`.
+**Global?** No — specific to this project's generic PyPI name, though the check generalizes.
