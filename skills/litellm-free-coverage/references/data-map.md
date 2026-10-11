@@ -8,6 +8,9 @@ Config: `~/.config/model-manager/config.toml`.
   lookup key), `scores` snapshot, `tags` (`tier-1/2/3` managed, others manual),
   `include_in_litellm` (user exclusion, never auto-modified),
   `provider_ids.<provider>.<pid>` → scan metadata (`availability`, `assessment`).
+  `reference_sets.<id>`: named benchmark groups (`display_name`, `items[]` of
+  `{model, variant, aa_slug}`) rendered in `dashboard.html` and pinnable as
+  `refset/<id>` groups in `radar.html`.
 - `model_scores.json` — processed AA scores keyed by `aa_slug`
   (`intelligence`, `coding`, `agentic`, `ttft`, `tps`). Agentic comes from the
   AA language-models API, not the model-list endpoint.
