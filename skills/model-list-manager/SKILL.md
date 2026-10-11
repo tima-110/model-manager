@@ -3,12 +3,13 @@ name: model-list-manager
 description: >
   Manage the model-manager conceptual library (models.json): add new models
   or versions, pick AA slugs, define variants, map provider IDs, remove
-  models, enable/disable variants for LiteLLM, (re)tag tiers, and manage
-  reference sets. Use this skill whenever the user mentions adding a model,
-  new model version, DeepSeek, discover, AA slug, variant, provider mapping,
-  removing a model, enabling or disabling a variant, retagging, reference
-  set, benchmark set, pinning a set, or asks whether the model list is
-  missing anything — even if they don't mention model-manager. Runs the
+  models, enable/disable variants for LiteLLM, (re)tag tiers, manage
+  reference sets, and set per-variant fallbacks. Use this skill whenever the
+  user mentions adding a model, new model version, DeepSeek, discover, AA
+  slug, variant, provider mapping, removing a model, enabling or disabling a
+  variant, retagging, reference set, benchmark set, pinning a set, fallback,
+  fallback order, or preferring one model over another, or asks whether the
+  model list is missing anything — even if they don't mention model-manager. Runs the
   interactive three-phase discover workflow and asks before every write.
 ---
 
@@ -123,25 +124,53 @@ radar pin dropdown, where they draw grouped color-coded benchmark lines.
 - **Verify**: `reference-sets list`, then regenerate `dashboard` / `radar` so the
   set appears in the HTML outputs.
 
+## Workflow B3 — user-defined variant fallbacks
+
+Fallbacks pin the head of a variant's generated LiteLLM chain. They are
+stored as `fallbacks` (ordered `model/variant` strings) on the variant in
+`models.json`; the generator expands them first, in user order, with no
+tier/rank filtering, then appends the auto-generated downhill tail. User
+entries are never truncated; blocked or unservable targets are skipped with
+a warning. Reachable as `models fallback ...` (alias: `models variant
+fallback ...`).
+
+- **Read**: `models fallback list [--model <m>] [--variant <v>] [--json]` —
+  current per-variant fallback targets.
+- **Add**: `models fallback add <model> <variant> <target>` — appends one
+  target. Short-form targets (`minimax-m2.7`) resolve via the target model's
+  `default_variant`; confirm the resolved `model/variant` with the user.
+- **Set**: `models fallback set <model> <variant> <targets...>` — replaces
+  the full ordered list. An empty result removes the key (same as `clear`).
+- **Remove / clear**: `models fallback remove <model> <variant> <target>` /
+  `models fallback clear <model> <variant>` — `remove` also accepts legacy
+  entries, so it cleans up anything `list` shows.
+- **Write rules**: unknown model/variant targets are rejected — confirm each
+  target exists in `models list` first. Self-edges are rejected. Writes that
+  would close a variant-level cycle are rejected (the error names the cycle);
+  propose an order without the back-edge instead. Confirm twice when `set`
+  shortens or reorders an existing list.
+- **Verify**: `models fallback list`, then regenerate the fallbacks YAML /
+  `dashboard` and confirm the "User-Defined Variant Fallbacks" table renders.
+
 ## Workflow C — change packet
 
 ALWAYS use this exact structure before any write:
 
 ```
-## Proposed change: <model / variant / reference set>
-- Type: <new conceptual model | new variant | remove | enable/disable | retag | reference set create/add-item/remove>
+## Proposed change: <model / variant / reference set / fallback>
+- Type: <new conceptual model | new variant | remove | enable/disable | retag | reference set create/add-item/remove | fallback set/add/remove/clear>
 - AA slug: <slug + scores + data age, or "unscored — no tier claim">
 - Providers: <each provider ID + cache staleness + scan health>
 - Exact commands:
-    model-manager models add ... / aliases add ... / models discover ... / reference-sets ...
-- Expected effect: <tier placement, alias changes, LiteLLM inclusion, dashboard/radar visibility>
+    model-manager models add ... / aliases add ... / models discover ... / reference-sets ... / models fallback ...
+- Expected effect: <tier placement, alias changes, LiteLLM inclusion, dashboard/radar visibility, fallback chain order>
 - Needs approval: <what you must confirm before writing>
 ```
 
 ## Guardrails (why each exists)
 
 - Confirm before every write to `models.json` (including `reference-sets`
-  create/add-item/remove). Reads and `--dry-run` previews
+  create/add-item/remove and `models fallback` add/set/remove/clear). Reads and `--dry-run` previews
   are always safe; writes change tiering, aliases, and downstream YAMLs.
 - No `--yolo`, no `providers fetch-all`, no live scans, no `scores fetch`,
   no `litellm generate` (even `--dry-run` is a separate skill's job), no

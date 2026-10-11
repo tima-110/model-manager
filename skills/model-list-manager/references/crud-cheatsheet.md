@@ -56,14 +56,33 @@ Reads are always safe; every command below mutates `models.json` unless noted.
 - Sets render in `dashboard.html` and as pinnable `refset/<id>` groups in
   `radar.html` — regenerate both after changes to verify visibility.
 
+## Fallbacks (user-defined variant fallback targets in `models.json`)
+- `models fallback list [--model <m>] [--variant <v>] [--json]` — read current
+  per-variant targets (safe recon). Alias: `models variant fallback ...`.
+- `models fallback add <model> <variant> <target>` — append one target.
+  Short form (`minimax-m2.7`) resolves via the target's `default_variant`.
+- `models fallback set <model> <variant> <targets...>` — replace the full
+  ordered list (confirm twice when shortening/reordering; empty result
+  removes the key, same as `clear`).
+- `models fallback remove <model> <variant> <target>` /
+  `models fallback clear <model> <variant>` — `remove` also clears legacy
+  entries.
+- Rejected writes: unknown model/variant, self-edges, cycle-closing orders
+  (confirm every target exists in `models list` first). Blocked/unservable
+  targets are skipped at generation with a warning. User entries lead the
+  generated chain and are never truncated; the auto downhill tail fills the
+  remainder.
+
 ## Verify after every change
 1. `models list` — variant present, slug + providers attached.
 2. `aliases resolve <new-provider-id>` — climbs to the right identity + scores.
 3. `models tag tier --dry-run` — expected tier vs leader (report ratio).
 4. For reference-set changes: `reference-sets list`, then regenerate
    `dashboard` / `radar` and confirm the set renders.
-5. Hand `litellm generate` preview to the litellm-free-coverage flow — out of
-   scope here unless the user asks.
+5. For fallback changes: `models fallback list`, then regenerate the
+   fallbacks YAML / `dashboard` and confirm the user-defined table renders.
+6. Hand `litellm generate` preview to the litellm-free-coverage flow — out of
+    scope here unless the user asks.
 
 ## DeepSeek V4.1 Flash worked example (test case, dry-run)
 - Recon: `scores list --filter deepseek` → `deepseek-v4-1-flash` (DeepSeek V4.1

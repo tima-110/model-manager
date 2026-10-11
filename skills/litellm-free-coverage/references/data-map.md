@@ -10,7 +10,9 @@ Config: `~/.config/model-manager/config.toml`.
   `provider_ids.<provider>.<pid>` → scan metadata (`availability`, `assessment`).
   `reference_sets.<id>`: named benchmark groups (`display_name`, `items[]` of
   `{model, variant, aa_slug}`) rendered in `dashboard.html` and pinnable as
-  `refset/<id>` groups in `radar.html`.
+  `refset/<id>` groups in `radar.html`. Variant-level `fallbacks[]`: ordered
+  user-defined `model/variant` targets, expanded first (in user order) when
+  the fallbacks YAML is generated, then the auto downhill tail.
 - `model_scores.json` — processed AA scores keyed by `aa_slug`
   (`intelligence`, `coding`, `agentic`, `ttft`, `tps`). Agentic comes from the
   AA language-models API, not the model-list endpoint.
