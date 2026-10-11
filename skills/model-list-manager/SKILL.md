@@ -3,12 +3,13 @@ name: model-list-manager
 description: >
   Manage the model-manager conceptual library (models.json): add new models
   or versions, pick AA slugs, define variants, map provider IDs, remove
-  models, enable/disable variants for LiteLLM, and (re)tag tiers. Use this
-  skill whenever the user mentions adding a model, new model version, DeepSeek,
-  discover, AA slug, variant, provider mapping, removing a model, enabling or
-  disabling a variant, retagging, or asks whether the model list is missing
-  anything — even if they don't mention model-manager. Runs the interactive
-  three-phase discover workflow and asks before every write.
+  models, enable/disable variants for LiteLLM, (re)tag tiers, and manage
+  reference sets. Use this skill whenever the user mentions adding a model,
+  new model version, DeepSeek, discover, AA slug, variant, provider mapping,
+  removing a model, enabling or disabling a variant, retagging, reference
+  set, benchmark set, pinning a set, or asks whether the model list is
+  missing anything — even if they don't mention model-manager. Runs the
+  interactive three-phase discover workflow and asks before every write.
 ---
 
 # Model List Manager — Add / Discover / CRUD for models.json
@@ -100,24 +101,47 @@ to preview tier effect.
   leader; `tag set/remove <model> <variant> <tag>` for manual tags.
   Tiers shift as scores change — always report composite-vs-leader ratio.
 
+## Workflow B2 — reference sets
+
+Reference sets are named benchmark groups (e.g. `anthropic`, `frontier`) stored
+as `reference_sets` in `models.json`. Each item points at a conceptual
+model/variant plus its AA slug; scores shown come from `model_scores.json`.
+Sets surface in `dashboard.html` and as pinnable groups (`refset/<id>`) in the
+radar pin dropdown, where they draw grouped color-coded benchmark lines.
+
+- **Read**: `reference-sets list [--json]` — sets, items, per-slug scores.
+- **Create**: `reference-sets create <name> [--display-name <D>]` — confirm
+  name + display name first. Idempotent (re-creating an existing set is a no-op).
+- **Add item**: `reference-sets add-item <name> <model> <variant> <aa-slug>` —
+  confirm the model/variant exists in `models list` and the slug resolves in
+  `scores list --filter` first. Re-adding an existing model/variant upserts the
+  slug. Prefer items whose variants are already mapped + scored; say plainly
+  when a slug is unscored.
+- **Remove item / set**: `reference-sets remove-item <name> <model> <variant>` /
+  `reference-sets remove <name>` — confirm twice; removal is not reversible via
+  CLI history (re-create re-adds an empty set).
+- **Verify**: `reference-sets list`, then regenerate `dashboard` / `radar` so the
+  set appears in the HTML outputs.
+
 ## Workflow C — change packet
 
 ALWAYS use this exact structure before any write:
 
 ```
-## Proposed change: <model / variant>
-- Type: <new conceptual model | new variant | remove | enable/disable | retag>
+## Proposed change: <model / variant / reference set>
+- Type: <new conceptual model | new variant | remove | enable/disable | retag | reference set create/add-item/remove>
 - AA slug: <slug + scores + data age, or "unscored — no tier claim">
 - Providers: <each provider ID + cache staleness + scan health>
 - Exact commands:
-    model-manager models add ... / aliases add ... / models discover ...
-- Expected effect: <tier placement, alias changes, LiteLLM inclusion>
+    model-manager models add ... / aliases add ... / models discover ... / reference-sets ...
+- Expected effect: <tier placement, alias changes, LiteLLM inclusion, dashboard/radar visibility>
 - Needs approval: <what you must confirm before writing>
 ```
 
 ## Guardrails (why each exists)
 
-- Confirm before every write to `models.json`. Reads and `--dry-run` previews
+- Confirm before every write to `models.json` (including `reference-sets`
+  create/add-item/remove). Reads and `--dry-run` previews
   are always safe; writes change tiering, aliases, and downstream YAMLs.
 - No `--yolo`, no `providers fetch-all`, no live scans, no `scores fetch`,
   no `litellm generate` (even `--dry-run` is a separate skill's job), no

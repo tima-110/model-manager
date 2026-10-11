@@ -12,6 +12,7 @@ Reads are always safe; every command below mutates `models.json` unless noted.
 - `aliases discover <provider> <csv-ids>` — suggested variant mappings
 - `models tag list` / `models tag tier --dry-run` — preview tier placement
 - `advisor compare <csv-ids>` / `advisor best [--metric intelligence|coding|agentic]`
+- `reference-sets list [--json]` — named benchmark sets, items + per-slug scores
 
 ## Create
 - `models add <model-id> --family <F> --display-name <D> [--default-variant standard]`
@@ -45,11 +46,23 @@ Reads are always safe; every command below mutates `models.json` unless noted.
   Prefer `--litellm-disable` when the user just wants it out of generation.
 - Per-provider exclusion (above) is reversible; `remove` is not — confirm twice.
 
+## Reference sets (named benchmark groups in `models.json`)
+- `reference-sets create <name> [--display-name <D>]` — new set (idempotent).
+- `reference-sets add-item <name> <model> <variant> <aa-slug>` — attach a
+  model/variant + slug (re-adding upserts the slug). Confirm the variant
+  exists and the slug resolves first; flag unscored slugs plainly.
+- `reference-sets remove-item <name> <model> <variant>` /
+  `reference-sets remove <name>` — confirm twice; not reversible.
+- Sets render in `dashboard.html` and as pinnable `refset/<id>` groups in
+  `radar.html` — regenerate both after changes to verify visibility.
+
 ## Verify after every change
 1. `models list` — variant present, slug + providers attached.
 2. `aliases resolve <new-provider-id>` — climbs to the right identity + scores.
 3. `models tag tier --dry-run` — expected tier vs leader (report ratio).
-4. Hand `litellm generate` preview to the litellm-free-coverage flow — out of
+4. For reference-set changes: `reference-sets list`, then regenerate
+   `dashboard` / `radar` and confirm the set renders.
+5. Hand `litellm generate` preview to the litellm-free-coverage flow — out of
    scope here unless the user asks.
 
 ## DeepSeek V4.1 Flash worked example (test case, dry-run)
