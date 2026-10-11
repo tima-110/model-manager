@@ -8,12 +8,15 @@ document. The stub is never overwritten; output always goes to a new file.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from model_manager.config import AppConfig
+
+log = logging.getLogger(__name__)
 
 
 def _load_yaml_doc(path: Path) -> dict:
@@ -121,6 +124,43 @@ def merge_aliases(
     return {**stub_map, **generated_map}
 
 
+def mirror_alias_fallbacks(
+    merged_list: list[dict[str, list[str]]],
+    stub_aliases: dict[str, Any],
+) -> list[dict[str, list[str]]]:
+    """Append mirrored fallback entries for stub aliases.
+
+    For each ``alias -> target`` in *stub_aliases*, when the alias has no
+    fallback entry of its own and the target does, append
+    ``{alias: <target's chain>}`` verbatim. Hand-written entries win;
+    aliases pointing at chainless targets are skipped. Mirrored chains
+    reference only provider model_names, so no alias->alias edges (and no
+    cycles) can result; callers still sanitize afterwards.
+    """
+    by_subject: dict[str, list[str]] = {}
+    for item in merged_list:
+        subject = _fallback_subject(item)
+        if subject is not None and subject not in by_subject:
+            by_subject[subject] = item[subject]
+    mirrored = list(merged_list)
+    for alias, target in stub_aliases.items():
+        if not isinstance(alias, str) or not isinstance(target, str):
+            continue
+        if alias in by_subject:
+            log.info("Alias %r already has a fallback entry; keeping it.", alias)
+            continue
+        chain = by_subject.get(target)
+        if not chain:
+            log.warning(
+                "Stub alias %r points at %r with no fallback chain; skipping.",
+                alias, target,
+            )
+            continue
+        mirrored.append({alias: list(chain)})
+        by_subject[alias] = list(chain)
+    return mirrored
+
+
 def build_merged_router_settings(
     config: AppConfig,
     *,
@@ -162,11 +202,18 @@ def build_merged_router_settings(
 
     # The valid set is derivable from models.json in both modes, so stale
     # files can never smuggle unregistered names into the merged output.
+    # Stub alias keys are added: mirrored alias subjects must validate.
     # An empty registry means "cannot validate" -> skip name filtering.
     from model_manager.domain.fallbacks import collect_valid_model_names
 
+    raw_stub_aliases = merged_block.get("model_group_alias", {})
+    stub_alias_map = raw_stub_aliases if isinstance(raw_stub_aliases, dict) else {}
+
     try:
-        valid_names: set[str] | None = collect_valid_model_names(config) or None
+        registry = collect_valid_model_names(config) or None
+        valid_names: set[str] | None = (
+            (registry | set(stub_alias_map)) if registry is not None else None
+        )
     except Exception:
         valid_names = None
 
@@ -179,6 +226,8 @@ def build_merged_router_settings(
             f"got {type(stub_fallbacks).__name__}"
         )
     merged = merge_fallbacks(stub_fallbacks, generated_fallbacks)
+    # Stub aliases inherit their target's chain (hand entries win).
+    merged = mirror_alias_fallbacks(merged, stub_alias_map)
     # Hand-managed stub entries can reintroduce cycles or reference names
     # outside model_list/aliases, which makes LiteLLM drop the block.
     # Sanitize the merged result (cycle back-edges removed, order kept).
@@ -232,7 +281,12 @@ def generate_router_settings_yaml(
     from model_manager.domain.yaml_gen import dump_litellm_yaml
 
     try:
-        valid: set[str] | None = collect_valid_model_names(config) or None
+        merged_aliases = doc["router_settings"].get("model_group_alias", {}) or {}
+        alias_keys = set(merged_aliases) if isinstance(merged_aliases, dict) else set()
+        registry = collect_valid_model_names(config) or None
+        valid: set[str] | None = (
+            (registry | alias_keys) if registry is not None else None
+        )
     except Exception:
         valid = None
     assert_valid_fallbacks(doc["router_settings"]["fallbacks"], valid)

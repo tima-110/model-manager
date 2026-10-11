@@ -82,6 +82,8 @@ Reads are always safe; every command below mutates `models.json` unless noted.
    `dashboard` / `radar` and confirm the set renders.
 5. For fallback changes: `models fallback list`, then regenerate the
    fallbacks YAML / `dashboard` and confirm the user-defined table renders.
+   Stub aliases inherit their target's chain in the merged router_settings
+   output — grep it for the alias key to confirm.
 6. Hand `litellm generate` preview to the litellm-free-coverage flow — out of
     scope here unless the user asks.
 

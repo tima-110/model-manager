@@ -234,3 +234,53 @@ def test_config_defaults_use_hyphenated_filenames(tmp_path: Path):
     cfg = AppConfig()
     assert cfg.litellm_router_settings_stub_path.name == "litellm-router_settings-stub.yaml"
     assert cfg.litellm_router_settings_path.name == "litellm-router_settings.yaml"
+
+
+def test_stub_alias_mirrors_target_chain(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write_models(tmp_path)
+    _write_stub(tmp_path / "stub.yaml", {
+        "model_group_alias": {"alias-a": "nvidia_nim/a-1"},
+    })
+    doc = rs.build_merged_router_settings(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in doc["router_settings"]["fallbacks"]}
+    assert "alias-a" in by_key
+    assert by_key["alias-a"] == by_key["nvidia_nim/a-1"]
+    assert is_dag(doc["router_settings"]["fallbacks"])
+
+
+def test_stub_alias_chainless_target_skipped(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write_models(tmp_path)
+    # b-1 is worst-ranked: no downhill target, so no chain to mirror.
+    _write_stub(tmp_path / "stub.yaml", {
+        "model_group_alias": {"lonely": "nvidia_nim/b-1"},
+    })
+    doc = rs.build_merged_router_settings(cfg)
+    subjects = {next(iter(m)) for m in doc["router_settings"]["fallbacks"]}
+    assert "lonely" not in subjects
+
+
+def test_stub_alias_hand_entry_wins_over_mirror(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write_models(tmp_path)
+    _write_stub(tmp_path / "stub.yaml", {
+        "fallbacks": [{"alias-a": ["nvidia_nim/b-1"]}],
+        "model_group_alias": {"alias-a": "nvidia_nim/a-1"},
+    })
+    doc = rs.build_merged_router_settings(cfg)
+    by_key = {next(iter(m)): list(m.values())[0] for m in doc["router_settings"]["fallbacks"]}
+    assert by_key["alias-a"] == ["nvidia_nim/b-1"]
+
+
+def test_mirrored_alias_passes_generate_validation(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    _write_models(tmp_path)
+    _write_stub(tmp_path / "stub.yaml", {
+        "model_group_alias": {"alias-a": "nvidia_nim/a-1"},
+    })
+    text = rs.generate_router_settings_yaml(cfg, dry_run=True)
+    assert text is not None
+    doc = yaml.safe_load(text)
+    by_key = {next(iter(m)): list(m.values())[0] for m in doc["router_settings"]["fallbacks"]}
+    assert by_key["alias-a"] == by_key["nvidia_nim/a-1"]

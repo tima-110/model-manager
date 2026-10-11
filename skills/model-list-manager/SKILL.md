@@ -151,6 +151,11 @@ fallback ...`).
   shortens or reorders an existing list.
 - **Verify**: `models fallback list`, then regenerate the fallbacks YAML /
   `dashboard` and confirm the "User-Defined Variant Fallbacks" table renders.
+- **Stub aliases**: `litellm generate router_settings` appends a mirrored
+  fallback entry per stub alias (`alias` gets its target's full chain
+  verbatim; hand-written alias entries win; aliases pointing at chainless
+  targets are skipped). Verify by grepping the generated router YAML for the
+  alias key (e.g. `gemini-flash` matches `gemini-3.8-flash`'s chain).
 
 ## Workflow C — change packet
 
