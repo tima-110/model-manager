@@ -515,6 +515,7 @@ tbody tr:hover{background:#20242f}
         <span><span class="dot" style="display:inline-block;background:#818cf8"></span> In LiteLLM Proxy</span>
         <span><span class="dot" style="display:inline-block;background:#10b981"></span> Provider Candidate</span>
         <span><span class="dot" style="display:inline-block;background:#06b6d4;border-radius:0;transform:rotate(45deg)"></span> AA Reference</span>
+        <span><span class="dot" style="display:inline-block;background:#f97316;border-radius:0;transform:rotate(45deg)"></span> Reference Set</span>
         <span><span style="display:inline-block;width:16px;border-top:2px dashed #4cd7f6"></span> Pareto Frontier</span>
         <span><span style="display:inline-block;width:16px;border-top:2px dashed #06b6d4"></span> Pinned reference level</span>
       </div>
@@ -526,6 +527,10 @@ tbody tr:hover{background:#20242f}
         <div style="display:flex;gap:.4rem;margin-top:.5rem">
           <select id="pinSelect" style="flex:1;background:var(--base);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.45rem"></select>
           <button class="btn" id="pinBtn">Pin</button>
+        </div>
+        <div style="display:flex;gap:.4rem;margin-top:.5rem">
+          <select id="refSetSelect" style="flex:1;background:var(--base);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.45rem"></select>
+          <button class="btn" id="refSetPinBtn">Pin Set</button>
         </div>
         <div id="chips" style="margin-top:.5rem"></div>
       </div>
@@ -579,11 +584,50 @@ var byId = {};
 DATA.models.forEach(function(m){ byId[m.id] = m; });
 var catalogBySlug = {};
 DATA.reference_catalog.forEach(function(e){ catalogBySlug[e.slug] = e; });
+var refSetColors = ["#f97316", "#eab308", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899"];
+
+function getPinnedRefSetColorMap(){
+  var map = {};
+  var colorIndex = 0;
+  (state.pins || []).forEach(function(pinId){
+    if (pinId.indexOf("refset/") === 0) {
+      var setId = pinId.slice(7);
+      var refSet = DATA.reference_sets ? DATA.reference_sets[setId] : null;
+      if (!refSet || !refSet.items) return;
+      var c = refSetColors[colorIndex % refSetColors.length];
+      colorIndex++;
+      refSet.items.forEach(function(item){
+        if (item.aa_slug) {
+          map[item.aa_slug] = c;
+        }
+      });
+    }
+  });
+  return map;
+}
+
+function getRefSetColorForModel(m){
+  var colorMap = getPinnedRefSetColorMap();
+  if (!m) return null;
+  if (m.arch && colorMap[m.arch]) return colorMap[m.arch];
+  if (m.provider_id && colorMap[m.provider_id]) return colorMap[m.provider_id];
+  if (m.model && colorMap[m.model]) return colorMap[m.model];
+  if (m.id && m.id.indexOf("reference/") === 0 && colorMap[m.id.slice(10)]) return colorMap[m.id.slice(10)];
+  return null;
+}
+
+function isModelPinned(m){
+  if (state.pins.indexOf(m.id) >= 0) return true;
+  if (getRefSetColorForModel(m) !== null) return true;
+  return false;
+}
+
 // Remap a pin ID to the live row for the same model when one exists.
 // Stale pins (e.g. reference/<slug> saved before the slug gained a
 // library row) would otherwise render a duplicate alongside aa/<slug>.
 function canonicalPinId(id){
   if (!id) return id;
+  if (id.indexOf("refset/") === 0) return id;
   if (byId[id]) return id;
   var slug = id.indexOf("reference/") === 0 ? id.slice(10) : id;
   var hit = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
@@ -614,9 +658,23 @@ function allRows(){
   var seen = {};
   rows.forEach(function(m){ seen[m.id] = true; });
   state.pins.forEach(function(id){
-    if (seen[id]) return;
-    var r = synthRowForPin(id);
-    if (r) { rows.push(r); seen[id] = true; }
+    if (id.indexOf("refset/") === 0) {
+      var setId = id.slice(7);
+      var refSet = DATA.reference_sets ? DATA.reference_sets[setId] : null;
+      if (refSet && refSet.items) {
+        refSet.items.forEach(function(item){
+          var synthId = "reference/" + item.aa_slug;
+          if (!seen[synthId]) {
+            var r = synthRowForPin(synthId);
+            if (r) { rows.push(r); seen[synthId] = true; }
+          }
+        });
+      }
+    } else {
+      if (seen[id]) return;
+      var r = synthRowForPin(id);
+      if (r) { rows.push(r); seen[id] = true; }
+    }
   });
   return rows;
 }
@@ -634,7 +692,9 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function filtered(){
   var q = state.q.toLowerCase();
   var pinned = {};
-  state.pins.forEach(function(id){ pinned[id] = true; });
+  allRows().forEach(function(m){
+    if (isModelPinned(m)) pinned[m.id] = true;
+  });
   return allRows().filter(function(m){
     var tier = m.tier;
     if (pinned[m.id]) tier = "AA_REFERENCE";
@@ -650,11 +710,11 @@ function filtered(){
 }
 function plotPoints(){
   // Points with a score; price optional (null -> no-price rail).
-  // AA_INDEX rows are table-only unless pinned as a baseline.
+  // AA_INDEX rows are table-only unless pinned as a baseline or part of a pinned ref set.
   return filtered().map(function(m){ return {m:m, y:dimVal(m), c:m.price_per_1m}; })
     .filter(function(p){
       if (p.y === null || p.y === undefined) return false;
-      if (p.m.tier === "AA_INDEX" && state.pins.indexOf(p.m.id) < 0) return false;
+      if (p.m.tier === "AA_INDEX" && !isModelPinned(p.m)) return false;
       return true;
     });
 }
@@ -774,40 +834,15 @@ function renderScatter(){
   // de-collided vertically (lines stay exact, only labels nudge).
   var pinLevels = [];
   allRows().forEach(function(m){
-    if (state.pins.indexOf(m.id) < 0) return;
+    var refSetColor = getRefSetColorForModel(m);
+    var isDirectPin = state.pins.indexOf(m.id) >= 0;
+    if (!isDirectPin && !refSetColor) return;
     var v = dimVal(m);
     if (v === null || v === undefined) return;
-    pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad), isRef: false});
+    var lineColor = refSetColor ? refSetColor : "#06b6d4";
+    if (pinLevels.filter(function(pl){ return pl.m.id === m.id; }).length > 0) return;
+    pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad), c: lineColor});
   });
-
-  // Reference Sets pinning
-  var refSetColors = ["#f97316", "#eab308", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899"];
-  var colorIndex = 0;
-  if (state.pins) {
-      state.pins.forEach(function(pinId) {
-          if (pinId.indexOf("refset/") === 0) {
-              var setId = pinId.slice(7);
-              var refSet = DATA.reference_sets[setId];
-              if (!refSet) return;
-              var c = refSetColors[colorIndex % refSetColors.length];
-              colorIndex++;
-              var slugs = refSet.items.map(function(item) { return item.aa_slug; });
-
-              // To properly reference all benchmark models (even unconfigured ones), iterate over reference_catalog
-              DATA.reference_catalog.forEach(function(e) {
-                 if (slugs.indexOf(e.slug) >= 0) {
-                     var synthId = "reference/" + e.slug;
-                     var m = byId[synthId] || synthRowForPin(synthId) || {id: synthId, display: e.name || e.slug, scores: e.scores};
-                     var v = dimVal(m);
-                     if (v === null || v === undefined) return;
-                     // Prevent duplicates if already drawing this
-                     if (pinLevels.filter(function(p) { return p.m.id === m.id && p.isRef; }).length > 0) return;
-                     pinLevels.push({m:m, v:v, y:yPix(v, vmin, vmax, H, pad), isRef: true, c: c});
-                 }
-              });
-          }
-      });
-  }
 
   pinLevels.sort(function(a,b){ return a.y - b.y; });
   var lastLy = -1e9;
@@ -818,7 +853,7 @@ function renderScatter(){
     p.ly = ly;
   });
   pinLevels.forEach(function(p){
-    var c = p.isRef ? p.c : "#06b6d4";
+    var c = p.c;
     s += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + p.y.toFixed(1) + '" y2="' + p.y.toFixed(1) + '" stroke="' + c + '" stroke-width="1" stroke-dasharray="6 3" opacity="0.55"/>';
     s += '<text x="' + (W - pad.r - 4) + '" y="' + (p.ly - 4).toFixed(1) + '" fill="' + c + '" font-size="10" font-family="JetBrains Mono,monospace" text-anchor="end" opacity="0.9">' + esc(p.m.display) + ' ' + dimLabel(p.v) + '</text>';
   });
@@ -830,9 +865,11 @@ function renderScatter(){
   }
   pts.forEach(function(p, i){
     var cx = xPix(p.c, cmin, cmax, W, pad), cy = yPix(p.y, vmin, vmax, H, pad);
-    var pinned = state.pins.indexOf(p.m.id) >= 0;
-    var col = tierColor(p.m.tier, pinned);
-    if (pinned || p.m.tier === "AA_REFERENCE") {
+    var refSetColor = getRefSetColorForModel(p.m);
+    var directPinned = state.pins.indexOf(p.m.id) >= 0;
+    var isPinned = directPinned || (refSetColor !== null);
+    var col = refSetColor ? refSetColor : tierColor(p.m.tier, directPinned);
+    if (isPinned || p.m.tier === "AA_REFERENCE") {
       s += '<g data-i="' + i + '" style="cursor:pointer"><rect x="' + (cx-5) + '" y="' + (cy-5) +
         '" width="10" height="10" transform="rotate(45 ' + cx + ' ' + cy + ')" fill="' + col + '"/></g>';
     } else {
@@ -880,7 +917,7 @@ function tierBadge(tier, pinned){
   return '<span class="badge b-proxy">In Proxy</span>';
 }
 function getStatusLabel(m){
-  var pinned = state.pins.indexOf(m.id) >= 0;
+  var pinned = isModelPinned(m);
   if (pinned || m.tier === "AA_REFERENCE") return "AA Reference";
   if (m.tier === "PROVIDER_CANDIDATE") return "Candidate";
   if (m.tier === "AA_INDEX") return "AA Index";
@@ -927,7 +964,7 @@ function renderTable(){
     });
   }
   var renderedRows = rows.map(function(m){
-    var pinned = state.pins.indexOf(m.id) >= 0;
+    var pinned = isModelPinned(m);
     var action;
     if (pinned || m.tier === "AA_REFERENCE") {
       action = '<button class="btn ghost" data-unpin="' + esc(m.id) + '">Unpin</button>';
@@ -968,22 +1005,25 @@ function renderTable(){
 }
 function renderPins(){
   var sel = document.getElementById("pinSelect");
-  var html = '<optgroup label="Models">';
-  html += DATA.reference_catalog.map(function(e){
+  sel.innerHTML = DATA.reference_catalog.map(function(e){
     return '<option value="' + esc(e.slug) + '">' + esc(e.name) + '</option>';
   }).join("");
-  html += '</optgroup>';
 
+  var refSel = document.getElementById("refSetSelect");
   var refSetKeys = Object.keys(DATA.reference_sets || {});
-  if (refSetKeys.length > 0) {
-    html += '<optgroup label="Reference Sets">';
-    html += refSetKeys.map(function(key) {
-      return '<option value="refset/' + esc(key) + '">' + esc(DATA.reference_sets[key].display_name || key) + '</option>';
-    }).join("");
-    html += '</optgroup>';
+  if (refSel) {
+    if (refSetKeys.length > 0) {
+      refSel.innerHTML = refSetKeys.map(function(key) {
+        return '<option value="refset/' + esc(key) + '">' + esc(DATA.reference_sets[key].display_name || key) + '</option>';
+      }).join("");
+      refSel.disabled = false;
+      document.getElementById("refSetPinBtn").disabled = false;
+    } else {
+      refSel.innerHTML = '<option value="">No Reference Sets defined</option>';
+      refSel.disabled = true;
+      document.getElementById("refSetPinBtn").disabled = true;
+    }
   }
-
-  sel.innerHTML = html;
 
   var box = document.getElementById("chips");
   box.innerHTML = state.pins.map(function(id){
@@ -1080,11 +1120,13 @@ document.querySelectorAll("#tabs button").forEach(function(b){
 });
 document.getElementById("pinBtn").addEventListener("click", function(){
   var slug = document.getElementById("pinSelect").value;
-  if (slug.indexOf("refset/") === 0) {
-    pin(slug);
-  } else {
-    var ref = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
-    pin(ref ? ref.id : "reference/" + slug);
+  var ref = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
+  pin(ref ? ref.id : "reference/" + slug);
+});
+document.getElementById("refSetPinBtn").addEventListener("click", function(){
+  var setId = document.getElementById("refSetSelect").value;
+  if (setId) {
+    pin(setId);
   }
 });
 document.getElementById("exportBtn").addEventListener("click", function(){
