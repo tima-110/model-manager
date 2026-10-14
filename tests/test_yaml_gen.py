@@ -406,3 +406,120 @@ class TestGenerateProviderYaml:
         model_names = {e["model_name"] for e in parsed["model_list"]}
         assert "nvidia_nim/real-model" in model_names
         assert "nvidia_nim/include_in_litellm" not in model_names
+
+
+def _write_models(data_dir: Path, variants: dict) -> None:
+    data_dir.mkdir(exist_ok=True)
+    (data_dir / "models.json").write_text(json.dumps({
+        "meta": {},
+        "models": {
+            "m": {
+                "display_name": "M", "family": "x", "default_variant": "standard",
+                "variants": variants,
+            },
+        },
+    }))
+
+
+def _gen(data_dir: Path, provider_cfg: ProviderConfig, provider: str = "gemini") -> list[dict]:
+    config = AppConfig(data_dir=data_dir, providers={provider: provider_cfg})
+    result = yaml_gen.generate_provider_yaml(config, provider, dry_run=True)
+    assert result is not None
+    return yaml.safe_load(result)["model_list"]
+
+
+def _gemini_cfg(**kwargs) -> ProviderConfig:
+    base: dict = {
+        "keys": ["GEMINI_KEY_A"],
+        "output_path": Path("/tmp/litellm-gemini.yaml"),
+        "litellm_prefix": "gemini",
+    }
+    base.update(kwargs)
+    return ProviderConfig(**base)
+
+
+class TestEntryLimits:
+    def test_config_fallback_full_set(self, tmp_path: Path):
+        """With nothing in models.json, all config defaults flow through."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {"aa_slug": None, "provider_ids": {"gemini": {"gemini/flash": {}}}},
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15, tpm=1_000_000, rpd=1500,
+                                             max_parallel_requests=10, weight=2))
+        params = entries[0]["litellm_params"]
+        assert params["rpm"] == 15
+        assert params["tpm"] == 1_000_000
+        assert params["rpd"] == 1500
+        assert params["max_parallel_requests"] == 10
+        assert params["weight"] == 2
+
+    def test_variant_limits_disable_config_fallback(self, tmp_path: Path):
+        """Any variant-wide limit makes models.json authoritative: config ignored."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "aa_slug": None,
+                "limits": {"rpm": 10},
+                "provider_ids": {"gemini": {"gemini/flash": {}}},
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15, tpm=1_000_000))
+        params = entries[0]["litellm_params"]
+        assert params["rpm"] == 10
+        assert "tpm" not in params  # config tpm must not leak in
+
+    def test_provider_entry_beats_config(self, tmp_path: Path):
+        """Explicit provider-entry rpm=5 beats config rpm=15."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "aa_slug": None,
+                "provider_ids": {"gemini": {"gemini/flash": {}, "limits": {"rpm": 5}}},
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15))
+        assert entries[0]["litellm_params"]["rpm"] == 5
+
+    def test_provider_entry_merges_with_variant(self, tmp_path: Path):
+        """Provider-entry overrides per field, variant-wide fills the rest."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "aa_slug": None,
+                "limits": {"rpm": 10, "tpm": 500_000},
+                "provider_ids": {"gemini": {"gemini/flash": {}, "limits": {"rpm": 5}}},
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15, tpm=1_000_000))
+        params = entries[0]["litellm_params"]
+        assert params["rpm"] == 5
+        assert params["tpm"] == 500_000
+
+    def test_other_provider_limits_do_not_block_config(self, tmp_path: Path):
+        """Limits on another provider's entry don't disable config fallback here."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "aa_slug": None,
+                "provider_ids": {
+                    "gemini": {"gemini/flash": {}},
+                    "nvidia": {"nvidia/flash": {}, "limits": {"rpm": 40}},
+                },
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15))
+        assert entries[0]["litellm_params"]["rpm"] == 15
+
+    def test_limits_sentinel_not_emitted_as_model(self, tmp_path: Path):
+        """A provider-entry limits dict is metadata, never a model."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "aa_slug": None,
+                "provider_ids": {"gemini": {"gemini/flash": {}, "limits": {"rpm": 5}}},
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15))
+        model_names = {e["model_name"] for e in entries}
+        assert model_names == {"gemini/flash"}

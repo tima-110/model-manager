@@ -22,6 +22,10 @@ class ProviderOutputConfig(BaseModel):
     output_path: Path | None = None
     litellm_prefix: str = ""
     rpm: int | None = None
+    tpm: int | None = None
+    rpd: int | None = None
+    max_parallel_requests: int | None = None
+    weight: float | None = None
     api_base: str | None = None
 
 

@@ -246,6 +246,98 @@ def set_variant_fallbacks(config: AppConfig, model_id: str, variant_id: str, fal
     return True
 
 
+#: Rate/capacity limit fields understood by ``litellm generate config``.
+#: ``weight`` accepts floats; the rest must be positive integers.
+LIMIT_FIELDS: tuple[str, ...] = ("rpm", "tpm", "rpd", "max_parallel_requests", "weight")
+
+
+def validate_limits(values: dict[str, Any]) -> dict[str, int | float]:
+    """Validate a limits mapping. Returns the cleaned mapping.
+
+    Raises ValueError on unknown fields or non-positive values.
+    """
+    cleaned: dict[str, int | float] = {}
+    for field, value in values.items():
+        if field not in LIMIT_FIELDS:
+            raise ValueError(
+                f"Unknown limit field '{field}'. "
+                f"Known fields: {', '.join(LIMIT_FIELDS)}."
+            )
+        if value is None:
+            continue
+        if field == "weight":
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                raise ValueError(f"Limit '{field}' must be a positive number, got {value!r}.")
+            cleaned[field] = value
+        else:
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"Limit '{field}' must be a positive integer, got {value!r}.")
+            cleaned[field] = value
+    return cleaned
+
+
+def update_variant_limits(
+    config: AppConfig,
+    model_id: str,
+    variant_id: str,
+    values: dict[str, Any] | None = None,
+    provider: str | None = None,
+    clear: bool = False,
+) -> bool:
+    """Set or clear rate/capacity limits for a model variant.
+
+    Without ``provider`` the limits apply variant-wide (``variant["limits"]``).
+    With ``provider`` they apply to that provider only
+    (``variant["provider_ids"][provider]["limits"]``), overriding the
+    variant-wide values per field. Legacy list-format provider mappings are
+    migrated to dict shape on write.
+
+    Returns True if the variant was found and updated, False otherwise.
+    Raises ValueError on invalid limit fields/values.
+    """
+    data = storage.load_models_data(config)
+    model = data.get("models", {}).get(model_id)
+    if not model:
+        return False
+
+    variant = model.get("variants", {}).get(variant_id)
+    if not variant:
+        return False
+
+    if clear:
+        if provider:
+            provider_ids = variant.get("provider_ids", {})
+            entry = provider_ids.get(provider)
+            if entry is None:
+                return False
+            if isinstance(entry, dict):
+                entry.pop("limits", None)
+            # legacy lists carry no limits; nothing to clear
+        else:
+            variant.pop("limits", None)
+    else:
+        cleaned = validate_limits(values or {})
+        if not cleaned:
+            raise ValueError("No limit values provided. Pass a limit flag or --clear-limits.")
+        if provider:
+            provider_ids = variant.setdefault("provider_ids", {})
+            entry = provider_ids.get(provider)
+            if entry is None:
+                return False
+            if isinstance(entry, list):
+                entry = {pid: {} for pid in entry}
+                provider_ids[provider] = entry
+            entry.setdefault("limits", {}).update(cleaned)
+        else:
+            variant.setdefault("limits", {}).update(cleaned)
+
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    storage.save_models_data(config, data)
+    return True
+
+
 def add_variant_fallback(config: AppConfig, model_id: str, variant_id: str, fallback_target: str) -> bool:
     """Add a fallback target to a model variant. Returns False if variant not found.
 

@@ -153,6 +153,20 @@ def variant_update(
         help="Exclude a specific provider for this variant (e.g. openrouter)."),
     litellm_enable_provider: str | None = typer.Option(None, "--litellm-enable-provider",
         help="Re-include a specific provider for this variant."),
+    rpm: int | None = typer.Option(None, "--rpm",
+        help="Requests-per-minute limit for this variant."),
+    tpm: int | None = typer.Option(None, "--tpm",
+        help="Tokens-per-minute limit for this variant."),
+    rpd: int | None = typer.Option(None, "--rpd",
+        help="Requests-per-day limit for this variant."),
+    max_parallel: int | None = typer.Option(None, "--max-parallel",
+        help="Max parallel requests for this variant (max_parallel_requests)."),
+    weight: float | None = typer.Option(None, "--weight",
+        help="Routing weight for this variant."),
+    provider: str | None = typer.Option(None, "--provider",
+        help="Scope limit flags to one provider (omit to apply variant-wide)."),
+    clear_limits: bool = typer.Option(False, "--clear-limits",
+        help="Clear limits at the targeted level (variant-wide or --provider)."),
     config: Path | None = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Update settings for a model variant.
@@ -162,6 +176,10 @@ def variant_update(
       model-manager model variant update gpt-4 8b-q4 --litellm-disable
 
       model-manager model variant update gpt-4 8b-q4 --litellm-disable-provider openrouter
+
+      model-manager model variant update gemini-2-flash standard --rpm 15 --tpm 1000000
+
+      model-manager model variant update gemini-2-flash standard --provider gemini --rpm 5
     """
     cfg = load_config(config)
 
@@ -185,6 +203,25 @@ def variant_update(
     elif litellm_enable_provider:
         include_in_litellm_provider = True
 
+    limit_values: dict[str, int | float] = {}
+    if rpm is not None:
+        limit_values["rpm"] = rpm
+    if tpm is not None:
+        limit_values["tpm"] = tpm
+    if rpd is not None:
+        limit_values["rpd"] = rpd
+    if max_parallel is not None:
+        limit_values["max_parallel_requests"] = max_parallel
+    if weight is not None:
+        limit_values["weight"] = weight
+
+    if clear_limits and limit_values:
+        console.print("[red]Error: Cannot use --clear-limits together with limit flags.[/red]")
+        raise typer.Exit(1)
+    if provider and not limit_values and not clear_limits:
+        console.print("[red]Error: --provider requires a limit flag or --clear-limits.[/red]")
+        raise typer.Exit(1)
+
     if models.update_variant(
         cfg, model, variant,
         include_in_litellm=include_in_litellm,
@@ -199,11 +236,34 @@ def variant_update(
             console.print(f"[green]Provider [bold]{litellm_disable_provider}[/bold] for [bold]{model}/{variant}[/bold] excluded from LiteLLM config.[/green]")
         elif include_in_litellm_provider is True:
             console.print(f"[green]Provider [bold]{litellm_enable_provider}[/bold] for [bold]{model}/{variant}[/bold] included in LiteLLM config.[/green]")
-        else:
+        elif not (limit_values or clear_limits):
             console.print(f"[green]Variant [bold]{model}/{variant}[/bold] updated.[/green]")
     else:
         console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
         raise typer.Exit(1)
+
+    if limit_values or clear_limits:
+        try:
+            ok = models.update_variant_limits(
+                cfg, model, variant,
+                values=limit_values or None,
+                provider=provider,
+                clear=clear_limits,
+            )
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+        if not ok:
+            if provider:
+                console.print(f"[red]Error: Provider [bold]{provider}[/bold] is not mapped to [bold]{model}/{variant}[/bold].[/red]")
+            else:
+                console.print(f"[red]Error: Variant [bold]{model}/{variant}[/bold] not found.[/red]")
+            raise typer.Exit(1)
+        scope = f"provider [bold]{provider}[/bold] for " if provider else ""
+        if clear_limits:
+            console.print(f"[green]Cleared limits for {scope}[bold]{model}/{variant}[/bold].[/green]")
+        else:
+            console.print(f"[green]Set limits for {scope}[bold]{model}/{variant}[/bold]: {limit_values}.[/green]")
 
 @tag_app.command("tier")
 def tag_tier(
@@ -404,6 +464,8 @@ def models_list(
 
                 for pid, scan_data in pids.items():
                     if pid.startswith("include_"):
+                        continue
+                    if pid == "limits":
                         continue
                     model_display = mid if mid != last_model else ""
                     variant_display = f"{vid}{score_str}{exclude_mark}{prov_exclude_mark}" if (vid != last_variant or mid != last_model) else ""

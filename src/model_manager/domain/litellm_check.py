@@ -14,6 +14,9 @@ import yaml
 
 from model_manager.config import AppConfig
 
+#: Limit fields that may appear in generated ``litellm_params``.
+_LIMIT_INT_FIELDS = ("rpm", "tpm", "rpd", "max_parallel_requests")
+
 
 def _load_yaml_doc(path: Path) -> tuple[dict | None, str | None]:
     """Return (doc, error). Missing/unreadable/invalid files yield an error."""
@@ -73,6 +76,22 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
                     record(inc_path, "model_list entries", False, f"entries without model_name at {bad[:5]}")
                 else:
                     record(inc_path, "model_list entries", True, f"{len(entries)} entries")
+                limit_problems: list[str] = []
+                for i, e in enumerate(entries):
+                    if not isinstance(e, dict):
+                        continue
+                    params = e.get("litellm_params")
+                    if not isinstance(params, dict):
+                        continue
+                    for field in _LIMIT_INT_FIELDS:
+                        v = params.get(field)
+                        if v is not None and (isinstance(v, bool) or not isinstance(v, int) or v <= 0):
+                            limit_problems.append(f"{i}:{field}={v!r}")
+                    w = params.get("weight")
+                    if w is not None and (isinstance(w, bool) or not isinstance(w, (int, float)) or w <= 0):
+                        limit_problems.append(f"{i}:weight={w!r}")
+                record(inc_path, "limit params valid", not limit_problems,
+                       "; ".join(limit_problems[:5]) if limit_problems else "OK")
         elif "router_settings" in inc_doc:
             record(inc_path, "include kind", True, "router_settings include (checked below)")
         else:
@@ -153,5 +172,46 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
                    not rs_problems, "OK" if not rs_problems else "see fallbacks report")
         except RuntimeError as e:
             record(config.litellm_router_settings_path, "merged shape", False, str(e))
+
+    # 6. models.json limits: known fields with positive values, both
+    # variant-wide and per-provider entries.
+    try:
+        import json as _json
+
+        from model_manager.domain.models import validate_limits as _validate_limits
+
+        models_path = config.data_dir / "models.json"
+        if models_path.exists():
+            try:
+                models_doc = _json.loads(models_path.read_text())
+            except (ValueError, OSError) as e:
+                record(models_path, "limits parse", False, str(e))
+                models_doc = None
+            if isinstance(models_doc, dict):
+                limit_errors: list[str] = []
+                for mid, mdata in (models_doc.get("models") or {}).items():
+                    if not isinstance(mdata, dict):
+                        continue
+                    for vid, vdata in (mdata.get("variants") or {}).items():
+                        if not isinstance(vdata, dict):
+                            continue
+                        try:
+                            _validate_limits(vdata.get("limits") or {})
+                        except ValueError as e:
+                            limit_errors.append(f"{mid}/{vid}: {e}")
+                        prov_ids = vdata.get("provider_ids") or {}
+                        if not isinstance(prov_ids, dict):
+                            continue
+                        for prov, pmap in prov_ids.items():
+                            if prov.startswith("include_") or not isinstance(pmap, dict):
+                                continue
+                            try:
+                                _validate_limits(pmap.get("limits") or {})
+                            except ValueError as e:
+                                limit_errors.append(f"{mid}/{vid} [{prov}]: {e}")
+                record(models_path, "limits valid", not limit_errors,
+                       "; ".join(limit_errors[:5]) if limit_errors else "OK")
+    except Exception as e:  # validation must never break the check suite
+        record(config.data_dir / "models.json", "limits valid", False, str(e))
 
     return {"checks": checks, "errors": errors}

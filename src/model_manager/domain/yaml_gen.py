@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from model_manager.config import AppConfig
+from model_manager.domain.models import LIMIT_FIELDS
 
 SCAN_FILES: dict[str, str] = {
     "nvidia": "nvidia_scan.json",
@@ -71,10 +72,10 @@ def _load_scan_results(config: AppConfig, provider: str) -> dict[str, str]:
     return assessments
 
 
-# Keys inside a provider_ids map that are metadata flags, not provider IDs.
-# (Written there by models.set_provider_mapping; see domain/models.py.)
-# They must never be treated as model IDs.
-_PROVIDER_MAP_META_KEYS = frozenset({"include_in_litellm"})
+# Keys inside a provider_ids map that are metadata, not provider IDs.
+# (Written there by models.set_provider_mapping / update_variant_limits;
+# see domain/models.py.) They must never be treated as model IDs.
+_PROVIDER_MAP_META_KEYS = frozenset({"include_in_litellm", "limits"})
 
 
 def _iter_provider_ids(
@@ -100,6 +101,43 @@ def _derive_model_name(litellm_prefix: str, provider_id: str) -> str:
 def _derive_model(litellm_prefix: str, provider_id: str) -> str:
     """Derive the full LiteLLM model string."""
     return f"{litellm_prefix}/{provider_id}"
+
+
+def resolve_entry_limits(
+    provider_cfg: AppConfig,
+    variant_data: dict[str, Any],
+    provider_entry: dict[str, Any] | list[str] | None,
+) -> dict[str, Any]:
+    """Resolve rate/capacity limits for one (variant, provider) pair.
+
+    Precedence per field: provider-entry ``limits`` > variant-wide
+    ``limits`` > provider config default — with one rule: the config
+    default applies only when models.json defines nothing applicable
+    (no variant-wide ``limits`` and no ``limits`` on this provider's
+    entry). Any models.json presence makes models.json authoritative.
+    """
+    variant_limits = variant_data.get("limits") or {}
+    entry_limits = (provider_entry.get("limits") or {}) if isinstance(provider_entry, dict) else {}
+    if not isinstance(variant_limits, dict):
+        variant_limits = {}
+    if not isinstance(entry_limits, dict):
+        entry_limits = {}
+
+    resolved: dict[str, Any] = {}
+    if variant_limits or entry_limits:
+        # models.json is authoritative: merge entry over variant-wide.
+        for field in LIMIT_FIELDS:
+            if entry_limits.get(field) is not None:
+                resolved[field] = entry_limits[field]
+            elif variant_limits.get(field) is not None:
+                resolved[field] = variant_limits[field]
+    else:
+        # Nothing in models.json: fall back to the provider config default.
+        for field in LIMIT_FIELDS:
+            value = getattr(provider_cfg, field, None)
+            if value is not None:
+                resolved[field] = value
+    return resolved
 
 
 def generate_provider_yaml(
@@ -181,8 +219,10 @@ def generate_provider_yaml(
                         "model": model,
                         "api_key": f"os.environ/{key}",
                     }
-                    if provider_cfg.rpm is not None:
-                        params["rpm"] = provider_cfg.rpm
+                    for field, value in resolve_entry_limits(
+                        provider_cfg, variant_data, provider_ids_map
+                    ).items():
+                        params[field] = value
                     if provider_cfg.api_base is not None:
                         params["api_base"] = provider_cfg.api_base
 

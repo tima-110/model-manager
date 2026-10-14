@@ -68,7 +68,16 @@ generation only when it has both `keys` and `litellm_prefix` set.
 | `output_path` | Path | `None` | Override for the generated YAML file for this provider. |
 | `litellm_prefix` | String | `""` | Prefix used to derive `model_name` (`{prefix}/{short-slug}`) and `litellm_params.model` (`{prefix}/{provider_id}`). |
 | `rpm` | Integer | `None` | Optional requests-per-minute limit written into generated entries. |
+| `tpm` | Integer | `None` | Optional tokens-per-minute limit written into generated entries. |
+| `rpd` | Integer | `None` | Optional requests-per-day limit written into generated entries. |
+| `max_parallel_requests` | Integer | `None` | Optional max-parallel-requests limit written into generated entries. |
+| `weight` | Number | `None` | Optional routing weight written into generated entries. |
 | `api_base` | String | `None` | Optional API base URL written into `litellm_params`. |
+
+Provider-level limits are defaults: they apply only when `models.json`
+defines no limits for the (variant, provider) pair. Any variant-wide or
+provider-entry limit in `models.json` makes `models.json` authoritative
+for that pair (see `models.json` → `limits` below).
 | `scan_concurrency` | Integer | `None` (provider default) | Override for parallel scan requests. |
 | `scan_delay_between_models_ms` | Integer | `None` (provider default) | Override for delay between per-model scan requests. |
 | `cycle_delay_sec` | Integer | `None` (falls back to `scan_frequency`) | Delay between scan cycles for this provider. |
@@ -157,9 +166,11 @@ The tool uses a hierarchical structure to handle model variants (e.g., quantized
         - `scores`: (Optional) A snapshot of the AA scores (`intelligence`, `coding`, `agentic`, `ttft`, `tps`) at the time of allocation.
         - `tags`: (Optional) A list of tags. `models tag tier` manages `tier-1`/`tier-2`/`tier-3` tags here; other tags are preserved.
         - `include_in_litellm`: (Optional) Set to `false` to exclude the whole variant from `litellm generate config` (see `models variant update --litellm-disable/--litellm-enable`).
+        - `limits`: (Optional) Rate/capacity limits for the variant, e.g. `{ "rpm": 10, "tpm": 500000 }`. Known fields: `rpm`, `tpm`, `rpd`, `max_parallel_requests` (positive integers) and `weight` (positive number). Applies to all providers of the variant unless a provider-entry `limits` overrides per field (see `models variant update --rpm/--tpm/--rpd/--max-parallel/--weight`).
         - `provider_ids`: A mapping of provider name to a dictionary of provider ID → scan metadata.
             - `openrouter`: `{ "openrouter/gemma-4-31b-it:free": { "availability": 0.98, "avg_latency": 320.5, "assessment": "Good", "scan_timestamp": "..." }, ... }`
             - A per-provider `include_in_litellm: false` key inside a provider's dictionary excludes that provider for the variant (see `models variant update --litellm-disable-provider/--litellm-enable-provider`).
+            - A per-provider `limits` object (e.g. `{ "rpm": 5 }`) overrides the variant-wide `limits` per field for that provider only (see `models variant update --provider`). Like `include_in_litellm`, it is metadata — never treated as a model ID.
             - Newly mapped IDs start as empty objects (`{}`) until a `providers ... scan` populates their health data. Legacy list-format mappings are auto-migrated to this shape on write.
         - `notes`: Context for why this variant is used.
     - `default_variant`: The fallback variant if no specific match is found.

@@ -87,7 +87,7 @@ Writes the default `config.toml` if none exists (never overwrites), verifies the
 | `models add MODEL` | Add or update a conceptual model | `MODEL` (required); `--family/-f`, `--display-name/-d`, `--default-variant/-v`, `--config`, `--json` |
 | `models remove MODEL` | Remove a conceptual model from the library | `MODEL` (required); `--config`, `--json` |
 | `models discover MODEL_ID` | Guided discovery and mapping of provider IDs to a conceptual model | `MODEL_ID` (required); `--provider/-p`, `--refresh`, `--yolo`, `--config` |
-| `models variant update MODEL VARIANT` | Include/exclude a variant (or one provider of a variant) from LiteLLM generation | `MODEL`, `VARIANT` (required); `--litellm-disable`, `--litellm-enable`, `--litellm-disable-provider TEXT`, `--litellm-enable-provider TEXT`, `--config` |
+| `models variant update MODEL VARIANT` | Include/exclude a variant (or one provider of a variant) from LiteLLM generation; set/clear rate limits | `MODEL`, `VARIANT` (required); `--litellm-disable`, `--litellm-enable`, `--litellm-disable-provider TEXT`, `--litellm-enable-provider TEXT`, `--rpm INT`, `--tpm INT`, `--rpd INT`, `--max-parallel INT`, `--weight FLOAT`, `--provider TEXT` (scope limits to one provider; omit for variant-wide), `--clear-limits`, `--config`, `--json` |
 | `models tag tier` | Auto-assign `tier-1/2/3` tags to scored variants relative to the library leader | `--dry-run`, `--t1-ratio`, `--t2-ratio`, `--config`, `--json` |
 | `models tag list` | List current tags per variant | `--config`, `--json` |
 | `models tag set MODEL VARIANT TAG` | Manually add a tag to a variant | `MODEL`, `VARIANT`, `TAG`; `--config`, `--json` |
