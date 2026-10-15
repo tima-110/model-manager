@@ -191,3 +191,33 @@ def test_radar_table_sorting(tmp_path: Path):
     # Assert sorting JS state & functions exist
     for marker in ('sortCol:null', 'sortDir:"asc"', "getStatusLabel", "updateSortHeaders", "#matrix th[data-sort]"):
         assert marker in html, marker
+
+
+def test_radar_reference_sets_elements_and_coloring(tmp_path: Path):
+    _seed_library(tmp_path)
+    # Write a reference set to models.json
+    models_file = tmp_path / "models.json"
+    doc = json.loads(models_file.read_text())
+    doc["reference_sets"] = {
+        "frontier-set": {
+            "display_name": "Frontier Set",
+            "items": [
+                {"model": "baseline-o", "variant": "std", "aa_slug": "baseline-o"}
+            ]
+        }
+    }
+    models_file.write_text(json.dumps(doc))
+
+    cfg = _cfg(tmp_path)
+    html = generate_radar(cfg).read_text()
+
+    # Assert DOM elements for reference sets exist
+    assert 'id="refSetSelect"' in html
+    assert 'id="refSetPinBtn"' in html
+    assert 'Pin Set' in html
+
+    # Assert reference set functions and colors exist in JS
+    assert 'refSetColors' in html
+    assert 'getPinnedRefSetColorMap' in html
+    assert 'getRefSetColorForModel' in html
+    assert 'refset/' in html
