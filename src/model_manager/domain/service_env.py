@@ -35,6 +35,12 @@ def export_keyring_to_env(path: Path | None = None) -> int:
     Only entries stored under ``SERVICE_NAME`` are exported; everything
     else in the keyring is left alone. Returns the number of keys written.
     The file is created with mode 0600.
+
+    Refuses to overwrite an existing non-empty file when nothing could be
+    exported (locked or unreachable keyring would otherwise silently
+    destroy the last good copy). Raises RuntimeError in that case, and
+    also when the export yields zero keys, so callers never mistake an
+    empty file for success.
     """
     import secretstorage
 
@@ -44,9 +50,17 @@ def export_keyring_to_env(path: Path | None = None) -> int:
     connection = secretstorage.dbus_init()
     lines: list[str] = []
     written = 0
+    locked: list[str] = []
 
     for collection in secretstorage.get_all_collections(connection):
         try:
+            label = collection.get_label()
+        except Exception:
+            label = "?"
+        try:
+            if collection.is_locked():
+                locked.append(label or "?")
+                continue
             items = list(collection.get_all_items())
         except Exception:
             continue
@@ -71,6 +85,22 @@ def export_keyring_to_env(path: Path | None = None) -> int:
                 except Exception:
                     name = "?"
                 lines.append(f"# {name}: <skipped: {e}>")
+
+    if written == 0:
+        detail = ""
+        if locked:
+            detail = f" Locked collections skipped: {', '.join(sorted(set(locked)))}."
+        if target.exists() and target.stat().st_size > 0:
+            raise RuntimeError(
+                "Exported 0 keys; leaving the existing env file untouched."
+                + detail +
+                " Unlock the keychain (log in graphically or unlock the Login"
+                " keyring) and re-run `model-manager auth update-env`."
+            )
+        raise RuntimeError(
+            "Exported 0 keys; no env file written." + detail +
+            " Unlock the keychain and re-run `model-manager auth update-env`."
+        )
 
     target.write_text("\n".join(lines).rstrip() + "\n" if lines else "", encoding="utf-8")
     os.chmod(target, 0o600)

@@ -23,9 +23,10 @@ def _fake_item(service: str, username: str, secret: bytes | None) -> MagicMock:
     return item
 
 
-def _fake_collection(items: list[MagicMock]) -> MagicMock:
+def _fake_collection(items: list[MagicMock], locked: bool = False) -> MagicMock:
     collection = MagicMock()
     collection.get_label.return_value = "test"
+    collection.is_locked.return_value = locked
     collection.get_all_items.return_value = items
     return collection
 
@@ -103,3 +104,51 @@ def test_cli_auth_update_env(tmp_path: Path):
     assert result.exit_code == 0
     assert "Wrote 4 keys" in result.stdout
     mock_export.assert_called_once_with(target)
+
+
+def _patch_empty_keyring():
+    return (
+        patch("secretstorage.dbus_init", return_value=MagicMock()),
+        patch("secretstorage.get_all_collections", return_value=[_fake_collection([])]),
+    )
+
+
+def test_export_zero_keys_preserves_existing_file(tmp_path: Path):
+    """A locked/empty keyring must never clobber the last good env file."""
+    import pytest as _pytest
+
+    target = tmp_path / "svc.env"
+    target.write_text("OLD_KEY=keep-me\n")
+    dbus_patch, coll_patch = _patch_empty_keyring()
+    with dbus_patch, coll_patch:
+        with _pytest.raises(RuntimeError, match="leaving the existing env file untouched"):
+            service_env.export_keyring_to_env(target)
+    assert target.read_text() == "OLD_KEY=keep-me\n"
+
+
+def test_export_zero_keys_no_file_created(tmp_path: Path):
+    """Zero-export with no existing file raises instead of reporting success."""
+    import pytest as _pytest
+
+    target = tmp_path / "svc.env"
+    dbus_patch, coll_patch = _patch_empty_keyring()
+    with dbus_patch, coll_patch:
+        with _pytest.raises(RuntimeError, match="Exported 0 keys"):
+            service_env.export_keyring_to_env(target)
+    assert not target.exists()
+
+
+def test_export_locked_collection_reports_and_preserves(tmp_path: Path):
+    """Locked collections are named in the error; existing file untouched."""
+    import pytest as _pytest
+
+    target = tmp_path / "svc.env"
+    target.write_text("OLD_KEY=keep-me\n")
+    locked_coll = _fake_collection([], locked=True)
+    locked_coll.get_label.return_value = "Login"
+    with patch("secretstorage.dbus_init", return_value=MagicMock()), patch(
+        "secretstorage.get_all_collections", return_value=[locked_coll]
+    ):
+        with _pytest.raises(RuntimeError, match="Locked collections skipped: Login"):
+            service_env.export_keyring_to_env(target)
+    assert target.read_text() == "OLD_KEY=keep-me\n"
