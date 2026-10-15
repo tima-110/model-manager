@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from model_manager.config import AppConfig
+from model_manager.config import AppConfig, ProviderConfig
 from model_manager.domain.models import LIMIT_FIELDS
 
 SCAN_FILES: dict[str, str] = {
@@ -101,6 +101,79 @@ def _derive_model_name(litellm_prefix: str, provider_id: str) -> str:
 def _derive_model(litellm_prefix: str, provider_id: str) -> str:
     """Derive the full LiteLLM model string."""
     return f"{litellm_prefix}/{provider_id}"
+
+
+class AllTargetsBlockedError(RuntimeError):
+    """Every mapped target for a provider is ledger-blocked.
+
+    Carries the provider name and the number of blocked skips so callers
+    can serve an intentionally empty ``model_list`` instead of treating
+    this like a misconfiguration. Subclasses RuntimeError, so existing
+    ``except RuntimeError`` handlers (e.g. the single-provider CLI) keep
+    their behavior.
+    """
+
+    def __init__(self, provider: str, blocked: int) -> None:
+        self.provider = provider
+        self.blocked = blocked
+        super().__init__(
+            f"No entries generated for provider '{provider}': all "
+            f"{blocked} mapped target(s) are ledger-blocked "
+            "(see `model-manager doctor`)."
+        )
+
+
+def _resolve_output_path(
+    config: AppConfig,
+    provider: str,
+    provider_cfg: ProviderConfig,
+    output_path: Path | None,
+) -> Path:
+    """Resolve the write target for a provider file. Raises when unset."""
+    out_path = output_path or provider_cfg.output_path
+    if not out_path:
+        raise RuntimeError(
+            f"No output_path configured for provider '{provider}' "
+            "and no --output argument provided."
+        )
+    return out_path
+
+
+def _write_yaml_doc(out_path: Path, doc: dict[str, Any]) -> None:
+    """Write a YAML doc with the usual .bak backup of any existing file."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists():
+        bak_path = out_path.with_suffix(out_path.suffix + ".bak")
+        out_path.rename(bak_path)
+    out_path.write_text(dump_litellm_yaml(doc))
+
+
+def write_empty_provider_yaml(
+    config: AppConfig,
+    provider: str,
+    *,
+    dry_run: bool = False,
+    output_path: Path | None = None,
+) -> str | None:
+    """Serve an empty ``model_list`` for a fully-blocked provider.
+
+    Removing the dead targets from the live config (instead of leaving
+    the stale file) is what unblocks the restart gate: the YAML stays
+    valid, so a single sick provider can't veto the whole pipeline.
+    Same dry_run/write contract as ``generate_provider_yaml``.
+    """
+    provider_cfg = config.providers.get(provider)
+    if not provider_cfg:
+        raise RuntimeError(
+            f"No output configuration found for provider '{provider}'. "
+            f"Add a [providers.{provider}] section to config.toml."
+        )
+    yaml_doc = dump_litellm_yaml({"model_list": []})
+    if dry_run:
+        return yaml_doc
+    out_path = _resolve_output_path(config, provider, provider_cfg, output_path)
+    _write_yaml_doc(out_path, {"model_list": []})
+    return None
 
 
 def resolve_entry_limits(
@@ -233,11 +306,7 @@ def generate_provider_yaml(
 
     if not entries:
         if blocked_skips:
-            raise RuntimeError(
-                f"No entries generated for provider '{provider}': all "
-                f"{blocked_skips} mapped target(s) are ledger-blocked "
-                "(see `model-manager doctor`)."
-            )
+            raise AllTargetsBlockedError(provider, blocked_skips)
         raise RuntimeError(
             f"No entries generated for provider '{provider}'. "
             "Check that models.json has mapped provider_ids for this provider."
@@ -248,18 +317,6 @@ def generate_provider_yaml(
     if dry_run:
         return yaml_doc
 
-    out_path = output_path or provider_cfg.output_path
-    if not out_path:
-        raise RuntimeError(
-            f"No output_path configured for provider '{provider}' "
-            "and no --output argument provided."
-        )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Backup existing file if present
-    if out_path.exists():
-        bak_path = out_path.with_suffix(out_path.suffix + ".bak")
-        out_path.rename(bak_path)
-
-    out_path.write_text(yaml_doc)
+    out_path = _resolve_output_path(config, provider, provider_cfg, output_path)
+    _write_yaml_doc(out_path, {"model_list": entries})
     return None

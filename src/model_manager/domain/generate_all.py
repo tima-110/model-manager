@@ -43,6 +43,23 @@ def run_generate_all(config: AppConfig, *, dry_run: bool = False) -> dict:
             outputs[prov] = yaml_gen.generate_provider_yaml(config, prov, dry_run=dry_run)
             ok[prov] = True
             steps.append(f"generate config ({prov}): success")
+        except yaml_gen.AllTargetsBlockedError as e:
+            # Fully-blocked provider: serve an empty model_list so the dead
+            # targets leave the live config. This is a blocked state, not a
+            # misconfiguration, so it must not veto a restart on its own —
+            # the config check below remains the restart gate.
+            try:
+                outputs[prov] = yaml_gen.write_empty_provider_yaml(
+                    config, prov, dry_run=dry_run)
+                ok[prov] = True
+                steps.append(
+                    f"generate config ({prov}): empty "
+                    f"(all {e.blocked} target(s) ledger-blocked)"
+                )
+            except RuntimeError as empty_err:
+                outputs[prov] = None
+                ok[prov] = False
+                errors.append(f"provider '{prov}': {empty_err}")
         except RuntimeError as e:
             outputs[prov] = None
             ok[prov] = False

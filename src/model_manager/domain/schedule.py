@@ -611,7 +611,7 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
         return
 
     if _wait_for_proxy(_scan.DEFAULT_BASE_URL, proxy_key):
-        results["steps"].append("litellm proxy: responsive after restart")
+        results["steps"].append("litellm proxy: responsive")
     else:
         results["errors"].append("litellm proxy: unresponsive 5 min after restart request")
 
@@ -657,14 +657,14 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
     try:
         gen_result = gen_all_mod.run_generate_all(config, dry_run=False)
         results["steps"].extend(f"litellm re-generate {s}" for s in gen_result["steps"])
-        regen_errors = list(gen_result["errors"])
-        results["errors"].extend(f"litellm re-generate {e}" for e in regen_errors)
+        results["errors"].extend(f"litellm re-generate {e}" for e in gen_result["errors"])
     except Exception as e:
         results["errors"].append(f"litellm re-generate all: {e}")
         return
-    if regen_errors:
-        results["errors"].append("litellm re-generate had errors; skipping second restart")
-        return
+    # No error veto here: a single sick provider (e.g. fully ledger-blocked,
+    # served as an empty model_list) must not hold the restart hostage. The
+    # provider's models stay blocked via the ledger, and the config check
+    # below remains the restart gate: valid YAML restarts, invalid does not.
     if not _validate_configs(config, results, phase="re-generate"):
         results["errors"].append("litellm request-restart (re-run): skipped (config check failed)")
         return

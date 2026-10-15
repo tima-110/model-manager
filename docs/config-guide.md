@@ -52,6 +52,7 @@ Fetch and scan observations feed a persistent ledger in `data_dir/model_blocks.j
 - **Provider scan assessments** in the block list (e.g. unauthorized, not_found, unsupported) block; healthy labels release; transient labels (`dead`, `ratelimited`, `unknown`) are tracked but never block.
 - **LiteLLM probe results**: `up` releases; block-listed statuses/codes block; timeouts, 500s, `empty`, and rate limits are tracked but never block.
 - Inspect via `doctor` (blocked-models section, with billing issues flagged separately) and the dashboard's Availability Blocks section; the raw JSON holds `{blocked_since, reason, code, source}` per key.
+- **Fully-blocked provider**: when every mapped target of a provider is ledger-blocked, `generate` serves an intentionally empty `model_list: []` for that file (stale entries are *not* left behind). Empty is valid YAML and passes `config check`, so one sick provider can't veto a restart — the restart gate is config validity, not per-provider success.
 
 Tier ratios can be overridden per-invocation with `--t1-ratio` / `--t2-ratio` on `models tag tier`.
 

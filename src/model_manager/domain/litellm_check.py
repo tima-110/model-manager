@@ -67,8 +67,13 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
             continue
         if "model_list" in inc_doc:
             entries = inc_doc.get("model_list")
-            if not isinstance(entries, list) or not entries:
-                record(inc_path, "model_list non-empty", False, "missing or empty")
+            if not isinstance(entries, list):
+                record(inc_path, "model_list non-empty", False, "missing or not a list")
+            elif not entries:
+                # Intentionally emptied: every mapped target is ledger-blocked
+                # (see write_empty_provider_yaml). Valid YAML, nothing to serve.
+                record(inc_path, "model_list non-empty", True, "empty (all targets blocked)")
+                entries = []
             else:
                 bad = [i for i, e in enumerate(entries)
                        if not isinstance(e, dict) or not e.get("model_name")]
@@ -149,12 +154,18 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
     record(config.litellm_router_settings_stub_path, "stub readable",
            stub_err is None, stub_err or "OK")
     stub_alias_values: set[str] = set()
+    stub_alias_keys: set[str] = set()
     if stub_doc is not None:
         try:
-            stub_alias_values = set(extract_alias_map(stub_doc).values())
+            stub_alias_map = extract_alias_map(stub_doc)
+            stub_alias_values = set(stub_alias_map.values())
+            stub_alias_keys = set(stub_alias_map.keys())
         except RuntimeError:
             pass
-    merged_allowed = valid_names | stub_alias_values
+    # Alias keys are legal fallback subjects: the merge mirrors a stub
+    # alias' target chain under the alias name, so e.g. `gemini-model`
+    # legitimately heads a fallback entry without being a model itself.
+    merged_allowed = valid_names | stub_alias_values | stub_alias_keys
     rs_doc, rs_err = _load_yaml_doc(config.litellm_router_settings_path)
     record(config.litellm_router_settings_path, "exists+parse",
            rs_err is None, rs_err or "Valid YAML")
