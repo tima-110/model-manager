@@ -18,6 +18,7 @@ from .prices import prices_app
 from .radar import radar_app
 from .schedule import schedule_app
 from .reference_sets import reference_sets_app
+from .agents import agents_app
 
 app = typer.Typer(
     name="model-manager",
@@ -58,6 +59,7 @@ app.add_typer(prices_app, name="prices")
 app.add_typer(radar_app, name="radar")
 app.add_typer(schedule_app, name="schedule")
 app.add_typer(reference_sets_app, name="reference-sets")
+app.add_typer(agents_app, name="agents")
 
 
 @app.command("init")
