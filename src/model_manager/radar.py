@@ -84,9 +84,19 @@ def _variant_scores(v_info: dict, all_scores: dict) -> dict:
     return {"intelligence": None, "coding": None, "agentic": None, "ttft_s": None, "tps": None}
 
 
-def _pid_lookup_keys(aa_slug: str | None, prov: str, pid: str, mid: str) -> list[str]:
+def _pid_lookup_keys(
+    aa_slug: str | None,
+    prov: str,
+    pid: str,
+    mid: str,
+    prefix: str = "",
+) -> list[str]:
     keys = []
-    for k in (aa_slug, pid, f"{prov}/{pid}", mid):
+    candidates = []
+    if prefix:
+        candidates.append(f"{prefix}/{pid}")
+    candidates.extend([aa_slug, pid, f"{prov}/{pid}", mid])
+    for k in candidates:
         if k:
             keys.append(str(k))
     # OpenRouter ":free" suffix variant without suffix, for price joins.
@@ -96,10 +106,10 @@ def _pid_lookup_keys(aa_slug: str | None, prov: str, pid: str, mid: str) -> list
 
 
 def collect_radar_data(cfg: AppConfig) -> dict:
-    """Assemble the radar payload from local JSON files only."""
+    """Assemble the radar payload from local JSON files and LiteLLM cost map."""
     models_data = storage.load_models_data(cfg)
     all_scores = scores.list_all_scores(cfg)
-    price_lib = prices_mod.load_prices(cfg)
+    price_lib = prices_mod.load_radar_prices(cfg)
     try:
         blocked_keys = {e["key"] for e in blocks.blocked_summary(cfg)}
     except Exception:
@@ -137,8 +147,13 @@ def collect_radar_data(cfg: AppConfig) -> dict:
                 ttft_ms = lat if lat else (
                     v_scores["ttft_s"] * 1000 if v_scores["ttft_s"] else None
                 )
+                prov_cfg = cfg.providers.get(prov)
+                litellm_prefix = prov_cfg.litellm_prefix if prov_cfg else ""
                 price = prices_mod.lookup_price(
-                    _pid_lookup_keys(v_info.get("aa_slug"), prov, pid, mid), price_lib
+                    _pid_lookup_keys(
+                        v_info.get("aa_slug"), prov, pid, mid, prefix=litellm_prefix
+                    ),
+                    price_lib,
                 )
                 rows.append({
                     "id": f"{mid}/{vid}/{prov}/{pid}",
@@ -197,7 +212,12 @@ def collect_radar_data(cfg: AppConfig) -> dict:
             s = (all_scores.get(slug, {}).get("scores") or {}) if slug else {}
             if slug:
                 covered_slugs.add(slug.lower())
-            price = prices_mod.lookup_price([slug or "", pid, f"{prov_key}/{pid}"], price_lib)
+            prov_cfg = cfg.providers.get(prov_key)
+            prefix = prov_cfg.litellm_prefix if prov_cfg else ""
+            lookup_keys = [slug or "", pid, f"{prov_key}/{pid}"]
+            if prefix:
+                lookup_keys.append(f"{prefix}/{pid}")
+            price = prices_mod.lookup_price(lookup_keys, price_lib)
             ttft = _num(s.get("ttft"))
             rows.append({
                 "id": f"candidate/{prov_key}/{pid}",

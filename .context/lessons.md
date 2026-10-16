@@ -29,3 +29,10 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Insight:** `pipx install model-manager` resolves the name on PyPI, not the local project — a generic name collision silently installs the wrong tool. Fix is `pipx uninstall model-manager` then `pipx install -e .` from the project root, and verify with `pipx list` (version + exposed apps) and `model-manager --version`.
 **Apply when:** A pipx-installed CLI shows unexpected commands/version, or `which <cmd>` is empty while `pipx list` claims it is installed — check the exposed app names vs pyproject `[project.scripts]`.
 **Global?** No — specific to this project's generic PyPI name, though the check generalizes.
+
+### 2026-10-15: VNC D-Bus Session Isolation Breaks GNOME Keyring
+**Context:** Accessing GNOME Keyring (`model-manager auth list`) inside a VNC session (Budgie/TigerVNC) timed out after 120s with `org.freedesktop.DBus.Error.TimedOut` on `org.freedesktop.secrets`.
+**Insight:** VNC `xstartup` scripts commonly run `unset DBUS_SESSION_BUS_ADDRESS && exec dbus-run-session <desktop>`, which spins up an isolated ephemeral D-Bus session bus. Because `gnome-keyring-daemon` is already running on the systemd user bus (`/run/user/$UID/bus`), requests to `org.freedesktop.secrets` on the isolated bus trigger auto-activation. The activated daemon detects an existing keyring daemon on the machine and exits, causing the isolated D-Bus daemon to hang for 120s. Pointing `DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"` and publishing `DISPLAY` and `XAUTHORITY` via `dbus-update-activation-environment` / `systemctl --user import-environment` connects the VNC desktop to the existing GNOME Keyring daemon without needing separate wallet software.
+**Apply when:** Secret Service / keyring timeouts or auth hangs in VNC, RDP, or non-GNOME graphical sessions.
+**Global?** Yes — applies to any Linux VNC/remote desktop setup accessing GNOME Keyring or Secret Service.
+

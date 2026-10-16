@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from model_manager.config import AppConfig, get_prices_path
+from model_manager.config import AppConfig, get_litellm_cost_map_output_path, get_prices_path
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
@@ -61,6 +61,48 @@ def fetch_openrouter_prices() -> dict[str, dict]:
     return entries
 
 
+def load_prices_from_cost_map(
+    cost_map: dict[str, Any],
+    source: str = "litellm-local",
+) -> dict[str, dict]:
+    """Parse blended USD/1M token prices from a LiteLLM cost map dictionary.
+
+    Keys are lowercased model identifiers. If a model identifier contains a slash
+    (e.g., 'openai/gpt-4o' or 'bedrock/anthropic.claude-3-5-sonnet'), the unprefixed
+    name is also indexed if not already present.
+    """
+    entries: dict[str, dict] = {}
+    for key, block in cost_map.items():
+        if not isinstance(block, dict) or key == "sample_spec":
+            continue
+        blended = _blended_per_1m(
+            block.get("input_cost_per_token"), block.get("output_cost_per_token")
+        )
+        if blended is None:
+            continue
+        kl = str(key).lower()
+        entries[kl] = {"blended_per_1m": blended, "source": source}
+        if "/" in kl:
+            suffix = kl.split("/", 1)[1]
+            if suffix not in entries:
+                entries[suffix] = {"blended_per_1m": blended, "source": source}
+    return entries
+
+
+def load_local_cost_map_prices(config: AppConfig) -> dict[str, dict]:
+    """Load prices from the generated LiteLLM cost map output file."""
+    path = get_litellm_cost_map_output_path(config)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        if isinstance(data, dict):
+            return load_prices_from_cost_map(data, source="litellm-local")
+    except Exception:
+        pass
+    return {}
+
+
 def fetch_upstream_cost_entries(url: str) -> dict[str, dict]:
     """Fetch blended prices from the upstream LiteLLM cost map URL.
 
@@ -70,17 +112,47 @@ def fetch_upstream_cost_entries(url: str) -> dict[str, dict]:
     from model_manager.domain import cost_map
 
     upstream = cost_map.fetch_upstream_cost_map(url)
-    entries: dict[str, dict] = {}
-    for key, block in upstream.items():
-        if not isinstance(block, dict):
-            continue
-        blended = _blended_per_1m(
-            block.get("input_cost_per_token"), block.get("output_cost_per_token")
-        )
-        if blended is None:
-            continue
-        entries[str(key).lower()] = {"blended_per_1m": blended, "source": "litellm-upstream"}
-    return entries
+    return load_prices_from_cost_map(upstream, source="litellm-upstream")
+
+
+def load_radar_prices(config: AppConfig, fetch_upstream_if_missing: bool = True) -> dict[str, dict]:
+    """Load model prices for the radar view without using the local overrides file.
+
+    Sources prices in precedence order:
+    1. Local generated LiteLLM cost map output file (e.g.
+       /var/www/local_json_data/model_prices_and_context_window.json).
+    2. Upstream LiteLLM cost map catalog (if local output file is absent and network is available).
+    3. Cached model price library (model_prices.json), ignoring any 'override' entries.
+    """
+    prices: dict[str, dict] = {}
+
+    # 1. Local cost map output file
+    prices = load_local_cost_map_prices(config)
+
+    # 2. Upstream LiteLLM catalog fallback if local output file is absent
+    if not prices and fetch_upstream_if_missing:
+        cached_lib = load_prices(config)
+        if cached_lib:
+            prices = cached_lib
+        else:
+            try:
+                prices = fetch_upstream_cost_entries(config.litellm_cost_map_url)
+            except Exception:
+                prices = {}
+    elif prices:
+        # Merge supplemental non-override cached prices (e.g. openrouter)
+        cached_lib = load_prices(config)
+        clean_cached = {
+            k: v for k, v in cached_lib.items()
+            if isinstance(v, dict) and v.get("source") != "override"
+        }
+        prices = merge_entries(prices, clean_cached)
+
+    if not prices:
+        # Final fallback to cached library if any exists (e.g. in test fixtures)
+        prices = load_prices(config)
+
+    return prices
 
 
 def load_overrides_entries(config: AppConfig) -> dict[str, dict]:

@@ -14,6 +14,7 @@ runner = CliRunner()
 
 
 def _cfg(tmp_path: Path, **kwargs) -> AppConfig:
+    kwargs.setdefault("litellm_service_dir", tmp_path)
     return AppConfig(data_dir=tmp_path, **kwargs)
 
 
@@ -221,3 +222,59 @@ def test_radar_reference_sets_elements_and_coloring(tmp_path: Path):
     assert 'getPinnedRefSetColorMap' in html
     assert 'getRefSetColorForModel' in html
     assert 'refset/' in html
+
+
+def test_radar_prices_from_local_cost_map(tmp_path: Path):
+    _seed_library(tmp_path)
+    # Write local LiteLLM cost map output file in litellm_service_dir
+    cost_map_file = tmp_path / "model_prices_and_context_window.json"
+    cost_map_file.write_text(json.dumps({
+        "acme/flagship-m": {
+            "input_cost_per_token": 1.0e-6,
+            "output_cost_per_token": 3.0e-6,
+        },
+        "acme/challenger-m": {
+            "input_cost_per_token": 2.0e-6,
+            "output_cost_per_token": 2.0e-6,
+        },
+    }))
+    cfg = _cfg(tmp_path)
+    data = collect_radar_data(cfg)
+    flagship = next(r for r in data["models"] if r["model"] == "flagship-m")
+    assert flagship["price_per_1m"] == 2.0
+    challenger = next(r for r in data["models"] if r["model"] == "challenger-m")
+    assert challenger["price_per_1m"] == 2.0
+
+
+def test_radar_prices_from_upstream_cost_map(tmp_path: Path, monkeypatch):
+    _seed_library(tmp_path)
+    cfg = _cfg(tmp_path)
+
+    from model_manager.domain import prices as prices_mod
+    monkeypatch.setattr(
+        prices_mod,
+        "fetch_upstream_cost_entries",
+        lambda url: {"acme/flagship-m": {"blended_per_1m": 4.5, "source": "litellm-upstream"}},
+    )
+
+    data = collect_radar_data(cfg)
+    flagship = next(r for r in data["models"] if r["model"] == "flagship-m")
+    assert flagship["price_per_1m"] == 4.5
+
+
+def test_radar_prices_ignores_override_file(tmp_path: Path):
+    _seed_library(tmp_path)
+    # Write local LiteLLM cost map output file
+    (tmp_path / "model_prices_and_context_window.json").write_text(json.dumps({
+        "acme/flagship-m": {"input_cost_per_token": 1.0e-6, "output_cost_per_token": 1.0e-6},
+    }))
+    # Write local overrides file with conflicting price
+    (tmp_path / "litellm_cost_overrides.json").write_text(json.dumps({
+        "acme/flagship-m": {"input_cost_per_token": 9.0e-6, "output_cost_per_token": 9.0e-6},
+    }))
+    cfg = _cfg(tmp_path)
+    data = collect_radar_data(cfg)
+    flagship = next(r for r in data["models"] if r["model"] == "flagship-m")
+    # Must use the cost map price (1.0), NOT the override file (9.0)
+    assert flagship["price_per_1m"] == 1.0
+
