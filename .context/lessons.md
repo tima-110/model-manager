@@ -36,3 +36,10 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Apply when:** Secret Service / keyring timeouts or auth hangs in VNC, RDP, or non-GNOME graphical sessions.
 **Global?** Yes — applies to any Linux VNC/remote desktop setup accessing GNOME Keyring or Secret Service.
 
+### 2026-10-16: Agent Runtime Model Classification & Interaction API Probing
+**Context:** Adding Google Antigravity agent models (`antigravity-preview-09-2026`) to LiteLLM and `model-manager`.
+**Insight:** Autonomous agent runtimes use stateful APIs (e.g. `/v1beta/interactions`) rather than standard completion endpoints (`:generateContent` or `/v1/chat/completions`). Probing them with standard completion requests triggers HTTP 400 Bad Request, leading scanner pipelines to assess them as "Unsupported" and permanently ledger-block them. Tagging variants with `tags: ["agent"]` allows scanners to recognize agent runtimes, bypass incompatible chat completion probes with an assumed-healthy status, automatically emit necessary gateway parameters (`drop_params: true`), and avoid fallback chains that would degrade an agent requiring sandbox tools into a text-only model.
+**Apply when:** Integrating stateful agent runtimes or non-standard protocol models alongside standard LLM chat completion endpoints.
+**Global?** Yes — any model gateway managing both chat completion LLMs and autonomous agent APIs faces this protocol mismatch.
+
+
