@@ -621,6 +621,7 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
         proxy_records = _scan.scan_targets(
             _scan.DEFAULT_BASE_URL, proxy_key,
             proxy_targets["models"] + proxy_targets["aliases"],
+            config=config,
             kinds={**{m: "model" for m in proxy_targets["models"]},
                    **{a: "alias" for a in proxy_targets["aliases"]}},
         )

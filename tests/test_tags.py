@@ -309,3 +309,46 @@ def test_cli_tag_set_remove(tmp_path: Path, mock_config: AppConfig):
 
     result = runner.invoke(app, ["models", "tag", "set", "missing", "std", "flag", "--config", str(config_file)])
     assert result.exit_code == 1
+
+
+def test_agent_tag_helpers(mock_config: AppConfig):
+    models = {
+        "agent-model": {
+            "variants": {
+                "std": {
+                    "tags": ["agent"],
+                    "provider_ids": {
+                        "gemini": {
+                            "antigravity-preview-09-2026": {"assessment": "Good"},
+                        }
+                    }
+                }
+            }
+        },
+        "chat-model": {
+            "variants": {
+                "std": {
+                    "tags": ["tier-1"],
+                    "provider_ids": {
+                        "gemini": {
+                            "gemini-2.5-pro": {"assessment": "Good"},
+                        }
+                    }
+                }
+            }
+        }
+    }
+    _write_library(mock_config.data_dir, models)
+    cfg = AppConfig(
+        data_dir=mock_config.data_dir,
+        providers={"gemini": {"keys": ["K1"], "litellm_prefix": "gemini"}},
+    )
+    assert tags.is_agent_variant(models["agent-model"]["variants"]["std"]) is True
+    assert tags.is_agent_variant(models["chat-model"]["variants"]["std"]) is False
+
+    agent_pids = tags.get_agent_provider_ids(cfg, "gemini")
+    assert agent_pids == {"antigravity-preview-09-2026"}
+
+    targets = tags.get_agent_litellm_targets(cfg)
+    assert "agent-model" in targets
+    assert "gemini/antigravity-preview-09-2026" in targets

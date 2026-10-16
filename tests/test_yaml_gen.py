@@ -523,3 +523,21 @@ class TestEntryLimits:
         entries = _gen(data_dir, _gemini_cfg(rpm=15))
         model_names = {e["model_name"] for e in entries}
         assert model_names == {"gemini/flash"}
+
+    def test_agent_variant_emits_drop_params(self, tmp_path: Path):
+        """Variants tagged with 'agent' must emit drop_params: True in litellm_params."""
+        data_dir = tmp_path / "data"
+        _write_models(data_dir, {
+            "standard": {
+                "tags": ["agent"],
+                "provider_ids": {"gemini": {"antigravity-preview-09-2026": {}}},
+            },
+            "chat": {
+                "tags": ["tier-1"],
+                "provider_ids": {"gemini": {"gemini-2.5-pro": {}}},
+            },
+        })
+        entries = _gen(data_dir, _gemini_cfg(rpm=15))
+        by_name = {e["model_name"]: e["litellm_params"] for e in entries}
+        assert by_name["gemini/antigravity-preview-09-2026"].get("drop_params") is True
+        assert "drop_params" not in by_name["gemini/gemini-2.5-pro"]

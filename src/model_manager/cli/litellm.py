@@ -459,6 +459,7 @@ def litellm_scan(
 
     records = scan_mod.scan_targets(
         base_url, api_key, all_targets,
+        config=cfg,
         max_tokens=max_tokens, timeout=timeout,
         kinds={**{m: "model" for m in targets["models"]},
                **{a: "alias" for a in targets["aliases"]}},

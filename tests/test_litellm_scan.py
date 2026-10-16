@@ -286,3 +286,55 @@ def test_dashboard_no_scan_placeholder(tmp_path: Path):
     html = generate_dashboard(cfg).read_text()
     assert "LiteLLM Proxy Scan" in html
     assert "litellm scan" in html
+
+
+def test_probe_litellm_model_agent_bypass():
+    from model_manager.domain.litellm_scan import probe_litellm_model
+
+    record = probe_litellm_model(
+        "http://localhost:4000", "fake-key", "gemini/antigravity-preview-09-2026",
+        is_agent=True,
+    )
+    assert record["status"] == "up"
+    assert record["code"] == "200"
+    assert record["finish_reason"] == "agent_bypass"
+
+
+def test_scan_targets_bypasses_agent_targets(tmp_path: Path):
+    from model_manager.domain.litellm_scan import scan_targets
+    import json
+
+    models = {
+        "models": {
+            "antigravity": {
+                "variants": {
+                    "standard": {
+                        "tags": ["agent"],
+                        "provider_ids": {
+                            "gemini": {
+                                "antigravity-preview-09-2026": {},
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (tmp_path / "models.json").write_text(json.dumps(models))
+    cfg = AppConfig(
+        data_dir=tmp_path,
+        providers={"gemini": {"keys": ["K1"], "litellm_prefix": "gemini"}},
+    )
+
+    records = scan_targets(
+        "http://localhost:4000", "fake-key",
+        ["gemini/antigravity-preview-09-2026", "antigravity"],
+        config=cfg,
+    )
+    assert len(records) == 2
+    for r in records:
+        assert r["status"] == "up"
+        assert r["code"] == "200"
+        assert r["finish_reason"] == "agent_bypass"
+
+

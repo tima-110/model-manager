@@ -292,6 +292,8 @@ def generate_provider_yaml(
                         "model": model,
                         "api_key": f"os.environ/{key}",
                     }
+                    if "agent" in variant_data.get("tags", []):
+                        params["drop_params"] = True
                     for field, value in resolve_entry_limits(
                         provider_cfg, variant_data, provider_ids_map
                     ).items():

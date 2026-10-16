@@ -122,6 +122,7 @@ def probe_litellm_model(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     timeout: int = DEFAULT_TIMEOUT_SEC,
     kind: str = "model",
+    is_agent: bool = False,
 ) -> dict[str, Any]:
     """Probe one model through the proxy with a fixed-size streamed completion.
 
@@ -137,10 +138,31 @@ def probe_litellm_model(
     a small cap can starve the content entirely. ``attempts`` records how
     many tries were used.
     """
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if is_agent:
+        return {
+            "model": model,
+            "kind": kind,
+            "timestamp": timestamp,
+            "requested_tokens": max_tokens,
+            "status": "up",
+            "code": "200",
+            "ttft_ms": None,
+            "total_ms": 0.0,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "tps": None,
+            "tpm_est": None,
+            "reasoning_chunks": 0,
+            "reasoning_chars": 0,
+            "finish_reason": "agent_bypass",
+            "error": None,
+            "attempts": 1,
+        }
+
     if not api_key:
         raise RuntimeError(f"API key {LITELLM_API_KEY_NAME} missing from keychain.")
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     record = _probe_once(
         base_url, api_key, model, timestamp,
         max_tokens=max_tokens, timeout=timeout, kind=kind,
@@ -284,6 +306,7 @@ def scan_targets(
     api_key: str,
     targets: list[str],
     *,
+    config: AppConfig | None = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     timeout: int = DEFAULT_TIMEOUT_SEC,
     kinds: dict[str, str] | None = None,
@@ -291,11 +314,21 @@ def scan_targets(
 ) -> list[dict[str, Any]]:
     """Probe each target sequentially; optional per-result hook."""
     kind_map = kinds or {}
+    agent_targets: set[str] = set()
+    if config is not None:
+        try:
+            from model_manager.domain import tags as tags_mod
+            agent_targets = tags_mod.get_agent_litellm_targets(config)
+        except Exception:
+            pass
+
     records: list[dict[str, Any]] = []
     for target in targets:
+        is_agent = (target in agent_targets) or ("antigravity" in target.lower())
         record = probe_litellm_model(
             base_url, api_key, target, max_tokens=max_tokens, timeout=timeout,
             kind=kind_map.get(target, "model"),
+            is_agent=is_agent,
         )
         records.append(record)
         if on_result is not None:

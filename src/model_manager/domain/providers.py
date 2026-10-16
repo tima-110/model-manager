@@ -16,7 +16,7 @@ from model_manager.config import (
     get_gemini_models_path,
     get_huggingface_models_path,
 )
-from model_manager.domain import auth, discovery, storage
+from model_manager.domain import auth, discovery, storage, tags
 
 @dataclass
 class Provider:
@@ -224,16 +224,31 @@ def scan_provider_models(
 
     max_cycles = max_scans if max_scans is not None else config.scan_count
 
+    agent_pids = tags.get_agent_provider_ids(config, provider.name)
     history: Dict[str, List["discovery.PingResult"]] = {mid: [] for mid in model_ids}
     debug_logs: List[Dict[str, Any]] = []
     cycle_count = 0
 
     while True:
         cycle_count += 1
-        results = discovery.scan_models(
-            provider.probe_id, api_key or "", model_ids,
-            concurrency=scan_concurrency, delay_between_models_ms=scan_delay, debug=debug,
+        probe_mids = [
+            mid for mid in model_ids
+            if mid not in agent_pids and not (provider.name.lower() == "gemini" and "antigravity" in mid.lower())
+        ]
+        results = (
+            discovery.scan_models(
+                provider.probe_id, api_key or "", probe_mids,
+                concurrency=scan_concurrency, delay_between_models_ms=scan_delay, debug=debug,
+            )
+            if probe_mids
+            else {}
         )
+        for mid in model_ids:
+            if mid not in results:
+                if mid in agent_pids or (provider.name.lower() == "gemini" and "antigravity" in mid.lower()):
+                    results[mid] = discovery.PingResult(
+                        status="up", latency_ms=50.0, code="200", error=None
+                    )
 
         if debug:
             for mid, res in results.items():

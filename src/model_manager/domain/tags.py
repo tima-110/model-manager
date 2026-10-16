@@ -9,6 +9,7 @@ from model_manager.domain import blocks as blocks_mod
 from model_manager.domain import storage
 
 TIER_TAG_PREFIX = "tier-"
+AGENT_TAG = "agent"
 
 
 def composite_score(scores: dict | None) -> float | None:
@@ -202,3 +203,58 @@ def _update_tags(config: AppConfig, model_id: str, variant_id: str, transform: A
         data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         storage.save_models_data(config, data)
     return True
+
+
+def is_agent_variant(variant_info: dict) -> bool:
+    """Return True if variant has the 'agent' tag."""
+    return AGENT_TAG in variant_info.get("tags", [])
+
+
+def get_agent_provider_ids(config: AppConfig, provider_name: str) -> set[str]:
+    """Return provider model IDs mapped to variants tagged with 'agent'."""
+    data = storage.load_models_data(config)
+    agent_pids: set[str] = set()
+    pname_lower = provider_name.lower()
+    for mid, m_info in data.get("models", {}).items():
+        for vid, v_info in m_info.get("variants", {}).items():
+            if is_agent_variant(v_info):
+                prov_map = v_info.get("provider_ids", {}) or {}
+                pmap = prov_map.get(pname_lower) or prov_map.get(provider_name) or prov_map.get(provider_name.capitalize())
+                if isinstance(pmap, dict):
+                    for pid in pmap:
+                        if not str(pid).startswith("include_") and pid != "limits":
+                            agent_pids.add(str(pid))
+                elif isinstance(pmap, (list, tuple)):
+                    for pid in pmap:
+                        if not str(pid).startswith("include_") and pid != "limits":
+                            agent_pids.add(str(pid))
+    return agent_pids
+
+
+def get_agent_litellm_targets(config: AppConfig) -> set[str]:
+    """Return LiteLLM target names (model_name and aliases) for variants tagged with 'agent'."""
+    data = storage.load_models_data(config)
+    targets: set[str] = set()
+    for mid, m_info in data.get("models", {}).items():
+        for vid, v_info in m_info.get("variants", {}).items():
+            if is_agent_variant(v_info):
+                targets.add(mid)
+                prov_map = v_info.get("provider_ids", {}) or {}
+                for pname, pc in config.providers.items():
+                    pmap = prov_map.get(pname) or prov_map.get(pname.capitalize())
+                    prefix = getattr(pc, "litellm_prefix", pname)
+                    if isinstance(pmap, dict):
+                        for pid in pmap:
+                            if not str(pid).startswith("include_") and pid != "limits":
+                                last_seg = str(pid).split("/")[-1]
+                                targets.add(f"{prefix}/{last_seg}")
+                                targets.add(f"{prefix}/{pid}")
+                                targets.add(str(pid))
+                    elif isinstance(pmap, (list, tuple)):
+                        for pid in pmap:
+                            if not str(pid).startswith("include_") and pid != "limits":
+                                last_seg = str(pid).split("/")[-1]
+                                targets.add(f"{prefix}/{last_seg}")
+                                targets.add(f"{prefix}/{pid}")
+                                targets.add(str(pid))
+    return targets
