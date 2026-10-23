@@ -42,4 +42,8 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Apply when:** Integrating stateful agent runtimes or non-standard protocol models alongside standard LLM chat completion endpoints.
 **Global?** Yes — any model gateway managing both chat completion LLMs and autonomous agent APIs faces this protocol mismatch.
 
-
+### 2026-10-23: LiteLLM Deployment IDs and Fallback Error Visibility
+**Context:** Adding key-level observability to `LiteLLM_SpendLogs` and exposing fallback error headers.
+**Insight:** An explicit `model_info.id` on a `model_list` entry is preserved verbatim and logged as `router_model_id`/`LiteLLM_SpendLogs.model_id`, bypassing the SHA-256 auto-hash. IDs must encode provider + provider model id + key env var to stay unique across providers. Separately, `general_settings.expose_fallback_errors_to_caller: true` is necessary but not sufficient: LiteLLM only emits `x-litellm-fallback-errors` when the request body also sends `include_fallback_errors: true`; `x-litellm-attempted-fallbacks` is emitted regardless. Finally, LiteLLM `include:` merging is top-level and shallow — a non-list key in an included file replaces the base value, so an isolated `general_settings` include would wipe `master_key`.
+**Apply when:** Configuring LiteLLM deployment IDs, fallback observability headers, or splitting config into included YAML files.
+**Global?** Yes — these are LiteLLM API behaviors independent of this project.

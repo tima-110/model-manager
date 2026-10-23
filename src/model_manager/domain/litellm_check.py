@@ -36,7 +36,7 @@ def _load_yaml_doc(path: Path) -> tuple[dict | None, str | None]:
 
 
 def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
-    """Validate all LiteLLM configs. Returns {"checks": [...], "errors": [...]}}.
+    """Validate all LiteLLM configs. Returns {"checks": [...], "errors": [...], "warnings": [...]}}.
 
     Each check is {"file": str, "check": str, "ok": bool, "detail": str}.
     Never raises for file problems; unexpected internal errors propagate.
@@ -46,6 +46,7 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
 
     checks: list[dict[str, Any]] = []
     errors: list[str] = []
+    warnings: list[str] = []
 
     def record(path: Path, check: str, ok: bool, detail: str = "") -> None:
         checks.append({"file": str(path), "check": check, "ok": ok, "detail": detail})
@@ -57,7 +58,11 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
     doc, err = _load_yaml_doc(master)
     record(master, "exists+parse", err is None, err or "Valid YAML")
     if doc is None:
-        return {"checks": checks, "errors": errors}
+        return {"checks": checks, "errors": errors, "warnings": warnings}
+    _general_settings = doc.get("general_settings")
+    merged_general_settings: dict[str, Any] = (
+        dict(_general_settings) if isinstance(_general_settings, dict) else {}
+    )
     base_dir = master.parent
     for included in doc.get("include") or []:
         inc_path = base_dir / included
@@ -65,6 +70,8 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
         record(inc_path, "include resolves+parses", inc_err is None, inc_err or "OK")
         if inc_doc is None:
             continue
+        if isinstance(inc_doc.get("general_settings"), dict):
+            merged_general_settings.update(inc_doc["general_settings"])
         if "model_list" in inc_doc:
             entries = inc_doc.get("model_list")
             if not isinstance(entries, list):
@@ -99,15 +106,23 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
                        "; ".join(limit_problems[:5]) if limit_problems else "OK")
         elif "router_settings" in inc_doc:
             record(inc_path, "include kind", True, "router_settings include (checked below)")
+        elif "general_settings" in inc_doc:
+            record(inc_path, "include kind", True, "general_settings include")
         else:
-            record(inc_path, "include kind", False, "unrecognized shape (no model_list/router_settings)")
+            record(inc_path, "include kind", False, "unrecognized shape (no model_list/router_settings/general_settings)")
+
+    if merged_general_settings.get("expose_fallback_errors_to_caller") is not True:
+        warnings.append(
+            f"{master}: expose_fallback_errors_to_caller is not enabled; "
+            "fallback error details will not be exposed to callers."
+        )
 
     # 2. Registered names (model_lists + alias keys/targets)
     try:
         valid_names = fallbacks_mod.collect_valid_model_names(config)
     except Exception as e:
         record(master, "collect model names", False, str(e))
-        return {"checks": checks, "errors": errors}
+        return {"checks": checks, "errors": errors, "warnings": warnings}
 
     # 3. Aliases file: targets must be registered
     aliases_doc, aliases_err = _load_yaml_doc(config.litellm_aliases_path)
@@ -225,4 +240,4 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
     except Exception as e:  # validation must never break the check suite
         record(config.data_dir / "models.json", "limits valid", False, str(e))
 
-    return {"checks": checks, "errors": errors}
+    return {"checks": checks, "errors": errors, "warnings": warnings}

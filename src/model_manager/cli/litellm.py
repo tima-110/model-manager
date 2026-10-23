@@ -65,6 +65,9 @@ def config_check(
         )
     console.print(table)
 
+    for warning in result.get("warnings", []):
+        console.print(f"[yellow]Warning: {warning}[/yellow]")
+
     if result["errors"]:
         console.print(f"[red]{len(result['errors'])} check(s) failed[/red]")
         raise typer.Exit(1)

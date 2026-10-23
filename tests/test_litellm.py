@@ -57,6 +57,29 @@ def test_litellm_config_check_valid_yaml(tmp_path: Path):
     assert "All LiteLLM configs valid" in result.stdout
 
 
+def test_litellm_config_check_warns_missing_fallback_errors(tmp_path: Path):
+    """Missing expose_fallback_errors_to_caller warns without failing."""
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "litellm.yaml").write_text("include:\n  - prov.yaml\n")
+    result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
+    assert result.exit_code == 0
+    assert "expose_fallback_errors_to_caller" in result.stdout
+
+
+def test_litellm_config_check_no_warning_when_fallback_errors_enabled(tmp_path: Path):
+    """The warning disappears once the flag is enabled."""
+    cfg_file = _check_cfg(tmp_path)
+    (tmp_path / "litellm.yaml").write_text(
+        "general_settings:\n"
+        "  expose_fallback_errors_to_caller: true\n"
+        "include:\n"
+        "  - prov.yaml\n"
+    )
+    result = runner.invoke(app, ["litellm", "config", "check", "--config", str(cfg_file)])
+    assert result.exit_code == 0
+    assert "expose_fallback_errors_to_caller is not enabled" not in result.stdout
+
+
 def test_litellm_config_check_invalid_yaml(tmp_path: Path):
     """Verify invalid YAML fails."""
     cfg_file = _check_cfg(tmp_path)

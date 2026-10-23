@@ -103,6 +103,18 @@ def _derive_model(litellm_prefix: str, provider_id: str) -> str:
     return f"{litellm_prefix}/{provider_id}"
 
 
+def derive_deployment_id(
+    litellm_prefix: str, provider_id: str, key_env_var: str
+) -> str:
+    """Build the stable, human-readable LiteLLM deployment ID.
+
+    Encodes provider, model, and API-key environment variable so that
+    ``LiteLLM_SpendLogs.model_id`` identifies the exact key that served a
+    request instead of an auto-generated SHA-256 hash.
+    """
+    return f"{litellm_prefix}/{provider_id}::{key_env_var}"
+
+
 class AllTargetsBlockedError(RuntimeError):
     """Every mapped target for a provider is ledger-blocked.
 
@@ -259,6 +271,7 @@ def generate_provider_yaml(
     blocked = blocks.blocked_set(config)
 
     entries: list[dict[str, Any]] = []
+    deployment_ids: set[str] = set()
     blocked_skips = 0
 
     for model_id, model_data in all_models.items():
@@ -288,6 +301,17 @@ def generate_provider_yaml(
 
                 # Replicate for each API key
                 for key in provider_cfg.keys:
+                    deployment_id = derive_deployment_id(
+                        provider_cfg.litellm_prefix, pid, key
+                    )
+                    if deployment_id in deployment_ids:
+                        raise RuntimeError(
+                            f"Duplicate deployment id {deployment_id!r} for "
+                            f"provider '{provider}'. Check for duplicate keys "
+                            "or the same provider_id mapped by multiple variants."
+                        )
+                    deployment_ids.add(deployment_id)
+
                     params: dict[str, Any] = {
                         "model": model,
                         "api_key": f"os.environ/{key}",
@@ -304,6 +328,7 @@ def generate_provider_yaml(
                     entries.append({
                         "model_name": model_name,
                         "litellm_params": params,
+                        "model_info": {"id": deployment_id},
                     })
 
     if not entries:

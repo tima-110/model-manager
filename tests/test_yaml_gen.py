@@ -229,6 +229,68 @@ class TestGenerateProviderYaml:
             "os.environ/NVIDIA_KEY_POLLUX",
         }
 
+    def test_model_info_id_present_and_formatted(
+        self, models_with_variants: Path, nvidia_output_config: ProviderConfig
+    ):
+        """Every entry carries a provider/model/key deployment id."""
+        config = AppConfig(
+            data_dir=models_with_variants,
+            providers={"nvidia": nvidia_output_config},
+        )
+        result = yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
+        parsed = yaml.safe_load(result)
+
+        for entry in parsed["model_list"]:
+            deployment_id = entry["model_info"]["id"]
+            key = entry["litellm_params"]["api_key"].removeprefix("os.environ/")
+            assert deployment_id == (
+                f"{entry['litellm_params']['model']}::{key}"
+            )
+
+    def test_deployment_ids_unique_across_providers(
+        self,
+        models_with_variants: Path,
+        nvidia_output_config: ProviderConfig,
+        gemini_output_config: ProviderConfig,
+    ):
+        """The same model mapped on two providers yields distinct ids."""
+        config = AppConfig(
+            data_dir=models_with_variants,
+            providers={
+                "nvidia": nvidia_output_config,
+                "gemini": gemini_output_config,
+            },
+        )
+        nvidia_doc = yaml.safe_load(
+            yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
+        )
+        gemini_doc = yaml.safe_load(
+            yaml_gen.generate_provider_yaml(config, "gemini", dry_run=True)
+        )
+
+        nvidia_ids = {e["model_info"]["id"] for e in nvidia_doc["model_list"]}
+        gemini_ids = {e["model_info"]["id"] for e in gemini_doc["model_list"]}
+        assert nvidia_ids.isdisjoint(gemini_ids)
+        assert (
+            "nvidia_nim/google/gemma-4-31b-it::NVIDIA_KEY_CASTOR" in nvidia_ids
+        )
+        assert "gemini/gemma-4-31b-it::GEMINI_KEY_CASTOR" in gemini_ids
+
+    def test_duplicate_deployment_id_raises(self, models_with_variants: Path):
+        """Duplicate keys would produce ambiguous ids and must fail."""
+        config = AppConfig(
+            data_dir=models_with_variants,
+            providers={
+                "nvidia": ProviderConfig(
+                    keys=["NVIDIA_KEY_CASTOR", "NVIDIA_KEY_CASTOR"],
+                    output_path=Path("/tmp/out.yaml"),
+                    litellm_prefix="nvidia_nim",
+                ),
+            },
+        )
+        with pytest.raises(RuntimeError, match="Duplicate deployment id"):
+            yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
+
     def test_rpm_in_params(self, models_with_variants: Path, nvidia_output_config: ProviderConfig):
         """RPM should be included in litellm_params."""
         config = AppConfig(
