@@ -139,50 +139,81 @@ def collect_radar_data(cfg: AppConfig) -> dict:
                 continue
             if v_info.get("aa_slug"):
                 covered_slugs.add(str(v_info["aa_slug"]).lower())
+
+            prov_prices = []
+            latencies = []
+            prov_names = []
+            prov_pids = []
+            prov_mappings = []
+            litellm_inc = False
+
             for prov, pid, meta in mappings:
                 mapped_pids.add(str(pid).lower())
                 mapped_pids.add(f"{prov}/{pid}".lower())
                 meta = meta if isinstance(meta, dict) else {}
                 lat = _num(meta.get("avg_latency"))
-                ttft_ms = lat if lat else (
-                    v_scores["ttft_s"] * 1000 if v_scores["ttft_s"] else None
-                )
                 prov_cfg = cfg.providers.get(prov)
                 litellm_prefix = prov_cfg.litellm_prefix if prov_cfg else ""
+                if lat:
+                    latencies.append(lat)
                 price = prices_mod.lookup_price(
                     _pid_lookup_keys(
                         v_info.get("aa_slug"), prov, pid, mid, prefix=litellm_prefix
                     ),
                     price_lib,
                 )
-                rows.append({
-                    "id": f"{mid}/{vid}/{prov}/{pid}",
-                    "model": mid,
-                    "display": display,
-                    "family": family,
-                    "variant": vid,
-                    "tier": PROXY_TIER,
-                    "tag_tier": _tag_tier(v_info),
-                    "provider": prov,
-                    "provider_id": pid,
-                    "arch": v_info.get("aa_slug") or "",
-                    "scores": {
-                        "intelligence": v_scores["intelligence"],
-                        "coding": v_scores["coding"],
-                        "agentic": v_scores["agentic"],
-                        "ttft_ms": round(ttft_ms, 1) if ttft_ms is not None else None,
-                        "tps": v_scores["tps"],
-                    },
-                    "health": {
-                        "assessment": meta.get("assessment", "Unknown"),
-                        "availability": meta.get("availability"),
-                    },
-                    "price_per_1m": price,
-                    "litellm_included": included and (
-                        (provider_ids.get(prov) or {}).get("include_in_litellm") is not False
-                        if isinstance(provider_ids.get(prov), dict) else True
-                    ),
+                if price is not None:
+                    prov_prices.append(price)
+                if str(prov) not in prov_names:
+                    prov_names.append(str(prov))
+                prov_pids.append(str(pid))
+                prov_mappings.append({
+                    "provider": str(prov),
+                    "provider_id": str(pid),
                 })
+
+                prov_inc = (
+                    (provider_ids.get(prov) or {}).get("include_in_litellm") is not False
+                    if isinstance(provider_ids.get(prov), dict) else True
+                )
+                if included and prov_inc:
+                    litellm_inc = True
+
+            min_lat = min(latencies) if latencies else None
+            ttft_ms = min_lat if min_lat else (
+                v_scores["ttft_s"] * 1000 if v_scores["ttft_s"] else None
+            )
+
+            # Highest price among any provider for this variant
+            variant_price = max(prov_prices) if prov_prices else None
+            primary_meta = mappings[0][2] if isinstance(mappings[0][2], dict) else {}
+
+            rows.append({
+                "id": f"{mid}/{vid}",
+                "model": mid,
+                "display": display,
+                "family": family,
+                "variant": vid,
+                "tier": PROXY_TIER,
+                "tag_tier": _tag_tier(v_info),
+                "provider": ", ".join(prov_names),
+                "provider_id": ", ".join(prov_pids),
+                "provider_mappings": prov_mappings,
+                "arch": v_info.get("aa_slug") or "",
+                "scores": {
+                    "intelligence": v_scores["intelligence"],
+                    "coding": v_scores["coding"],
+                    "agentic": v_scores["agentic"],
+                    "ttft_ms": round(ttft_ms, 1) if ttft_ms is not None else None,
+                    "tps": v_scores["tps"],
+                },
+                "health": {
+                    "assessment": primary_meta.get("assessment", "Unknown"),
+                    "availability": primary_meta.get("availability"),
+                },
+                "price_per_1m": variant_price,
+                "litellm_included": litellm_inc,
+            })
 
     # Add reference sets
     ref_sets = models_data.get("reference_sets", {})
@@ -631,6 +662,10 @@ function getRefSetColorForModel(m){
   if (!m) return null;
   if (m.arch && colorMap[m.arch]) return colorMap[m.arch];
   if (m.provider_id && colorMap[m.provider_id]) return colorMap[m.provider_id];
+  var maps = m.provider_mappings || [];
+  for (var i = 0; i < maps.length; i++) {
+    if (maps[i].provider_id && colorMap[maps[i].provider_id]) return colorMap[maps[i].provider_id];
+  }
   if (m.model && colorMap[m.model]) return colorMap[m.model];
   if (m.id && m.id.indexOf("reference/") === 0 && colorMap[m.id.slice(10)]) return colorMap[m.id.slice(10)];
   return null;
@@ -649,6 +684,16 @@ function canonicalPinId(id){
   if (!id) return id;
   if (id.indexOf("refset/") === 0) return id;
   if (byId[id]) return id;
+  // Pins saved before variant aggregation carried the provider/pid suffix
+  // ("model/variant/provider/provider_id"). Collapse them onto the longest
+  // live row ID that prefixes them so they do not become orphans.
+  var liveId = null;
+  DATA.models.forEach(function(m){
+    if (id.indexOf(m.id + "/") === 0 && (!liveId || m.id.length > liveId.length)) {
+      liveId = m.id;
+    }
+  });
+  if (liveId) return liveId;
   var slug = id.indexOf("reference/") === 0 ? id.slice(10) : id;
   var hit = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
   return hit ? hit.id : id;
@@ -914,8 +959,9 @@ function showHud(m, g){
     var d = m.scores.intelligence - flag.scores.intelligence;
     delta = '<div>D vs ' + esc(flag.display) + ': <b>' + (d >= 0 ? "+" : "") + d.toFixed(1) + ' pts</b></div>';
   }
-  hud.innerHTML = '<b>' + esc(m.display) + '</b> <span class="mono" style="color:var(--muted)">' + esc(m.provider) + '</span>' +
-    '<div class="row"><span>Intelligence ' + (m.scores.intelligence != null ? m.scores.intelligence : "\\u2014") + '</span>' +
+  var scoreVal = dimVal(m);
+  hud.innerHTML = '<b>' + esc(m.display) + ' (' + esc(m.variant) + ')</b> <span class="mono" style="color:var(--muted)">' + esc(m.provider) + '</span>' +
+    '<div class="row"><span>Score ' + (scoreVal != null ? scoreVal : "\\u2014") + '</span>' +
     '<span>' + fmtPrice(m.price_per_1m) + '</span>' +
     '<span>' + (m.scores.ttft_ms != null ? m.scores.ttft_ms + "ms" : "\\u2014") + '</span></div>' + delta +
     '<button class="btn" style="margin-top:.3rem" data-stage="' + esc(m.id) + '">+ Stage in YAML</button>';
@@ -1098,9 +1144,21 @@ function renderStaged(){
   btn.textContent = state.staged.length ? "Export YAML Diff (" + state.staged.length + ")" : "Export YAML Diff";
 }
 function yamlFor(m){
-  var slug = (m.provider_id || m.model).split("/").slice(-1)[0].replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
-  return "  - model_name: " + slug + "\\n    litellm_params:\\n      model: " +
-    (m.provider || "openai") + "/" + m.provider_id + "\\n";
+  var maps = m.provider_mappings || [];
+  if (!maps.length && m.provider && m.provider_id) {
+    maps = [{provider: m.provider, provider_id: m.provider_id}];
+  }
+  if (!maps.length) {
+    var lone = (m.model || "model").split("/").slice(-1)[0].replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+    return "  - model_name: " + lone + "\\n    litellm_params:\\n      model: " + (m.provider || "openai") + "\\n";
+  }
+  return maps.map(function(p){
+    var pid = String(p.provider_id || "");
+    var slug = pid.split("/").slice(-1)[0].replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+    if (!slug) slug = (m.model || "model").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+    return "  - model_name: " + slug + "\\n    litellm_params:\\n      model: " +
+      (p.provider || "openai") + "/" + pid + "\\n";
+  }).join("");
 }
 function renderAll(){ renderScatter(); renderTable(); renderPins(); renderInsights(); renderStaged(); }
 
@@ -1140,7 +1198,10 @@ document.querySelectorAll("#tabs button").forEach(function(b){
 });
 document.getElementById("pinBtn").addEventListener("click", function(){
   var slug = document.getElementById("pinSelect").value;
-  var ref = DATA.models.filter(function(m){ return m.provider_id === slug || m.model === slug || m.arch === slug; })[0];
+  var ref = DATA.models.filter(function(m){
+    if (m.provider_id === slug || m.model === slug || m.arch === slug) return true;
+    return (m.provider_mappings || []).some(function(p){ return p.provider_id === slug; });
+  })[0];
   pin(ref ? ref.id : "reference/" + slug);
 });
 document.getElementById("refSetPinBtn").addEventListener("click", function(){

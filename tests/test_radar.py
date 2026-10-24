@@ -113,8 +113,8 @@ def test_radar_aa_index_covers_all_slugs(tmp_path: Path):
     assert 'if (pinned[m.id]) return true;' in html
     # Stale pins collapse onto live rows instead of duplicating them.
     assert 'function canonicalPinId(id){' in html
-    # HUD uses the Intelligence label; no dead TTFT dimension wiring remains.
-    assert '<span>Intelligence ' in html
+    # HUD displays Score and model/variant; no dead TTFT dimension wiring remains.
+    assert '<span>Score ' in html
     assert 'data-dim="ttft"' not in html
 
 
@@ -192,6 +192,100 @@ def test_radar_table_sorting(tmp_path: Path):
     # Assert sorting JS state & functions exist
     for marker in ('sortCol:null', 'sortDir:"asc"', "getStatusLabel", "updateSortHeaders", "#matrix th[data-sort]"):
         assert marker in html, marker
+
+
+def test_radar_variant_aggregation_and_highest_price(tmp_path: Path):
+    (tmp_path / "models.json").write_text(json.dumps({
+        "meta": {},
+        "models": {
+            "multi-prov-m": {
+                "display_name": "Multi Prov M", "family": "acme", "default_variant": "standard",
+                "variants": {
+                    "standard": {
+                        "aa_slug": "multi-prov-m",
+                        "scores": {"intelligence": 82.0, "coding": 78.0, "agentic": 75.0, "ttft": 0.3, "tps": 55.0},
+                        "tags": ["tier-1"],
+                        "provider_ids": {
+                            "nvidia": {"acme/multi-prov-m": {"assessment": "Good", "availability": 1.0, "avg_latency": 300.0}},
+                            "openrouter": {"acme/multi-prov-m": {"assessment": "Good", "availability": 0.9, "avg_latency": 250.0}},
+                        },
+                    }
+                },
+            },
+        },
+    }))
+    (tmp_path / "model_scores.json").write_text(json.dumps({
+        "meta": {},
+        "models": {
+            "multi-prov-m": {"name": "Multi Prov M", "scores": {"intelligence": 82.0, "coding": 78.0, "agentic": 75.0, "ttft": 0.3, "tps": 55.0}},
+        },
+    }))
+    (tmp_path / "model_prices.json").write_text(json.dumps({
+        "meta": {},
+        "prices": {
+            "nvidia/acme/multi-prov-m": {"blended_per_1m": 1.50, "source": "nvidia"},
+            "openrouter/acme/multi-prov-m": {"blended_per_1m": 2.50, "source": "override"},
+        },
+    }))
+
+    cfg = _cfg(tmp_path)
+    data = collect_radar_data(cfg)
+    proxy_rows = [r for r in data["models"] if r["tier"] == "IN_LITELLM_PROXY"]
+    assert len(proxy_rows) == 1
+    row = proxy_rows[0]
+    assert row["id"] == "multi-prov-m/standard"
+    assert row["variant"] == "standard"
+    assert row["price_per_1m"] == 2.50  # highest price among openrouter (2.50) and nvidia fallback (1.50)
+    assert "nvidia" in row["provider"]
+    assert "openrouter" in row["provider"]
+    assert row["provider_mappings"] == [
+        {"provider": "nvidia", "provider_id": "acme/multi-prov-m"},
+        {"provider": "openrouter", "provider_id": "acme/multi-prov-m"},
+    ]
+
+
+def test_radar_yaml_export_emits_one_entry_per_provider(tmp_path: Path):
+    _seed_multiprov_library(tmp_path)
+    data = collect_radar_data(_cfg(tmp_path))
+    row = next(r for r in data["models"] if r["id"] == "multi-prov-m/standard")
+    assert row["provider_mappings"] == [
+        {"provider": "nvidia", "provider_id": "acme/multi-prov-m"},
+        {"provider": "openrouter", "provider_id": "acme/multi-prov-m"},
+    ]
+    html = generate_radar(_cfg(tmp_path)).read_text()
+    # Export iterates provider mappings instead of comma-joined strings.
+    assert "m.provider_mappings" in html
+    assert "maps.map(function(p){" in html
+    # Old provider-level pins collapse onto the live variant row.
+    assert 'id.indexOf(m.id + "/") === 0' in html
+
+
+def _seed_multiprov_library(tmp_path: Path):
+    (tmp_path / "models.json").write_text(json.dumps({
+        "meta": {},
+        "models": {
+            "multi-prov-m": {
+                "display_name": "Multi Prov M", "family": "acme", "default_variant": "standard",
+                "variants": {
+                    "standard": {
+                        "aa_slug": "multi-prov-m",
+                        "scores": {"intelligence": 82.0, "coding": 78.0, "agentic": 75.0, "ttft": 0.3, "tps": 55.0},
+                        "tags": ["tier-1"],
+                        "provider_ids": {
+                            "nvidia": {"acme/multi-prov-m": {"assessment": "Good", "availability": 1.0, "avg_latency": 300.0}},
+                            "openrouter": {"acme/multi-prov-m": {"assessment": "Good", "availability": 0.9, "avg_latency": 250.0}},
+                        },
+                    }
+                },
+            },
+        },
+    }))
+    (tmp_path / "model_scores.json").write_text(json.dumps({
+        "meta": {},
+        "models": {
+            "multi-prov-m": {"name": "Multi Prov M", "scores": {"intelligence": 82.0, "coding": 78.0, "agentic": 75.0, "ttft": 0.3, "tps": 55.0}},
+        },
+    }))
 
 
 def test_radar_reference_sets_elements_and_coloring(tmp_path: Path):
