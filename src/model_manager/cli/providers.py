@@ -172,6 +172,41 @@ def gemini_scan(
     provider = next(p for p in providers.list_providers() if p.name.lower() == "gemini")
     _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans, debug)
 
+def _gemini_key_impl(env_file: Path | None, config: Path | None) -> None:
+    from model_manager.domain import keys
+
+    cfg = load_config(config)
+    try:
+        key = keys.get_random_gemini_key(env_file_path=env_file, config=cfg)
+        typer.echo(key)
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+@gemini_app.command("key")
+def gemini_key(
+    env_file: Path | None = typer.Option(None, "--env-file", "-e", help="Path to env file containing Gemini API keys."),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to custom config.toml."),
+) -> None:
+    """Return a randomly rotated Gemini API key from /etc/litellm/keys.env or environment."""
+    _gemini_key_impl(env_file, config)
+
+@gemini_app.command("get-key")
+def gemini_get_key(
+    env_file: Path | None = typer.Option(None, "--env-file", "-e", help="Path to env file containing Gemini API keys."),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to custom config.toml."),
+) -> None:
+    """Return a randomly rotated Gemini API key from /etc/litellm/keys.env or environment."""
+    _gemini_key_impl(env_file, config)
+
+@providers_app.command("gemini-key")
+def providers_gemini_key(
+    env_file: Path | None = typer.Option(None, "--env-file", "-e", help="Path to env file containing Gemini API keys."),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to custom config.toml."),
+) -> None:
+    """Return a randomly rotated Gemini API key from /etc/litellm/keys.env or environment."""
+    _gemini_key_impl(env_file, config)
+
 @huggingface_app.command("fetch")
 def huggingface_fetch(
     probe: bool = typer.Option(False, "--probe", help="Verify model availability by sending a minimal request."),
