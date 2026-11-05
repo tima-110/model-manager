@@ -839,6 +839,9 @@ def _render_html(data: dict) -> str:
   .tier-badge.tier-2 {{ background: rgba(224,175,104,0.15); color: #e0af68; }}
   .tier-badge.tier-3 {{ background: rgba(247,118,142,0.15); color: #f7768e; }}
   .tier-badge.tier-none {{ background: #1d1f2e; color: #565f89; }}
+  .attribution {{ margin-top: 2rem; padding-top: 0.75rem; border-top: 1px solid #24283b; text-align: center; font-size: 0.78rem; color: #565f89; }}
+  .attribution a {{ color: #7aa2f7; text-decoration: none; }}
+  .attribution a:hover {{ text-decoration: underline; }}
   @media (max-width: 600px) {{ .cards {{ grid-template-columns: repeat(2, 1fr); }} }}
 </style>
 <script>
@@ -930,6 +933,8 @@ function sortTable(n, isNumeric) {{
 
   <h2>System Paths</h2>
   <table class="data-table">{paths_table}</table>
+
+  <div class="attribution">Benchmark data from <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a></div>
 </div>
 </body>
 </html>"""

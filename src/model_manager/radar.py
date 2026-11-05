@@ -539,6 +539,10 @@ tbody tr:hover{background:#20242f}
   max-width:640px;width:92%;padding:1rem;max-height:80vh;overflow:auto}
 #modal pre{background:#0a0e18;padding:.7rem;border-radius:6px;overflow:auto;font-size:.78rem}
 .legend{display:flex;flex-wrap:wrap;gap:.9rem;font-size:.78rem;color:var(--muted);margin-top:.4rem}
+.attribution{margin-top:1.25rem;padding-top:.75rem;border-top:1px solid var(--border);
+  text-align:center;font-size:.75rem;color:var(--muted)}
+.attribution a{color:var(--muted);text-decoration:none}
+.attribution a:hover{color:var(--text);text-decoration:underline}
 </style>
 </head>
 <body>
@@ -614,6 +618,7 @@ tbody tr:hover{background:#20242f}
       <tbody></tbody>
     </table></div>
   </div>
+  <div class="attribution">Benchmark data from <a href="https://artificialanalysis.ai" target="_blank" rel="noopener">Artificial Analysis</a></div>
 </div>
 <div id="modal"><div class="box">
   <h2 style="margin-top:0">LiteLLM YAML Diff (draft)</h2>
