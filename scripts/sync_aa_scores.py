@@ -22,20 +22,33 @@ def get_api_key():
     return os.environ.get("ARTIFICIAL_ANALYSIS_API_KEY")
 
 def fetch_aa_data(api_key):
-    """Fetch model data from Artificial Analysis API and save raw response."""
-    url = "https://artificialanalysis.ai/api/v2/data/llms/models"
+    """Fetch model data from Artificial Analysis API and save raw response.
+
+    The legacy /api/v2/data/llms/models endpoint was retired 2026-11-04
+    (410 Gone); the supported replacement is the paginated free endpoint
+    (200/page). All pages are walked and combined into one payload.
+    """
+    url = "https://artificialanalysis.ai/api/v2/language/models/free"
     headers = {"x-api-key": api_key}
+    models = []
+    page = 1
     try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
+        while page <= 50:
+            req = urllib.request.Request(f"{url}?page={page}", headers=headers)
+            with urllib.request.urlopen(req, timeout=30) as response:
+                payload = json.loads(response.read().decode())
+            models.extend(payload.get("data", []))
+            if not (payload.get("pagination") or {}).get("has_more"):
+                break
+            page += 1
+        data = {"data": models}
 
-            # Save raw response for traceability
-            os.makedirs(DATA_DIR, exist_ok=True)
-            with open(RAW_SCORES_PATH, "w") as f:
-                json.dump(data, f, indent=2)
+        # Save raw response for traceability
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(RAW_SCORES_PATH, "w") as f:
+            json.dump(data, f, indent=2)
 
-            return data
+        return data
     except Exception as e:
         print(f"Error fetching AA data: {e}")
         return None

@@ -8,7 +8,10 @@ from model_manager.domain import scores
 from model_manager.config import AppConfig
 
 def test_process_aa_data(mock_config):
-    """Verify that raw API data is correctly processed into the scores format."""
+    """Verify that raw API data is correctly processed into the scores format.
+
+    Legacy payload shape: ttft/tps at top level (exercises the fallback).
+    """
     sample_response = {
         "data": [
             {
@@ -32,6 +35,35 @@ def test_process_aa_data(mock_config):
     assert processed["models"]["model-1"]["scores"]["ttft"] == 0.5
     assert processed["models"]["model-1"]["scores"]["tps"] == 100.0
     assert processed["meta"]["total_models"] == 1
+
+def test_process_aa_data_v2_performance_shape(mock_config):
+    """V2 payloads nest ttft/tps under ``performance`` (no top-level fields)."""
+    sample_response = {
+        "tier": "free",
+        "data": [
+            {
+                "slug": "model-2",
+                "name": "Model Two",
+                "performance": {
+                    "median_time_to_first_token_seconds": 0.7,
+                    "median_output_tokens_per_second": 55.5,
+                },
+                "evaluations": {
+                    "artificial_analysis_intelligence_index": 60,
+                    "artificial_analysis_coding_index": None,
+                    "artificial_analysis_agentic_index": None,
+                }
+            }
+        ]
+    }
+
+    processed = scores.process_aa_data(sample_response, mock_config)
+    s = processed["models"]["model-2"]["scores"]
+    assert s["ttft"] == 0.7
+    assert s["tps"] == 55.5
+    assert s["intelligence"] == 60
+    assert s["coding"] is None
+    assert s["agentic"] is None
 
 def test_fetch_aa_data_success(mock_config):
     """Verify successful data fetch and raw save."""
@@ -59,6 +91,30 @@ def _mock_page(payload: dict) -> MagicMock:
     mock_response.read.return_value = json.dumps(payload).encode()
     mock_response.__enter__.return_value = mock_response
     return mock_response
+
+def test_fetch_aa_data_paginates_and_combines(mock_config):
+    """All pages of the V2 free endpoint are walked and merged into one payload."""
+    page1 = {"data": [{"slug": "a"}], "pagination": {"page": 1, "has_more": True}, "tier": "free"}
+    page2 = {"data": [{"slug": "b"}], "pagination": {"page": 2, "has_more": False}, "tier": "free"}
+
+    with patch("urllib.request.urlopen", side_effect=[_mock_page(page1), _mock_page(page2)]):
+        result = scores.fetch_aa_data("fake-key", mock_config)
+
+    assert [m["slug"] for m in result["data"]] == ["a", "b"]
+    assert result["tier"] == "free"
+    saved = json.loads((mock_config.data_dir / "aa_raw_response.json").read_text())
+    assert [m["slug"] for m in saved["data"]] == ["a", "b"]
+
+def test_fetch_aa_data_partial_failure_writes_nothing(mock_config):
+    """A failure mid-pagination must not write a truncated raw file."""
+    raw_path = mock_config.data_dir / "aa_raw_response.json"
+    page1 = {"data": [{"slug": "a"}], "pagination": {"page": 1, "has_more": True}}
+
+    with patch("urllib.request.urlopen", side_effect=[_mock_page(page1), Exception("boom")]):
+        result = scores.fetch_aa_data("fake-key", mock_config)
+
+    assert result is None
+    assert not raw_path.exists()
 
 def test_fetch_agentic_index_from_api_pagination(mock_config):
     """Verify paginated agentic fetch collects slugs and stops at last page."""

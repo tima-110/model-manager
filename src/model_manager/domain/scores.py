@@ -19,21 +19,44 @@ def get_api_key() -> str | None:
     return auth.get_secret("ARTIFICIAL_ANALYSIS_API_KEY")
 
 def fetch_aa_data(api_key: str, config: AppConfig) -> dict | None:
-    """Fetch model data from Artificial Analysis API and save raw response."""
-    url = "https://artificialanalysis.ai/api/v2/data/llms/models"
+    """Fetch model data from Artificial Analysis API and save raw response.
+
+    The legacy ``/api/v2/data/llms/models`` endpoint was retired 2026-11-04
+    (410 Gone); the supported replacement is the paginated free endpoint
+    (200/page). All pages are walked and combined into a single ``data``
+    payload. On any failure returns ``None`` without writing the raw file,
+    so callers never process a truncated catalog.
+    """
     headers = {"x-api-key": api_key}
+    models: list[dict] = []
+    envelope: dict = {}
+    page = 1
+    max_pages = 50  # safety cap; currently 4 pages
     try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-
-            raw_path = get_raw_scores_path(config)
-            raw_path.write_text(json.dumps(data, indent=2))
-
-            return data
+        while page <= max_pages:
+            req = urllib.request.Request(
+                f"{AA_LANGUAGE_MODELS_FREE_URL}?page={page}",
+                headers=headers,
+            )
+            with urllib.request.urlopen(req, timeout=30) as response:
+                payload = json.loads(response.read().decode())
+            models.extend(payload.get("data", []))
+            envelope = payload
+            if not (payload.get("pagination") or {}).get("has_more"):
+                break
+            page += 1
     except Exception as e:
         print(f"Error fetching AA data: {e}", file=sys.stderr)
         return None
+
+    data: dict = {"data": models}
+    for key in ("tier", "intelligence_index_version"):
+        if envelope.get(key) is not None:
+            data[key] = envelope[key]
+
+    raw_path = get_raw_scores_path(config)
+    raw_path.write_text(json.dumps(data, indent=2))
+    return data
 
 def fetch_agentic_index_from_api(api_key: str, max_pages: int = 20) -> dict[str, float]:
     """Fetch {slug: agentic_index} from the AA language-models endpoint.
@@ -66,6 +89,18 @@ def fetch_agentic_index_from_api(api_key: str, max_pages: int = 20) -> dict[str,
             break
         page += 1
     return indexes
+
+def _perf_metric(perf: dict, model: dict, key: str):
+    """Read a performance metric from the V2 payload.
+
+    V2 responses nest metrics under ``performance``; legacy payloads had
+    them top-level. Prefer the nested value when the key is present there
+    (even if null — null means "not measured"), else fall back to the
+    legacy top-level field.
+    """
+    if key in perf:
+        return perf[key]
+    return model.get(key)
 
 def process_aa_data(
     aa_response: dict,
@@ -100,14 +135,15 @@ def process_aa_data(
             continue
 
         evals = m.get("evaluations", {})
+        perf = m.get("performance") or {}
         processed["models"][slug] = {
             "name": m.get("name"),
             "scores": {
                 "intelligence": evals.get("artificial_analysis_intelligence_index"),
                 "coding": evals.get("artificial_analysis_coding_index"),
                 "agentic": agentic_indexes.get(slug),
-                "ttft": m.get("median_time_to_first_token_seconds"),
-                "tps": m.get("median_output_tokens_per_second"),
+                "ttft": _perf_metric(perf, m, "median_time_to_first_token_seconds"),
+                "tps": _perf_metric(perf, m, "median_output_tokens_per_second"),
             },
             "last_synced": processed["meta"]["last_updated"]
         }
