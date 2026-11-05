@@ -30,9 +30,21 @@ projects using the same tool or pattern, copy it to ~/practices/lessons.md.
 **Apply when:** A pipx-installed CLI shows unexpected commands/version, or `which <cmd>` is empty while `pipx list` claims it is installed — check the exposed app names vs pyproject `[project.scripts]`.
 **Global?** No — specific to this project's generic PyPI name, though the check generalizes.
 
+### 2026-11-03: Live State Lives in platformdirs, Not ./data/
+**Context:** Looking for freshly fetched provider model JSONs after a fetch; checked `./data/` first (per user's mental model) and found only stale Aug-12 copies.
+**Insight:** `config.py` resolves `data_dir` via `platformdirs.user_data_dir("model-manager")` → `~/.local/share/model-manager/`. All fetches (`*_available_models.json`, `models.json`, `model_scores.json`, scans) land there; `./data/` in the repo root is legacy/stale and never written by the CLI. Check mtimes before trusting either location.
+**Apply when:** Searching for model/fetch/scan JSON files in this project.
+**Global?** No — specific to this project's config layout, though "CLI state goes to platformdirs, not the repo" is a common Python packaging pattern.
+
 ### 2026-10-15: VNC D-Bus Session Isolation Breaks GNOME Keyring
 **Context:** Accessing GNOME Keyring (`model-manager auth list`) inside a VNC session (Budgie/TigerVNC) timed out after 120s with `org.freedesktop.DBus.Error.TimedOut` on `org.freedesktop.secrets`.
 **Insight:** VNC `xstartup` scripts commonly run `unset DBUS_SESSION_BUS_ADDRESS && exec dbus-run-session <desktop>`, which spins up an isolated ephemeral D-Bus session bus. Because `gnome-keyring-daemon` is already running on the systemd user bus (`/run/user/$UID/bus`), requests to `org.freedesktop.secrets` on the isolated bus trigger auto-activation. The activated daemon detects an existing keyring daemon on the machine and exits, causing the isolated D-Bus daemon to hang for 120s. Pointing `DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"` and publishing `DISPLAY` and `XAUTHORITY` via `dbus-update-activation-environment` / `systemctl --user import-environment` connects the VNC desktop to the existing GNOME Keyring daemon without needing separate wallet software.
 **Apply when:** Secret Service / keyring timeouts or auth hangs in VNC, RDP, or non-GNOME graphical sessions.
 **Global?** Yes — applies to any Linux VNC/remote desktop setup accessing GNOME Keyring or Secret Service.
+
+### 2026-11-05: AA Retired Legacy /api/v2/data/* Endpoints — 410 With Migration Link
+**Context:** `scores fetch` started failing with HTTP 410 after Artificial Analysis shut down `https://artificialanalysis.ai/api/v2/data/llms/models` on 2026-11-04 23:59 GMT.
+**Insight:** The 410 JSON body embedded the migration guide URL (`/data-api/migrate-v2-data`) and a `Link: rel="deprecation"` header named the sunset date — read the error response before searching. The documented replacement is not a drop-in: `/api/v2/language/models/free` (free tier; `/language/models` is Pro and 403s our key) paginates at 200/page where the legacy path returned all ~723 in one response, `median_time_to_first_token_seconds`/`median_output_tokens_per_second` moved under a `performance` object, and AA has permanently discontinued `artificial_analysis_coding_index`/`artificial_analysis_agentic_index` (documented "always null"). Fixed `fetch_aa_data` to walk `pagination.has_more` (no raw write on mid-pagination failure, so a partial catalog never replaces the full one) and added `_perf_metric` preferring the nested `performance` value with legacy top-level fallback. Caveat unresolved: 347 models that had TTFT/TPS on Nov 3 now return null performance — pruned measurements vs. free-tier field limits is indistinguishable without a Pro key.
+**Apply when:** Any AA endpoint 410s/404s, or `model_scores.json` suddenly shows null ttft/tps — re-diff the response schema, don't just swap the URL.
+**Global?** Yes — appended to `~/practices/lessons.md` as the API-retirement pattern.
 
