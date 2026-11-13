@@ -4,7 +4,25 @@ from __future__ import annotations
 import json
 import pytest
 from pathlib import Path
-from model_manager.config import AppConfig
+from model_manager.config import AppConfig, find_config
+
+
+@pytest.fixture(autouse=True)
+def _isolate_user_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests hermetic: never read/write real user config, data, or keyring."""
+    config_home = tmp_path / "xdg_config"
+    data_home = tmp_path / "xdg_data"
+    config_home.mkdir(parents=True, exist_ok=True)
+    data_home.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setattr("model_manager.domain.auth.get_secret", lambda _key_name: None)
+
+    resolved = find_config()
+    assert resolved is None or resolved.is_relative_to(tmp_path), (
+        f"Test isolation regression: find_config() resolved to {resolved}"
+    )
 
 @pytest.fixture
 def tmp_data_dir(tmp_path: Path) -> Path:

@@ -20,12 +20,9 @@ def test_help():
     assert result.exit_code == 0
     assert "Usage:" in result.stdout
 
-def test_scores_fetch_no_key():
+def test_scores_fetch_no_key(monkeypatch: pytest.MonkeyPatch):
     """Verify scores fetch fails gracefully without an API key."""
-    # Ensure key is not in environment
-    import os
-    if "ARTIFICIAL_ANALYSIS_API_KEY" in os.environ:
-        del os.environ["ARTIFICIAL_ANALYSIS_API_KEY"]
+    monkeypatch.delenv("ARTIFICIAL_ANALYSIS_API_KEY", raising=False)
 
     result = runner.invoke(app, ["scores", "fetch"])
     assert result.exit_code == 1
