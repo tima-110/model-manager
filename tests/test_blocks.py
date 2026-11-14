@@ -112,3 +112,28 @@ def test_blocked_summary_sorted(tmp_path: Path):
     blocks.record_observation(cfg, ["a-key"], blocked=True, reason="r", source="s")
     keys = [e["key"] for e in blocks.blocked_summary(cfg)]
     assert keys == ["a-key", "b-key"]
+
+
+def test_ledger_updated_at_timestamp(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    assert blocks.ledger_updated_at(cfg) is None
+    blocks.record_observation(cfg, ["target-1"], blocked=True, reason="r", source="s")
+
+    raw = json.loads((tmp_path / "model_blocks.json").read_text())
+    assert "meta" in raw
+    assert "updated_at" in raw["meta"]
+    assert raw["meta"]["updated_at"].endswith("Z")
+    assert blocks.ledger_updated_at(cfg) == raw["meta"]["updated_at"]
+
+    # metadata key is excluded from domain operations
+    assert "meta" not in blocks.blocked_set(cfg)
+    assert "target-1" in blocks.blocked_set(cfg)
+    assert blocks.load_ledger(cfg).keys() == {"target-1"}
+
+    # releasing also updates the timestamp
+    first_stamp = raw["meta"]["updated_at"]
+    blocks.record_observation(cfg, ["target-1"], blocked=False, reason="")
+    raw_after = json.loads((tmp_path / "model_blocks.json").read_text())
+    assert "meta" in raw_after
+    assert "updated_at" in raw_after["meta"]
+    assert blocks.blocked_set(cfg) == set()

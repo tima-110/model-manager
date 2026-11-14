@@ -87,6 +87,40 @@ def remove_model(config: AppConfig, model_id: str) -> bool:
         return True
     return False
 
+def remove_variant(config: AppConfig, model_id: str, variant_id: str) -> bool:
+    """Remove a variant from a conceptual model.
+
+    Returns True if removed, False if the model or variant was not found.
+    Raises ValueError when the variant is the model's only one — remove the
+    whole conceptual model instead. If the removed variant was the model's
+    ``default_variant``, the first remaining variant becomes the default.
+    """
+    data = storage.load_models_data(config)
+    model = data.get("models", {}).get(model_id)
+    if not model:
+        return False
+
+    variants = model.get("variants", {})
+    if variant_id not in variants:
+        return False
+
+    if len(variants) == 1:
+        raise ValueError(
+            f"Cannot remove variant '{variant_id}' from '{model_id}': it is the last "
+            f"variant. Use 'model-manager models remove {model_id}' to remove the model."
+        )
+
+    del variants[variant_id]
+    if model.get("default_variant") == variant_id:
+        model["default_variant"] = next(iter(variants))
+
+    if "meta" not in data:
+        data["meta"] = {}
+    data["meta"]["last_updated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    storage.save_models_data(config, data)
+    return True
+
 def update_variant(
     config: AppConfig,
     model_id: str,

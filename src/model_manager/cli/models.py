@@ -141,6 +141,43 @@ def fallback_list(
         table.add_row(key, " -> ".join(f"[bold]{fb}[/bold]" for fb in fbs))
     console.print(table)
 
+@variant_app.command("remove")
+def variant_remove(
+    model: str,
+    variant: str,
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Remove a variant from a conceptual model.
+
+    Example:
+
+      model-manager models variant remove gemma-4-31b-it non-reasoning
+    """
+    cfg = load_config(config)
+
+    try:
+        removed = models.remove_variant(cfg, model, variant)
+    except ValueError as e:
+        if json_output:
+            console.print(json.dumps({"status": "error", "message": str(e)}, indent=2))
+        else:
+            console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not removed:
+        message = f"Variant {model}/{variant} not found."
+        if json_output:
+            console.print(json.dumps({"status": "error", "message": message}, indent=2))
+        else:
+            console.print(f"[red]Error: {message}[/red]")
+        raise typer.Exit(1)
+
+    if json_output:
+        console.print(json.dumps({"status": "success", "model": model, "variant": variant}, indent=2))
+    else:
+        console.print(f"[green]Removed variant [bold]{model}/{variant}[/bold].[/green]")
+
 @variant_app.command("update")
 def variant_update(
     model: str,

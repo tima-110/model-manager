@@ -43,14 +43,51 @@ def load_ledger(config: AppConfig) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    if "blocks" in data and isinstance(data["blocks"], dict):
+        return data["blocks"]
+    return {
+        k: v for k, v in data.items()
+        if k not in ("meta", "_meta") and not k.startswith("_") and isinstance(v, dict)
+    }
 
 
 def save_ledger(config: AppConfig, ledger: dict[str, dict[str, Any]]) -> None:
-    ledger_path(config).write_text(json.dumps(ledger, indent=2))
+    stamp = _stamp()
+    blocks_dict = {
+        k: v for k, v in ledger.items()
+        if k not in ("meta", "_meta") and not k.startswith("_")
+    }
+    doc = {
+        "meta": {
+            "updated_at": stamp,
+            "last_updated": stamp,
+        },
+        **blocks_dict,
+    }
+    storage._atomic_write_text(ledger_path(config), json.dumps(doc, indent=2))
+
+
+def ledger_updated_at(config: AppConfig) -> str | None:
+    """Return the updated_at timestamp from the ledger metadata, or None."""
+    path = ledger_path(config)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if "meta" in data and isinstance(data["meta"], dict):
+        return data["meta"].get("updated_at") or data["meta"].get("last_updated")
+    if "_meta" in data and isinstance(data["_meta"], dict):
+        return data["_meta"].get("updated_at")
+    return None
 
 
 def provider_key(provider: str, pid: str) -> str:

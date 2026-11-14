@@ -88,6 +88,12 @@ to preview tier effect.
 - **Remove**: `models remove <model>` — confirm model id, warn it drops all
   variants/mappings. Offer `variant update --litellm-disable` instead when the
   user just wants it out of generation.
+- **Remove variant**: `models variant remove <model> <variant>` — deletes one
+  variant and its provider mappings; the model's other variants survive. Refuses
+  to remove the last variant (use `models remove` for that). If the removed
+  variant was `default_variant`, the first remaining variant inherits it. Not
+  reversible; confirm model/variant first and offer `variant update
+  --litellm-disable` instead when the user only wants it out of generation.
 - **Variant enable/disable**: `models variant update <model> <variant>
   --litellm-disable | --litellm-enable [--litellm-disable-provider <prov> |
   --litellm-enable-provider <prov>]` — per-variant or per-provider exclusion
@@ -101,6 +107,13 @@ to preview tier effect.
 - **(Re)tag**: `models tag tier [--dry-run]` previews tier-1/2/3 vs current
   leader; `tag set/remove <model> <variant> <tag>` for manual tags.
   Tiers shift as scores change — always report composite-vs-leader ratio.
+- **Block-ledger triage (`model_blocks.json`)**: For mapped entries blocked
+  `> 30` days, propose `--litellm-disable` when all providers on the variant
+  are blocked/dead, or `--litellm-disable-provider <p>` when other providers
+  remain viable. Unmapped entries (written by `record_assessment_observations`
+  from provider scans) can be safely purged along with their `litellm:` mirror
+  keys via `domain.blocks` (`load_ledger`/`save_ledger`): re-adding to
+  `models.json` or re-scanning a still-listed catalog model re-records them.
 
 ## Workflow B2 — reference sets
 
