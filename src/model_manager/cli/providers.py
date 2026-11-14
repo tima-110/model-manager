@@ -9,7 +9,7 @@ from rich.table import Table
 
 from model_manager.config import load_config
 from model_manager.domain import providers, auth
-from .common import console, _run_discovery_cli_workflow, _run_scan_cli_workflow
+from .common import console, _run_discovery_cli_workflow, _run_scan_cli_workflow, _run_chat_cli_workflow
 
 providers_app = typer.Typer(help="Manage supported model providers.")
 
@@ -195,3 +195,28 @@ def huggingface_scan(
     """Scan the current health and performance of HuggingFace models."""
     provider = next(p for p in providers.list_providers() if p.name.lower() == "huggingface")
     _run_scan_cli_workflow(provider, config, filter, only_up, only_down, json_output, max_scans, debug)
+
+
+def _register_chat_command(sub_app: typer.Typer, provider_name: str) -> None:
+    """Register the `chat` subcommand on a provider Typer sub-app."""
+    @sub_app.command("chat")
+    def provider_chat(
+        model: Optional[str] = typer.Option(None, "--model", "-m", help="Provider model ID (opens interactive picker if omitted)."),
+        prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Prompt text to send (prompts interactively if omitted)."),
+        timeout: Optional[float] = typer.Option(None, "--timeout", "-t", help="Optional request timeout in seconds."),
+        config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to custom config.toml."),
+        json_output: bool = typer.Option(False, "--json", help="Output response as JSON."),
+    ) -> None:
+        f"""Send a test chat prompt to a {provider_name} model."""
+        provider = next(p for p in providers.list_providers() if p.name.lower() == provider_name.lower())
+        _run_chat_cli_workflow(provider, model, prompt, timeout, config, json_output)
+
+
+for _sub_app, _prov_name in (
+    (openrouter_app, "OpenRouter"),
+    (nvidia_app, "NVIDIA"),
+    (ollama_app, "Ollama"),
+    (gemini_app, "Gemini"),
+    (huggingface_app, "HuggingFace"),
+):
+    _register_chat_command(_sub_app, _prov_name)

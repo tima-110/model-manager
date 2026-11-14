@@ -51,6 +51,15 @@ class PingResult:
     error: Optional[str] = None
     debug_info: Optional[Dict[str, Any]] = None
 
+
+@dataclass
+class ChatResult:
+    """The result of a single chat completion request."""
+    text: str
+    latency_ms: float
+    code: str
+    raw: Dict[str, Any]
+
 def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     """Fetch all models from OpenRouter and filter for free ones."""
     try:
@@ -282,11 +291,14 @@ def fetch_huggingface_models(api_key: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise RuntimeError(f"Failed to fetch models from HuggingFace: {e}")
 
-def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter", debug: bool = False) -> PingResult:
-    """Check if a model is responsive and measure TTFB latency."""
-    if not api_key:
-        return PingResult(status="unauthorized", latency_ms=0, code="401", error="API key missing")
-
+def _build_chat_request(
+    provider: str,
+    model_id: str,
+    api_key: str,
+    prompt: str,
+    max_tokens: int | None = None,
+) -> tuple[str, Dict[str, str], Dict[str, Any]]:
+    """Build (url, headers, payload) for a provider's chat/generation endpoint."""
     if provider == "ollama":
         chat_url = OLLAMA_CHAT_URL
     elif provider == "nvidia":
@@ -298,32 +310,115 @@ def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrout
     else:
         chat_url = OPENROUTER_CHAT_URL
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
+    headers: Dict[str, str] = {
         "Content-Type": "application/json",
     }
-
-    if provider == "gemini":
+    if provider != "gemini":
         # Gemini uses API key in URL, not Bearer token
-        headers.pop("Authorization", None)
+        headers["Authorization"] = f"Bearer {api_key}"
 
     if provider == "openrouter":
         headers["HTTP-Referer"] = "https://github.com/castor-claw/model-manager"
         headers["X-Title"] = "Model Manager Discovery"
 
     if provider == "gemini":
-        data = {
-            "contents": [{"parts": [{"text": "hi"}]}]
+        data: Dict[str, Any] = {
+            "contents": [{"parts": [{"text": prompt}]}]
         }
     else:
         data = {
             "model": model_id,
-            "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 1
+            "messages": [{"role": "user", "content": prompt}],
         }
+        if max_tokens is not None:
+            data["max_tokens"] = max_tokens
 
     if provider == "ollama":
         data["stream"] = False
+
+    return chat_url, headers, data
+
+
+def _extract_chat_text(provider: str, data: Dict[str, Any]) -> str:
+    """Extract assistant text from a provider-specific chat response payload."""
+    if provider == "gemini":
+        candidates = data.get("candidates") or []
+        if candidates and isinstance(candidates[0], dict):
+            parts = candidates[0].get("content", {}).get("parts") or []
+            texts = [p.get("text", "") for p in parts if isinstance(p, dict) and p.get("text")]
+            return "".join(texts)
+        return ""
+
+    if provider == "ollama":
+        msg = data.get("message")
+        if isinstance(msg, dict) and msg.get("content") is not None:
+            return str(msg["content"])
+
+    choices = data.get("choices") or []
+    if choices and isinstance(choices[0], dict):
+        msg = choices[0].get("message") or {}
+        if isinstance(msg, dict):
+            content = msg.get("content")
+            if content:
+                return str(content)
+            reasoning = msg.get("reasoning_content")
+            if reasoning:
+                return str(reasoning)
+    return ""
+
+
+def chat_model(
+    model_id: str,
+    api_key: Optional[str],
+    prompt: str,
+    provider: str = "openrouter",
+    timeout: float | None = None,
+) -> ChatResult:
+    """Send a standard non-streaming chat request to a provider model."""
+    if not api_key:
+        raise RuntimeError("API key missing from keychain.")
+
+    chat_url, headers, data = _build_chat_request(provider, model_id, api_key, prompt)
+    payload = json.dumps(data).encode()
+    req = urllib.request.Request(chat_url, data=payload, headers=headers, method="POST")
+
+    t0 = time.perf_counter()
+    open_kwargs: Dict[str, Any] = {"timeout": timeout} if timeout is not None else {}
+    try:
+        with urllib.request.urlopen(req, **open_kwargs) as response:
+            latency = (time.perf_counter() - t0) * 1000
+            code = str(response.getcode())
+            raw_text = response.read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace").strip()
+        detail = body[:500] if body else str(e.reason)
+        raise RuntimeError(f"HTTP {e.code} from {provider}: {detail}") from e
+    except TimeoutError as e:
+        raise RuntimeError(f"Request timed out after {timeout}s") from e
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise RuntimeError(f"Request timed out after {timeout}s") from e
+        raise RuntimeError(f"Connection error for {provider}: {e.reason}") from e
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON response from {provider}: {e}") from e
+
+    return ChatResult(
+        text=_extract_chat_text(provider, parsed),
+        latency_ms=latency,
+        code=code,
+        raw=parsed,
+    )
+
+
+def probe_model(model_id: str, api_key: Optional[str], provider: str = "openrouter", debug: bool = False) -> PingResult:
+    """Check if a model is responsive and measure TTFB latency."""
+    if not api_key:
+        return PingResult(status="unauthorized", latency_ms=0, code="401", error="API key missing")
+
+    chat_url, headers, data = _build_chat_request(provider, model_id, api_key, prompt="hi", max_tokens=1)
 
     t0 = time.perf_counter()
     debug_info = None
