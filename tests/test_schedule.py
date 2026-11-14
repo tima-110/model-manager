@@ -761,10 +761,9 @@ def test_pipeline_dead_proxy_no_regenerate(tmp_path: Path):
     with _pipeline_mocks(tmp_path, []):
         with patch(
             "model_manager.domain.schedule._wait_for_proxy", return_value=False
-        ), patch(
+        ) as mock_wait, patch(
             "model_manager.domain.litellm_scan.scan_targets",
-            side_effect=RuntimeError("connection refused"),
-        ), patch(
+        ) as mock_scan, patch(
             "model_manager.domain.generate_all.run_generate_all",
             return_value={"steps": ["generate fallbacks: success"], "errors": []},
         ) as mock_gen, patch(
@@ -774,8 +773,10 @@ def test_pipeline_dead_proxy_no_regenerate(tmp_path: Path):
             res = schedule_mod.execute_schedule_pipeline(cfg)
     assert mock_gen.call_count == 1
     assert mock_restart.call_count == 1
+    assert mock_wait.call_args.kwargs.get("initial_delay") == 30
+    mock_scan.assert_not_called()
     assert any("unresponsive" in e for e in res["errors"])
-    assert any("litellm proxy scan" in e for e in res["errors"])
+    assert any("litellm proxy scan: skipped" in e for e in res["errors"])
 
 
 def test_wait_for_proxy_fast_and_capped():
@@ -794,6 +795,15 @@ def test_wait_for_proxy_fast_and_capped():
             "http://x", "k", interval=30, timeout=65, sleep=sleeps.append
         ) is False
     assert sleeps == [30, 30]  # capped: no endless polling
+
+    initial_sleeps: list[float] = []
+    with patch(
+        "model_manager.domain.litellm_scan.fetch_proxy_models", return_value=["a"]
+    ):
+        assert schedule_mod._wait_for_proxy(
+            "http://x", "k", initial_delay=30, sleep=initial_sleeps.append
+        ) is True
+    assert initial_sleeps == [30]
 
 
 def test_failed_validation_skips_restart(tmp_path: Path):

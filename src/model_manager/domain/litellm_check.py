@@ -97,6 +97,20 @@ def check_litellm_configs(config: AppConfig) -> dict[str, Any]:
                         limit_problems.append(f"{i}:weight={w!r}")
                 record(inc_path, "limit params valid", not limit_problems,
                        "; ".join(limit_problems[:5]) if limit_problems else "OK")
+                seen_model_ids: set[str] = set()
+                dup_model_ids: list[str] = []
+                for e in entries:
+                    if not isinstance(e, dict):
+                        continue
+                    minfo = e.get("model_info")
+                    if isinstance(minfo, dict) and minfo.get("id"):
+                        mid = str(minfo["id"])
+                        if mid in seen_model_ids:
+                            dup_model_ids.append(mid)
+                        seen_model_ids.add(mid)
+                if dup_model_ids:
+                    record(inc_path, "model_info.id unique", False,
+                           f"duplicate model_info.id: {dup_model_ids[:5]}")
         elif "router_settings" in inc_doc:
             record(inc_path, "include kind", True, "router_settings include (checked below)")
         else:

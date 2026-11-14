@@ -103,6 +103,16 @@ def _derive_model(litellm_prefix: str, provider_id: str) -> str:
     return f"{litellm_prefix}/{provider_id}"
 
 
+def _derive_model_info_id(model: str, api_key: str | None = None) -> str:
+    """Derive ``model_info.id`` in ``<model>::<KEY_ENV_VAR>`` format.
+
+    Extracts ``<KEY_ENV_VAR>`` from ``os.environ/<KEY_ENV_VAR>`` when present,
+    and falls back to ``LOCAL`` for keyless/local deployments.
+    """
+    key_env = (api_key or "").removeprefix("os.environ/").strip() or "LOCAL"
+    return f"{model}::{key_env}"
+
+
 class AllTargetsBlockedError(RuntimeError):
     """Every mapped target for a provider is ledger-blocked.
 
@@ -259,6 +269,7 @@ def generate_provider_yaml(
     blocked = blocks.blocked_set(config)
 
     entries: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
     blocked_skips = 0
 
     for model_id, model_data in all_models.items():
@@ -299,9 +310,15 @@ def generate_provider_yaml(
                     if provider_cfg.api_base is not None:
                         params["api_base"] = provider_cfg.api_base
 
+                    model_info_id = _derive_model_info_id(model, params.get("api_key"))
+                    if model_info_id in seen_ids:
+                        continue
+                    seen_ids.add(model_info_id)
+
                     entries.append({
                         "model_name": model_name,
                         "litellm_params": params,
+                        "model_info": {"id": model_info_id},
                     })
 
     if not entries:

@@ -523,3 +523,117 @@ class TestEntryLimits:
         entries = _gen(data_dir, _gemini_cfg(rpm=15))
         model_names = {e["model_name"] for e in entries}
         assert model_names == {"gemini/flash"}
+
+
+class TestModelInfoId:
+    """Verify deterministic ``model_info.id`` (<model>::<KEY_ENV_VAR>) across providers."""
+
+    @pytest.mark.parametrize(
+        ("provider", "prefix", "provider_id", "keys", "expected_ids"),
+        [
+            (
+                "gemini",
+                "gemini",
+                "gemini-3.5-flash-lite",
+                ["GEMINI_KEY_CASTOR", "GEMINI_KEY_POLLUX"],
+                [
+                    "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR",
+                    "gemini/gemini-3.5-flash-lite::GEMINI_KEY_POLLUX",
+                ],
+            ),
+            (
+                "nvidia",
+                "nvidia_nim",
+                "google/gemma-4-31b-it",
+                ["NVIDIA_KEY_POLLUX"],
+                ["nvidia_nim/google/gemma-4-31b-it::NVIDIA_KEY_POLLUX"],
+            ),
+            (
+                "ollama",
+                "ollama",
+                "kimi-k2.6",
+                ["OLLAMA_KEY_TIMALOSI"],
+                ["ollama/kimi-k2.6::OLLAMA_KEY_TIMALOSI"],
+            ),
+            (
+                "openrouter",
+                "openrouter",
+                "nemotron",
+                ["OPENROUTER_KEY_TIMALOSI"],
+                ["openrouter/nemotron::OPENROUTER_KEY_TIMALOSI"],
+            ),
+        ],
+    )
+    def test_model_info_id_per_provider(
+        self,
+        tmp_path: Path,
+        provider: str,
+        prefix: str,
+        provider_id: str,
+        keys: list[str],
+        expected_ids: list[str],
+    ):
+        data_dir = tmp_path / "data"
+        _write_models(
+            data_dir,
+            {
+                "standard": {
+                    "aa_slug": None,
+                    "provider_ids": {provider: [provider_id]},
+                },
+            },
+        )
+        cfg = ProviderConfig(
+            keys=keys,
+            output_path=tmp_path / f"litellm-{provider}.yaml",
+            litellm_prefix=prefix,
+        )
+        entries = _gen(data_dir, cfg, provider=provider)
+        actual_ids = [e["model_info"]["id"] for e in entries]
+        assert actual_ids == expected_ids
+        assert len(actual_ids) == len(set(actual_ids))
+
+    def test_model_info_id_unique_across_model_list(
+        self, models_with_variants: Path, nvidia_output_config: ProviderConfig
+    ):
+        """Every entry in model_list has a unique <model>::<KEY_ENV_VAR> model_info.id."""
+        config = AppConfig(
+            data_dir=models_with_variants,
+            providers={"nvidia": nvidia_output_config},
+        )
+        result = yaml_gen.generate_provider_yaml(config, "nvidia", dry_run=True)
+        assert result is not None
+        entries = yaml.safe_load(result)["model_list"]
+        ids = [e["model_info"]["id"] for e in entries]
+        assert len(ids) == len(entries)
+        assert len(ids) == len(set(ids))
+        for entry in entries:
+            model = entry["litellm_params"]["model"]
+            key_env = entry["litellm_params"]["api_key"].removeprefix("os.environ/")
+            assert entry["model_info"]["id"] == f"{model}::{key_env}"
+
+    def test_duplicate_keys_deduplicated_for_unique_ids(self, tmp_path: Path):
+        """Duplicate keys in config do not produce duplicate model_info.id entries."""
+        data_dir = tmp_path / "data"
+        _write_models(
+            data_dir,
+            {
+                "standard": {
+                    "aa_slug": None,
+                    "provider_ids": {"gemini": ["gemini-3.5-flash-lite"]},
+                },
+            },
+        )
+        cfg = _gemini_cfg(keys=["GEMINI_KEY_CASTOR", "GEMINI_KEY_CASTOR"])
+        entries = _gen(data_dir, cfg, provider="gemini")
+        assert len(entries) == 1
+        assert entries[0]["model_info"]["id"] == "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR"
+
+    def test_derive_model_info_id_keyless_fallback(self):
+        """Keyless deployments fall back to a deterministic ::LOCAL suffix."""
+        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", None) == "ollama/kimi-k2.6::LOCAL"
+        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", "") == "ollama/kimi-k2.6::LOCAL"
+        assert (
+            yaml_gen._derive_model_info_id("gemini/gemini-3.5-flash-lite", "os.environ/GEMINI_KEY_CASTOR")
+            == "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR"
+        )

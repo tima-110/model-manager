@@ -487,7 +487,8 @@ def execute_schedule_pipeline(config: AppConfig) -> dict[str, Any]:
     # Step 8: poll, then validate the live deployment with a proxy scan.
     # New ledger entries trigger a re-tag plus exactly one regenerate +
     # second restart.
-    _validate_deployment(config, results)
+    restart_logged = any(s.startswith("litellm request-restart:") for s in results["steps"])
+    _validate_deployment(config, results, initial_delay=30 if restart_logged else 0)
 
     # Step 9: dashboard (regenerated last, from the freshest data)
     try:
@@ -568,17 +569,23 @@ def _wait_for_proxy(
     base_url: str,
     api_key: str,
     *,
+    initial_delay: int = 0,
     interval: int = 15,
     timeout: int = 300,
     sleep: Callable[[float], None] = time.sleep,
 ) -> bool:
     """Poll the proxy model list until responsive or the attempt cap expires.
 
-    Attempts are bounded (``ceil(timeout / interval)``) rather than
-    wall-clock-gated, so behavior is identical under real and fake clocks.
+    When *initial_delay* > 0, sleeps first so an asynchronous restart watcher
+    can bounce the service before we probe (avoiding false-positive hits on
+    the pre-restart process). Attempts are bounded (``ceil(timeout / interval)``)
+    rather than wall-clock-gated, so behavior is identical under real and fake
+    clocks.
     """
     import math
 
+    if initial_delay > 0:
+        sleep(initial_delay)
     attempts = max(1, math.ceil(timeout / interval))
     for n in range(attempts):
         try:
@@ -593,7 +600,12 @@ def _wait_for_proxy(
     return False
 
 
-def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
+def _validate_deployment(
+    config: AppConfig,
+    results: dict[str, Any],
+    *,
+    initial_delay: int = 0,
+) -> None:
     """Phase B: poll, proxy-scan the live deployment, single conditional re-pass.
 
     Appends step/error lines into ``results`` in place. Regenerates and
@@ -610,10 +622,12 @@ def _validate_deployment(config: AppConfig, results: dict[str, Any]) -> None:
         results["errors"].append("litellm proxy scan: LITELLM_MASTER_KEY missing")
         return
 
-    if _wait_for_proxy(_scan.DEFAULT_BASE_URL, proxy_key):
+    if _wait_for_proxy(_scan.DEFAULT_BASE_URL, proxy_key, initial_delay=initial_delay):
         results["steps"].append("litellm proxy: responsive")
     else:
         results["errors"].append("litellm proxy: unresponsive 5 min after restart request")
+        results["errors"].append("litellm proxy scan: skipped (proxy unresponsive)")
+        return
 
     before = blocks.blocked_set(config)
     try:
