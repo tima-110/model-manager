@@ -104,13 +104,16 @@ def _derive_model(litellm_prefix: str, provider_id: str) -> str:
 
 
 def _derive_model_info_id(model: str, api_key: str | None = None) -> str:
-    """Derive ``model_info.id`` in ``<model>::<KEY_ENV_VAR>`` format.
+    """Derive ``model_info.id`` in ``<sanitized_model>@@<KEY_ENV_VAR>`` format.
 
+    Replaces ``:`` in ``model`` with ``-`` (LiteLLM's ``usage-based-routing-v2``
+    splits deployment IDs on ``:``) and uses ``@@`` as the key separator.
     Extracts ``<KEY_ENV_VAR>`` from ``os.environ/<KEY_ENV_VAR>`` when present,
     and falls back to ``LOCAL`` for keyless/local deployments.
     """
+    sanitized_model = model.replace(":", "-")
     key_env = (api_key or "").removeprefix("os.environ/").strip() or "LOCAL"
-    return f"{model}::{key_env}"
+    return f"{sanitized_model}@@{key_env}"
 
 
 class AllTargetsBlockedError(RuntimeError):

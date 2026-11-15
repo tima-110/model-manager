@@ -526,7 +526,7 @@ class TestEntryLimits:
 
 
 class TestModelInfoId:
-    """Verify deterministic ``model_info.id`` (<model>::<KEY_ENV_VAR>) across providers."""
+    """Verify deterministic ``model_info.id`` (<sanitized_model>@@<KEY_ENV_VAR>) across providers."""
 
     @pytest.mark.parametrize(
         ("provider", "prefix", "provider_id", "keys", "expected_ids"),
@@ -537,8 +537,8 @@ class TestModelInfoId:
                 "gemini-3.5-flash-lite",
                 ["GEMINI_KEY_CASTOR", "GEMINI_KEY_POLLUX"],
                 [
-                    "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR",
-                    "gemini/gemini-3.5-flash-lite::GEMINI_KEY_POLLUX",
+                    "gemini/gemini-3.5-flash-lite@@GEMINI_KEY_CASTOR",
+                    "gemini/gemini-3.5-flash-lite@@GEMINI_KEY_POLLUX",
                 ],
             ),
             (
@@ -546,21 +546,21 @@ class TestModelInfoId:
                 "nvidia_nim",
                 "google/gemma-4-31b-it",
                 ["NVIDIA_KEY_POLLUX"],
-                ["nvidia_nim/google/gemma-4-31b-it::NVIDIA_KEY_POLLUX"],
+                ["nvidia_nim/google/gemma-4-31b-it@@NVIDIA_KEY_POLLUX"],
             ),
             (
                 "ollama",
                 "ollama",
-                "kimi-k2.6",
+                "gemma4:31b",
                 ["OLLAMA_KEY_TIMALOSI"],
-                ["ollama/kimi-k2.6::OLLAMA_KEY_TIMALOSI"],
+                ["ollama/gemma4-31b@@OLLAMA_KEY_TIMALOSI"],
             ),
             (
                 "openrouter",
                 "openrouter",
-                "nemotron",
+                "nemotron:free",
                 ["OPENROUTER_KEY_TIMALOSI"],
-                ["openrouter/nemotron::OPENROUTER_KEY_TIMALOSI"],
+                ["openrouter/nemotron-free@@OPENROUTER_KEY_TIMALOSI"],
             ),
         ],
     )
@@ -596,7 +596,7 @@ class TestModelInfoId:
     def test_model_info_id_unique_across_model_list(
         self, models_with_variants: Path, nvidia_output_config: ProviderConfig
     ):
-        """Every entry in model_list has a unique <model>::<KEY_ENV_VAR> model_info.id."""
+        """Every entry in model_list has a unique <sanitized_model>@@<KEY_ENV_VAR> model_info.id."""
         config = AppConfig(
             data_dir=models_with_variants,
             providers={"nvidia": nvidia_output_config},
@@ -608,9 +608,9 @@ class TestModelInfoId:
         assert len(ids) == len(entries)
         assert len(ids) == len(set(ids))
         for entry in entries:
-            model = entry["litellm_params"]["model"]
+            model = entry["litellm_params"]["model"].replace(":", "-")
             key_env = entry["litellm_params"]["api_key"].removeprefix("os.environ/")
-            assert entry["model_info"]["id"] == f"{model}::{key_env}"
+            assert entry["model_info"]["id"] == f"{model}@@{key_env}"
 
     def test_duplicate_keys_deduplicated_for_unique_ids(self, tmp_path: Path):
         """Duplicate keys in config do not produce duplicate model_info.id entries."""
@@ -627,13 +627,17 @@ class TestModelInfoId:
         cfg = _gemini_cfg(keys=["GEMINI_KEY_CASTOR", "GEMINI_KEY_CASTOR"])
         entries = _gen(data_dir, cfg, provider="gemini")
         assert len(entries) == 1
-        assert entries[0]["model_info"]["id"] == "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR"
+        assert entries[0]["model_info"]["id"] == "gemini/gemini-3.5-flash-lite@@GEMINI_KEY_CASTOR"
 
     def test_derive_model_info_id_keyless_fallback(self):
-        """Keyless deployments fall back to a deterministic ::LOCAL suffix."""
-        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", None) == "ollama/kimi-k2.6::LOCAL"
-        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", "") == "ollama/kimi-k2.6::LOCAL"
+        """Keyless deployments fall back to a deterministic @@LOCAL suffix."""
+        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", None) == "ollama/kimi-k2.6@@LOCAL"
+        assert yaml_gen._derive_model_info_id("ollama/kimi-k2.6", "") == "ollama/kimi-k2.6@@LOCAL"
         assert (
             yaml_gen._derive_model_info_id("gemini/gemini-3.5-flash-lite", "os.environ/GEMINI_KEY_CASTOR")
-            == "gemini/gemini-3.5-flash-lite::GEMINI_KEY_CASTOR"
+            == "gemini/gemini-3.5-flash-lite@@GEMINI_KEY_CASTOR"
+        )
+        assert (
+            yaml_gen._derive_model_info_id("openrouter/google/gemma-4-31b-it:free", "os.environ/OPENROUTER_KEY_TIMALOSI")
+            == "openrouter/google/gemma-4-31b-it-free@@OPENROUTER_KEY_TIMALOSI"
         )
