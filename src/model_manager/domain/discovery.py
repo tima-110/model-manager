@@ -31,6 +31,7 @@ HF_ROUTER_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
 STATUS_MAP = {
     "200": "up",
     "401": "unauthorized",
+    "402": "unauthorized",
     "403": "forbidden",
     "404": "not_found",
     "408": "timeout",
@@ -59,6 +60,11 @@ class ChatResult:
     latency_ms: float
     code: str
     raw: Dict[str, Any]
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    tokens_per_sec: Optional[float] = None
+    finish_reason: Optional[str] = None
 
 def fetch_openrouter_free_models() -> List[Dict[str, Any]]:
     """Fetch all models from OpenRouter and filter for free ones."""
@@ -367,6 +373,54 @@ def _extract_chat_text(provider: str, data: Dict[str, Any]) -> str:
     return ""
 
 
+def _extract_chat_stats(provider: str, data: Dict[str, Any], latency_ms: float) -> Dict[str, Any]:
+    """Extract normalized token usage, throughput, and finish reason from a chat response."""
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    tokens_per_sec: Optional[float] = None
+    finish_reason: Optional[str] = None
+
+    if provider == "gemini":
+        usage = data.get("usageMetadata") or {}
+        if isinstance(usage, dict):
+            prompt_tokens = usage.get("promptTokenCount")
+            completion_tokens = usage.get("candidatesTokenCount")
+            total_tokens = usage.get("totalTokenCount")
+        candidates = data.get("candidates") or []
+        if candidates and isinstance(candidates[0], dict):
+            finish_reason = candidates[0].get("finishReason")
+    elif provider == "ollama":
+        prompt_tokens = data.get("prompt_eval_count")
+        completion_tokens = data.get("eval_count")
+        if prompt_tokens is not None and completion_tokens is not None:
+            total_tokens = prompt_tokens + completion_tokens
+        eval_duration_ns = data.get("eval_duration")
+        if completion_tokens and isinstance(eval_duration_ns, (int, float)) and eval_duration_ns > 0:
+            tokens_per_sec = completion_tokens / (eval_duration_ns / 1_000_000_000)
+        finish_reason = data.get("done_reason") or ("stop" if data.get("done") is True else None)
+    else:
+        usage = data.get("usage") or {}
+        if isinstance(usage, dict):
+            prompt_tokens = usage.get("prompt_tokens")
+            completion_tokens = usage.get("completion_tokens")
+            total_tokens = usage.get("total_tokens")
+        choices = data.get("choices") or []
+        if choices and isinstance(choices[0], dict):
+            finish_reason = choices[0].get("finish_reason")
+
+    if tokens_per_sec is None and completion_tokens and latency_ms > 0:
+        tokens_per_sec = completion_tokens / (latency_ms / 1000.0)
+
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "tokens_per_sec": round(tokens_per_sec, 1) if tokens_per_sec is not None else None,
+        "finish_reason": finish_reason,
+    }
+
+
 def chat_model(
     model_id: str,
     api_key: Optional[str],
@@ -405,11 +459,13 @@ def chat_model(
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Invalid JSON response from {provider}: {e}") from e
 
+    stats = _extract_chat_stats(provider, parsed, latency)
     return ChatResult(
         text=_extract_chat_text(provider, parsed),
         latency_ms=latency,
         code=code,
         raw=parsed,
+        **stats,
     )
 
 

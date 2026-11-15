@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -56,7 +57,10 @@ def test_chat_model_nvidia_openai_compatible(monkeypatch: pytest.MonkeyPatch):
     capture: dict = {}
     _patch_urlopen(
         monkeypatch,
-        {"choices": [{"message": {"content": "Hello from NVIDIA!"}}]},
+        {
+            "choices": [{"message": {"content": "Hello from NVIDIA!"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 25, "total_tokens": 35},
+        },
         capture,
     )
 
@@ -69,6 +73,11 @@ def test_chat_model_nvidia_openai_compatible(monkeypatch: pytest.MonkeyPatch):
 
     assert res.text == "Hello from NVIDIA!"
     assert res.code == "200"
+    assert res.prompt_tokens == 10
+    assert res.completion_tokens == 25
+    assert res.total_tokens == 35
+    assert res.finish_reason == "stop"
+    assert res.tokens_per_sec is not None and res.tokens_per_sec > 0
     assert capture["url"] == discovery.NVIDIA_CHAT_URL
     assert capture["headers"]["Authorization"] == "Bearer nvapi-test"
     assert capture["data"] == {
@@ -82,7 +91,10 @@ def test_chat_model_gemini_endpoint_and_schema(monkeypatch: pytest.MonkeyPatch):
     capture: dict = {}
     _patch_urlopen(
         monkeypatch,
-        {"candidates": [{"content": {"parts": [{"text": "Hello from "}, {"text": "Gemini!"}]}}]},
+        {
+            "candidates": [{"content": {"parts": [{"text": "Hello from "}, {"text": "Gemini!"}]}, "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 8, "candidatesTokenCount": 12, "totalTokenCount": 20},
+        },
         capture,
     )
 
@@ -95,6 +107,10 @@ def test_chat_model_gemini_endpoint_and_schema(monkeypatch: pytest.MonkeyPatch):
     )
 
     assert res.text == "Hello from Gemini!"
+    assert res.prompt_tokens == 8
+    assert res.completion_tokens == 12
+    assert res.total_tokens == 20
+    assert res.finish_reason == "STOP"
     assert capture["url"] == "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=gem-key"
     assert "Authorization" not in capture["headers"]
     assert capture["data"] == {"contents": [{"parts": [{"text": "Explain gravity"}]}]}
@@ -105,7 +121,13 @@ def test_chat_model_ollama_endpoint_and_schema(monkeypatch: pytest.MonkeyPatch):
     capture: dict = {}
     _patch_urlopen(
         monkeypatch,
-        {"message": {"role": "assistant", "content": "Hello from Ollama!"}},
+        {
+            "message": {"role": "assistant", "content": "Hello from Ollama!"},
+            "done": True,
+            "prompt_eval_count": 5,
+            "eval_count": 40,
+            "eval_duration": 500_000_000,
+        },
         capture,
     )
 
@@ -117,6 +139,11 @@ def test_chat_model_ollama_endpoint_and_schema(monkeypatch: pytest.MonkeyPatch):
     )
 
     assert res.text == "Hello from Ollama!"
+    assert res.prompt_tokens == 5
+    assert res.completion_tokens == 40
+    assert res.total_tokens == 45
+    assert res.tokens_per_sec == 80.0
+    assert res.finish_reason == "stop"
     assert capture["url"] == discovery.OLLAMA_CHAT_URL
     assert capture["data"]["stream"] is False
     assert capture["data"]["messages"] == [{"role": "user", "content": "Ping"}]
@@ -158,6 +185,33 @@ def test_chat_model_errors(monkeypatch: pytest.MonkeyPatch):
 
 
 # --- Interactive picker tests ---
+
+def test_read_terminal_key_escape_sequences(monkeypatch: pytest.MonkeyPatch):
+    r_fd, w_fd = os.pipe()
+    try:
+        fake_stdin = os.fdopen(r_fd, "r", buffering=1)
+        monkeypatch.setattr(cli_common.sys, "stdin", fake_stdin)
+        monkeypatch.setattr(cli_common.termios, "tcgetattr", lambda fd: [])
+        monkeypatch.setattr(cli_common.termios, "tcsetattr", lambda fd, when, attrs: None)
+        monkeypatch.setattr(cli_common.tty, "setraw", lambda fd: None)
+
+        for seq, expected in [
+            (b"\x1b[A", "UP"),
+            (b"\x1b[B", "DOWN"),
+            (b"\x1bOA", "UP"),
+            (b"\x1bOB", "DOWN"),
+            (b"\x1b[5~", "PGUP"),
+            (b"\x1b[6~", "PGDN"),
+            (b"\x1b[C", "UNKNOWN"),
+            (b"\r", "ENTER"),
+            (b"\x1b", "ESC"),
+        ]:
+            os.write(w_fd, seq)
+            assert cli_common._read_terminal_key() == expected
+    finally:
+        os.close(w_fd)
+        fake_stdin.close()
+
 
 def test_interactive_select_model_navigation_and_filter():
     models = [
@@ -236,13 +290,28 @@ def test_cli_providers_chat_with_model_and_prompt(monkeypatch: pytest.MonkeyPatc
 
     def fake_chat_model(model_id, api_key, prompt, provider="openrouter", timeout=None):
         called.update(model_id=model_id, api_key=api_key, prompt=prompt, provider=provider, timeout=timeout)
-        return discovery.ChatResult(text="Hi back!", latency_ms=123.4, code="200", raw={"ok": True})
+        return discovery.ChatResult(
+            text="Hi back!",
+            latency_ms=1234.0,
+            code="200",
+            raw={"ok": True},
+            prompt_tokens=10,
+            completion_tokens=20,
+            total_tokens=30,
+            tokens_per_sec=16.2,
+            finish_reason="stop",
+        )
 
     monkeypatch.setattr(discovery, "chat_model", fake_chat_model)
 
     result = runner.invoke(app, ["providers", "nvidia", "chat", "--model", "meta/llama-3.1-8b", "-p", "hello"])
     assert result.exit_code == 0
-    assert "Hi back!" in result.stdout
+    normalized = " ".join(result.stdout.split())
+    assert "Hi back!" in normalized
+    assert "1.23 s" in normalized
+    assert "tokens: 10 in / 20 out (30 total)" in normalized
+    assert "16.2 tok/s" in normalized
+    assert "finish: stop" in normalized
     assert called == {
         "model_id": "meta/llama-3.1-8b",
         "api_key": "test-key",

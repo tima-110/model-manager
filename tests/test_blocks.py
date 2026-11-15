@@ -40,6 +40,33 @@ def test_signal_policy_defaults_and_tuning(tmp_path: Path):
     assert not blocks.is_block_signal("404", cfg)
 
 
+def test_http_402_maps_to_unauthorized_and_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import io
+    import urllib.error
+    import urllib.request
+    from model_manager.domain import discovery, providers
+
+    def raise_402(req, **kwargs):
+        raise urllib.error.HTTPError(
+            req.full_url, 402, "Payment Required", {}, io.BytesIO(b"payment required")
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", raise_402)
+    ping = discovery.probe_model("deepseek-v4-pro:0813", "ollama-key", provider="ollama")
+    assert ping.code == "402"
+    assert ping.status == "unauthorized"
+
+    label = providers.assess_scan_results([ping])
+    assert label == "Unauthorized"
+
+    cfg = _cfg(tmp_path)
+    res = blocks.record_assessment_observations(cfg, "ollama", {"deepseek-v4-pro:0813": label})
+    assert res["blocked"] == 1
+    entry = blocks.is_blocked(blocks.load_ledger(cfg), [blocks.provider_key("ollama", "deepseek-v4-pro:0813")])
+    assert entry is not None
+    assert "Unauthorized" in entry["reason"]
+
+
 def test_block_and_release_cycle(tmp_path: Path):
     cfg = _cfg(tmp_path)
     keys = [blocks.provider_key("nvidia", "a/b")]

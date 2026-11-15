@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import select
 import sys
 import termios
@@ -212,30 +213,43 @@ def _read_terminal_key() -> str:
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if ch == "\x1b":
+        raw = os.read(fd, 1)
+        if not raw:
+            return "ESC"
+        if raw == b"\x1b":
             ready, _, _ = select.select([fd], [], [], 0.05)
             if not ready:
                 return "ESC"
-            seq = sys.stdin.read(1)
-            if seq == "[":
-                code = sys.stdin.read(1)
-                if code == "A":
+            seq = os.read(fd, 1)
+            if seq == b"[":
+                code = os.read(fd, 1)
+                if code == b"A":
                     return "UP"
-                if code == "B":
+                if code == b"B":
                     return "DOWN"
-                if code in ("5", "6"):
-                    tail = sys.stdin.read(1)
-                    if tail == "~":
-                        return "PGUP" if code == "5" else "PGDN"
-            return "ESC"
-        if ch in ("\r", "\n"):
+                if code in (b"5", b"6"):
+                    tail = os.read(fd, 1)
+                    if tail == b"~":
+                        return "PGUP" if code == b"5" else "PGDN"
+                # Drain any remaining CSI parameter/terminator bytes so unknown keys don't cancel
+                while select.select([fd], [], [], 0.01)[0]:
+                    os.read(fd, 1)
+                return "UNKNOWN"
+            if seq == b"O":
+                code = os.read(fd, 1)
+                if code == b"A":
+                    return "UP"
+                if code == b"B":
+                    return "DOWN"
+                return "UNKNOWN"
+            return "UNKNOWN"
+        if raw in (b"\r", b"\n"):
             return "ENTER"
-        if ch == "\x03":
+        if raw == b"\x03":
             return "CTRL_C"
-        if ch in ("\x7f", "\x08"):
+        if raw in (b"\x7f", b"\x08"):
             return "BACKSPACE"
-        return ch
+        return raw.decode("utf-8", errors="ignore")
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
@@ -455,6 +469,13 @@ def _run_chat_cli_workflow(
                     "latency_ms": round(result.latency_ms, 2),
                     "code": result.code,
                     "response": result.text,
+                    "stats": {
+                        "prompt_tokens": result.prompt_tokens,
+                        "completion_tokens": result.completion_tokens,
+                        "total_tokens": result.total_tokens,
+                        "tokens_per_sec": result.tokens_per_sec,
+                        "finish_reason": result.finish_reason,
+                    },
                     "raw": result.raw,
                 },
                 indent=2,
@@ -463,7 +484,26 @@ def _run_chat_cli_workflow(
         return
 
     console.print(result.text if result.text else "[dim](empty response)[/dim]")
-    console.print(f"\n[dim]({provider.name.lower()} / {model} — {result.latency_ms:.0f} ms)[/dim]")
+    latency_str = f"{result.latency_ms / 1000:.2f} s" if result.latency_ms >= 1000 else f"{result.latency_ms:.0f} ms"
+    stat_parts = [f"{provider.name.lower()} / {model}", latency_str]
+
+    tok_bits = []
+    if result.prompt_tokens is not None:
+        tok_bits.append(f"{result.prompt_tokens} in")
+    if result.completion_tokens is not None:
+        tok_bits.append(f"{result.completion_tokens} out")
+    if tok_bits or result.total_tokens is not None:
+        tok_str = " / ".join(tok_bits)
+        if result.total_tokens is not None:
+            tok_str = f"{tok_str} ({result.total_tokens} total)" if tok_str else f"{result.total_tokens} total"
+        stat_parts.append(f"tokens: {tok_str}")
+
+    if result.tokens_per_sec is not None:
+        stat_parts.append(f"{result.tokens_per_sec:.1f} tok/s")
+    if result.finish_reason:
+        stat_parts.append(f"finish: {result.finish_reason}")
+
+    console.print(f"\n[dim]{' • '.join(stat_parts)}[/dim]")
 
 
 def _version_callback(value: bool) -> None:
